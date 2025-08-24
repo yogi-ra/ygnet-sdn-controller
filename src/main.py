@@ -3,7 +3,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from .database import engine, Base
 from .api.routers import auth, devices
-from .tasks import check_device_for_changes
+from .tasks import check_device_for_changes, update_device_reachability_status # Import new task
 
 # Create all database tables
 Base.metadata.create_all(bind=engine)
@@ -27,6 +27,8 @@ async def startup_event():
     # Add the job to the scheduler
     # Runs every 5 minutes
     scheduler.add_job(check_device_for_changes, "interval", minutes=5)
+    # Add the new job for device reachability status
+    scheduler.add_job(update_device_reachability_status, "interval", minutes=1) # Run every 1 minute
     scheduler.start()
 
 

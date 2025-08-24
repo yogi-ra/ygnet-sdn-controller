@@ -36,29 +36,8 @@ const DashboardPage = () => {
         const devices = await devicesResponse.json();
         setTotalDevices(devices.length);
 
-        // Check reachability for each device concurrently
-        const reachabilityChecks = devices.map(async (device: any) => {
-          try {
-            const reachabilityResponse = await fetch(`/api/devices/${device.id}/check-reachability`, {
-              headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-              }
-            });
-            if (!reachabilityResponse.ok) {
-              // Log error but don't stop the whole process
-              console.error(`Error checking reachability for device ${device.id}: ${reachabilityResponse.status}`);
-              return false;
-            }
-            return await reachabilityResponse.json(); // This will be true or false
-          } catch (e) {
-            console.error(`Exception checking reachability for device ${device.id}:`, e);
-            return false;
-          }
-        });
-
-        const results = await Promise.all(reachabilityChecks);
-        const activeCount = results.filter(isReachable => isReachable).length;
+        // Filter devices based on the new is_reachable property
+        const activeCount = devices.filter((device: any) => device.is_reachable).length;
         setActiveDevicesCount(activeCount);
 
       } catch (e: any) {

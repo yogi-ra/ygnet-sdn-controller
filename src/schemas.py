@@ -25,12 +25,14 @@ class DeviceCreate(DeviceBase):
 
 class Device(DeviceBase):
     id: int
+    is_reachable: bool = False # Add is_reachable to the schema
     model_config = ConfigDict(from_attributes=True)
 
 
 class DeviceDetail(Device):
     version: Optional[str] = None
     interfaces: Optional[list[dict]] = None # Changed to list[dict] based on common Netmiko output for interfaces
+    is_reachable: bool = False # Add is_reachable to the schema
 
 
 class DeviceUpdate(BaseModel):

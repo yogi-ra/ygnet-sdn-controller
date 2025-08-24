@@ -43,3 +43,37 @@ async def check_device_for_changes():
         if db:
             db.close()
 
+from .database import get_db # New import
+from .models import NetworkDevice # New import
+
+async def update_device_reachability_status():
+    """
+    Background task to periodically check device reachability and update the database.
+    """
+    db: Session = None
+    try:
+        db = SessionLocal()
+        devices = crud.get_devices(db)
+
+        for device in devices:
+            is_reachable = False
+            try:
+                handler = get_handler_from_device_id(device.id, db)
+                with handler:
+                    # If connection is successful, it's reachable
+                    is_reachable = True
+            except Exception as e:
+                print(f"Device {device.name} (ID: {device.id}) is not reachable: {e}")
+                is_reachable = False
+            finally:
+                # Update the device's reachability status in the database
+                if device.is_reachable != is_reachable: # Only update if status changed
+                    device.is_reachable = is_reachable
+                    db.add(device)
+                    db.commit()
+                    db.refresh(device)
+                    print(f"Updated reachability for device {device.name} (ID: {device.id}) to {is_reachable}")
+    finally:
+        if db:
+            db.close()
+

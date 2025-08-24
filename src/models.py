@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy import Column, Integer, String, ForeignKey, Boolean # Import Boolean
 from sqlalchemy.orm import relationship
 from .database import Base
 
@@ -23,3 +23,4 @@ class NetworkDevice(Base):
     username = Column(String, nullable=False)
     encrypted_password = Column(String, nullable=False)  # Password is encrypted
     secret = Column(String, nullable=True)  # Enable secret, also encrypted
+    is_reachable = Column(Boolean, default=False) # New field for reachability status
