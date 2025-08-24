@@ -48,7 +48,8 @@ def read_devices(skip: int = 0, limit: int = 100, db: Session = Depends(get_db))
     Retrieve all network devices from the database.
     """
     devices = crud.get_devices(db, skip=skip, limit=limit)
-    return devices
+    # Ensure that the returned devices are always serialized through the schema
+    return [schemas.Device.from_orm(device) for device in devices]
 
 
 @router.get(
