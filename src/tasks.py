@@ -55,24 +55,31 @@ async def update_device_reachability_status():
         db = SessionLocal()
         devices = crud.get_devices(db)
 
-        for device in devices:
+        for device_schema in devices: # Rename to device_schema to avoid confusion
             is_reachable = False
+            db_device = crud.get_device(db, device_id=device_schema.id) # Fetch the actual model instance
+            if not db_device:
+                print(f"Device with ID {device_schema.id} not found in DB, skipping reachability check.")
+                continue
+
             try:
-                handler = get_handler_from_device_id(device.id, db)
+                handler = get_handler_from_device_id(db_device.id, db) # Use db_device.id
                 with handler:
                     # If connection is successful, it's reachable
                     is_reachable = True
             except Exception as e:
-                print(f"Device {device.name} (ID: {device.id}) is not reachable: {e}")
+                import traceback # Import traceback
+                print(f"Device {db_device.name} (ID: {db_device.id}) is not reachable: {e}")
+                print(traceback.format_exc()) # Print full traceback
                 is_reachable = False
             finally:
                 # Update the device's reachability status in the database
-                if device.is_reachable != is_reachable: # Only update if status changed
-                    device.is_reachable = is_reachable
-                    db.add(device)
+                if db_device.is_reachable != is_reachable: # Only update if status changed
+                    db_device.is_reachable = is_reachable
+                    db.add(db_device) # Add the mapped instance
                     db.commit()
-                    db.refresh(device)
-                    print(f"Updated reachability for device {device.name} (ID: {device.id}) to {is_reachable}")
+                    db.refresh(db_device)
+                    print(f"Updated reachability for device {db_device.name} (ID: {db_device.id}) to {is_reachable}")
     finally:
         if db:
             db.close()
