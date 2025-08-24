@@ -1,0 +1,2 @@
+username {{ username }} privilege {{ privilege | DIGIT }} {{ _ }}
+username {{ username }} password {{ _ }} {{ _ }}

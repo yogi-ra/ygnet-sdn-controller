@@ -1,0 +1,3 @@
+<group name="vlan_details">
+{{ line | REMAINDER }}
+</group>
