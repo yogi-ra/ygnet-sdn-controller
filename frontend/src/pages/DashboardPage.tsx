@@ -1,5 +1,6 @@
 import { Container, Card, Row, Col } from 'react-bootstrap';
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom'; // Import useNavigate
 import { useAuth } from '../hooks/useAuth'; // Import useAuth
 
 const DashboardPage = () => {
@@ -8,6 +9,7 @@ const DashboardPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { token } = useAuth(); // Get the token from useAuth
+  const navigate = useNavigate(); // Get the navigate function
 
   // Placeholder for API Version - in a real app, this might come from a /version endpoint
   const apiVersion = "N/A"; 
@@ -15,8 +17,7 @@ const DashboardPage = () => {
   useEffect(() => {
     const fetchDevicesAndReachability = async () => {
       if (!token) {
-        setError("Not authenticated. Please log in.");
-        setLoading(false);
+        navigate('/login'); // Redirect to login page
         return;
       }
 
