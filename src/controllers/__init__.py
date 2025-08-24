@@ -15,6 +15,8 @@ DEVICE_HANDLER_MAP: Dict[str, Type[BaseDevice]] = {
     "juniper_junos": JuniperJunosDevice,
 }
 
+_handler_cache: Dict[str, BaseDevice] = {}
+
 def get_device_handler(device_info: DeviceConnectionInfo) -> BaseDevice:
     """
     Factory function that returns an instance of the correct device handler class.
@@ -28,10 +30,16 @@ def get_device_handler(device_info: DeviceConnectionInfo) -> BaseDevice:
     Raises:
         NotImplementedError: If the device_type is not supported.
     """
+    if device_info.name in _handler_cache:
+        return _handler_cache[device_info.name]
+
     handler_class = DEVICE_HANDLER_MAP.get(device_info.device_type)
     if not handler_class:
         raise NotImplementedError(f"Device type '{device_info.device_type}' is not supported.")
-    return handler_class(device_info)
+    
+    handler = handler_class(device_info)
+    _handler_cache[device_info.name] = handler
+    return handler
 
 # Make the public interface cleaner
 __all__ = [

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 from typing import List, Any, Annotated, Union, Dict
 from datetime import datetime
@@ -73,8 +73,7 @@ def read_device(
     cached_data = redis_client.get(cache_key)
     if cached_data:
         try:
-            device_detail_dict = json.loads(cached_data)
-            return schemas.DeviceDetail(**device_detail_dict)
+            return json.loads(cached_data)
         except json.JSONDecodeError:
             # If cached data is corrupted, delete it and proceed to fetch
             redis_client.delete(cache_key)
@@ -101,7 +100,7 @@ def read_device(
     )
 
     # Cache the fetched data
-    redis_client.setex(cache_key, CACHE_TTL, json.dumps(device_detail.model_dump()))
+    redis_client.setex(cache_key, CACHE_TTL, device_detail.model_dump_json())
 
     return device_detail
 
@@ -161,6 +160,7 @@ def delete_device(
 )
 @cache_response(cache_key_prefix="device:version", ttl=300)
 def get_version(
+    request: Request,
     device_id: int,
     handler: Annotated[Any, Depends(get_method_compatible_handler("get_version_info"))],
 ):
@@ -182,6 +182,7 @@ def get_version(
 )
 @cache_response(cache_key_prefix="device:interfaces", ttl=300)
 def get_interfaces(
+    request: Request,
     device_id: int,
     handler: Annotated[
         Any, Depends(get_method_compatible_handler("get_interfaces_brief"))
@@ -205,6 +206,7 @@ def get_interfaces(
 )
 @cache_response(cache_key_prefix="device:hostname", ttl=300)
 def get_hostname(
+    request: Request,
     device_id: int,
     handler: Annotated[Any, Depends(get_method_compatible_handler("get_hostname"))],
 ):
@@ -226,6 +228,7 @@ def get_hostname(
 )
 @cache_response(cache_key_prefix="device:active_users", ttl=300)
 def get_active_users(
+    request: Request,
     device_id: int,
     handler: Annotated[Any, Depends(get_method_compatible_handler("get_active_users"))],
 ):
@@ -247,6 +250,7 @@ def get_active_users(
 )
 @cache_response(cache_key_prefix="device:local_users", ttl=300)
 def get_local_users(
+    request: Request,
     device_id: int,
     handler: Annotated[Any, Depends(get_method_compatible_handler("get_local_users"))],
 ):
@@ -268,6 +272,7 @@ def get_local_users(
 )
 @cache_response(cache_key_prefix="device:clock", ttl=300)
 def get_clock(
+    request: Request,
     device_id: int,
     handler: Annotated[Any, Depends(get_method_compatible_handler("get_clock"))],
 ):
@@ -289,6 +294,7 @@ def get_clock(
 )
 @cache_response(cache_key_prefix="device:vlan_details", ttl=300)
 def get_vlan_details(
+    request: Request,
     device_id: int,
     handler: Annotated[Any, Depends(get_method_compatible_handler("get_vlan_details"))],
 ):
@@ -310,6 +316,7 @@ def get_vlan_details(
 )
 @cache_response(cache_key_prefix="device:vtp_status", ttl=300)
 def get_vtp_status(
+    request: Request,
     device_id: int,
     handler: Annotated[Any, Depends(get_method_compatible_handler("get_vtp_status"))],
 ):
@@ -331,6 +338,7 @@ def get_vtp_status(
 )
 @cache_response(cache_key_prefix="device:spanning_tree_summary", ttl=300)
 def get_spanning_tree_summary(
+    request: Request,
     device_id: int,
     handler: Annotated[
         Any, Depends(get_method_compatible_handler("get_spanning_tree_summary"))
@@ -354,6 +362,7 @@ def get_spanning_tree_summary(
 )
 @cache_response(cache_key_prefix="device:interfaces_trunk", ttl=300)
 def get_interfaces_trunk(
+    request: Request,
     device_id: int,
     handler: Annotated[
         Any, Depends(get_method_compatible_handler("get_interfaces_trunk"))
@@ -377,6 +386,7 @@ def get_interfaces_trunk(
 )
 @cache_response(cache_key_prefix="device:interface_config", ttl=300)
 def get_interface_config(
+    request: Request,
     device_id: int,
     interface_name: str,
     handler: Annotated[
@@ -401,6 +411,7 @@ def get_interface_config(
 )
 @cache_response(cache_key_prefix="device:line_config", ttl=300)
 def get_line_config(
+    request: Request,
     device_id: int,
     handler: Annotated[Any, Depends(get_method_compatible_handler("get_line_config"))],
 ):
@@ -422,6 +433,7 @@ def get_line_config(
 )
 @cache_response(cache_key_prefix="device:banners", ttl=300)
 def get_banners(
+    request: Request,
     device_id: int,
     handler: Annotated[Any, Depends(get_method_compatible_handler("get_banners"))],
 ):
@@ -443,6 +455,7 @@ def get_banners(
 )
 @cache_response(cache_key_prefix="device:ntp_config", ttl=300)
 def get_ntp_config(
+    request: Request,
     device_id: int,
     handler: Annotated[Any, Depends(get_method_compatible_handler("get_ntp_config"))],
 ):
@@ -464,6 +477,7 @@ def get_ntp_config(
 )
 @cache_response(cache_key_prefix="device:snmp_config", ttl=300)
 def get_snmp_config(
+    request: Request,
     device_id: int,
     handler: Annotated[Any, Depends(get_method_compatible_handler("get_snmp_config"))],
 ):
@@ -485,6 +499,7 @@ def get_snmp_config(
 )
 @cache_response(cache_key_prefix="device:logging_config", ttl=300)
 def get_logging_config(
+    request: Request,
     device_id: int,
     handler: Annotated[
         Any, Depends(get_method_compatible_handler("get_logging_config"))
@@ -508,6 +523,7 @@ def get_logging_config(
 )
 @cache_response(cache_key_prefix="device:acls", ttl=300)
 def get_acls(
+    request: Request,
     device_id: int,
     handler: Annotated[Any, Depends(get_method_compatible_handler("get_acls"))],
 ):
@@ -529,6 +545,7 @@ def get_acls(
 )
 @cache_response(cache_key_prefix="device:aaa_config", ttl=300)
 def get_aaa_config(
+    request: Request,
     device_id: int,
     handler: Annotated[Any, Depends(get_method_compatible_handler("get_aaa_config"))],
 ):
@@ -550,6 +567,7 @@ def get_aaa_config(
 )
 @cache_response(cache_key_prefix="device:cdp_neighbors", ttl=300)
 def get_cdp_neighbors(
+    request: Request,
     device_id: int,
     handler: Annotated[
         Any, Depends(get_method_compatible_handler("get_cdp_neighbors"))
@@ -573,6 +591,7 @@ def get_cdp_neighbors(
 )
 @cache_response(cache_key_prefix="device:ospf_neighbors", ttl=300)
 def get_ospf_neighbors(
+    request: Request,
     device_id: int,
     handler: Annotated[
         Any, Depends(get_method_compatible_handler("get_ospf_neighbors"))
@@ -596,6 +615,7 @@ def get_ospf_neighbors(
 )
 @cache_response(cache_key_prefix="device:eigrp_neighbors", ttl=300)
 def get_eigrp_neighbors(
+    request: Request,
     device_id: int,
     handler: Annotated[
         Any, Depends(get_method_compatible_handler("get_eigrp_neighbors"))
@@ -619,6 +639,7 @@ def get_eigrp_neighbors(
 )
 @cache_response(cache_key_prefix="device:routing_protocol_config", ttl=300)
 def get_routing_protocol_config(
+    request: Request,
     device_id: int,
     handler: Annotated[
         Any, Depends(get_method_compatible_handler("get_routing_protocol_config"))
@@ -642,6 +663,7 @@ def get_routing_protocol_config(
 )
 @cache_response(cache_key_prefix="device:nat_config", ttl=300)
 def get_nat_config(
+    request: Request,
     device_id: int,
     handler: Annotated[Any, Depends(get_method_compatible_handler("get_nat_config"))],
 ):
@@ -663,6 +685,7 @@ def get_nat_config(
 )
 @cache_response(cache_key_prefix="device:vpn_config", ttl=300)
 def get_vpn_config(
+    request: Request,
     device_id: int,
     handler: Annotated[Any, Depends(get_method_compatible_handler("get_vpn_config"))],
 ):
@@ -684,6 +707,7 @@ def get_vpn_config(
 )
 @cache_response(cache_key_prefix="device:lldp_neighbors", ttl=300)
 def get_lldp_neighbors(
+    request: Request,
     device_id: int,
     handler: Annotated[
         Any, Depends(get_method_compatible_handler("get_lldp_neighbors"))
@@ -707,6 +731,7 @@ def get_lldp_neighbors(
 )
 @cache_response(cache_key_prefix="device:port_security", ttl=300)
 def get_port_security(
+    request: Request,
     device_id: int,
     handler: Annotated[
         Any, Depends(get_method_compatible_handler("get_port_security"))
@@ -730,6 +755,7 @@ def get_port_security(
 )
 @cache_response(cache_key_prefix="device:etherchannel_summary", ttl=300)
 def get_etherchannel_summary(
+    request: Request,
     device_id: int,
     handler: Annotated[
         Any, Depends(get_method_compatible_handler("get_etherchannel_summary"))
@@ -753,6 +779,7 @@ def get_etherchannel_summary(
 )
 @cache_response(cache_key_prefix="device:vlan_config", ttl=300)
 def get_vlan_config(
+    request: Request,
     device_id: int,
     handler: Annotated[Any, Depends(get_method_compatible_handler("get_vlan_config"))],
 ):
@@ -774,6 +801,7 @@ def get_vlan_config(
 )
 @cache_response(cache_key_prefix="device:interface_vlan_membership", ttl=300)
 def get_interface_vlan_membership(
+    request: Request,
     device_id: int,
     handler: Annotated[
         Any, Depends(get_method_compatible_handler("get_interface_vlan_membership"))
@@ -797,6 +825,7 @@ def get_interface_vlan_membership(
 )
 @cache_response(cache_key_prefix="device:trunk_port_config", ttl=300)
 def get_trunk_port_config(
+    request: Request,
     device_id: int,
     interface_name: str,
     handler: Annotated[
@@ -821,6 +850,7 @@ def get_trunk_port_config(
 )
 @cache_response(cache_key_prefix="device:interface_port_security", ttl=300)
 def get_interface_port_security(
+    request: Request,
     device_id: int,
     handler: Annotated[
         Any, Depends(get_method_compatible_handler("get_interface_port_security"))
