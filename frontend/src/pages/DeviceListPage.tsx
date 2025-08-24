@@ -10,7 +10,7 @@ interface Device {
   ip_address: string;
   port: number;
   username: string;
-  
+  is_reachable?: boolean; // Add is_reachable to the interface
 }
 
 const DeviceListPage = () => {
@@ -121,6 +121,7 @@ const DeviceListPage = () => {
                 <th>IP Address</th>
                 <th>Port</th>
                 <th>Username</th>
+                <th>Status</th> {/* New Status Header */}
                 <th>Actions</th>
               </tr>
             </thead>
@@ -132,6 +133,13 @@ const DeviceListPage = () => {
                   <td>{device.ip_address}</td>
                   <td>{device.port}</td>
                   <td>{device.username}</td>
+                  <td> {/* New Status Data */}
+                    {device.is_reachable === true ? (
+                      <span style={{ color: 'green', fontWeight: 'bold' }}>Online</span>
+                    ) : (
+                      <span style={{ color: 'red', fontWeight: 'bold' }}>Offline</span>
+                    )}
+                  </td>
                   <td>
                     <Button
                       variant="info"
