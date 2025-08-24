@@ -51,6 +51,7 @@ async def update_device_reachability_status():
     Background task to periodically check device reachability and update the database.
     """
     db: Session = None
+    redis_client: Redis = None
     try:
         db = SessionLocal()
         devices = crud.get_devices(db)
@@ -80,6 +81,12 @@ async def update_device_reachability_status():
                     db.commit()
                     db.refresh(db_device)
                     print(f"Updated reachability for device {db_device.name} (ID: {db_device.id}) to {is_reachable}")
+                    redis_client = get_redis_client()
+                    cache_key = f"device:{db_device.id}:details"
+                    # Invalidate all caches related to this device
+                    for key in redis_client.scan_iter(f"device:{db_device.id}:*"):
+                        redis_client.delete(key)
+                    print(f"Invalidated cache for device {db_device.name} (ID: {db_device.id}) due to reachability status change.")
     finally:
         if db:
             db.close()

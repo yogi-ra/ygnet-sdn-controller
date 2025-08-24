@@ -1,0 +1,6 @@
+Value TOTAL_ADDRESSES_IN_SYSTEM (\d+)
+Value MAX_ADDRESSES_LIMIT_IN_SYSTEM (\d+)
+
+Start
+  ^Total Addresses in System \(excluding one mac per port\)\s+:\s+${TOTAL_ADDRESSES_IN_SYSTEM}
+  ^Max Addresses limit in System \(excluding one mac per port\)\s+:\s+${MAX_ADDRESSES_LIMIT_IN_SYSTEM} -> Record

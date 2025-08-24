@@ -340,9 +340,8 @@ class CiscoIosRouter(CiscoIosDevice):
         if vpn_config_data:
             return vpn_config_data
 
-        # Fallback to parse_cli_output if custom parsing fails
-        # Note: parse_cli_output expects a single command, so we'll pass a generic one
-        return self.parse_cli_output("show vpn config", combined_raw_output)
+        # Fallback: Return combined raw output if custom parsing yields no data
+        return combined_raw_output
 
 
 class CiscoIosSwitch(CiscoIosDevice):
@@ -372,16 +371,13 @@ class CiscoIosSwitch(CiscoIosDevice):
         raw_output = self.send_command(command)
         return self.parse_cli_output(command, raw_output)
 
-    def get_vlan_details(self) -> Union[List[Dict[str, Any]], str]:
+    def get_vlan_details(self) -> List[Dict[str, Any]]:
         """
         Gets detailed information about VLANs.
         """
         command = "show vlan"
         raw_output = self.send_command(command)
-        parsed_data = self.parse_cli_output(command, raw_output)
-        if isinstance(parsed_data, str):
-            return parsed_data  # Return raw string if parsing fails
-        return parsed_data
+        return self.parse_cli_output(command, raw_output)
 
     def get_vtp_status(self) -> List[Dict[str, Any]]:
         """
@@ -391,11 +387,11 @@ class CiscoIosSwitch(CiscoIosDevice):
         raw_output = self.send_command(command)
         return self.parse_cli_output(command, raw_output)
 
-    def get_spanning_tree_summary(self) -> Union[List[Dict[str, Any]], str]:
+    def get_spanning_tree_summary(self) -> List[Dict[str, Any]]:
         """
         Gets a summary of the Spanning Tree Protocol (STP) status.
         Attempts to parse using Netmiko's TextFSM, then falls back to custom Python parsing,
-        and finally to raw string if all parsing fails.
+        and finally to an empty list if all parsing fails.
         """
         command = "show spanning-tree summary"
         raw_output = self.send_command(command)
@@ -409,7 +405,7 @@ class CiscoIosSwitch(CiscoIosDevice):
             pass  # Continue to fallback parsing
 
         # Attempt 2: Custom Python-based parsing
-        raw_output = self.send_command(command="show spanning-tree summary")
+        # Use the raw_output from the first send_command call
 
         # Simple parsing for VLAN table
         vlan_data = []
@@ -455,14 +451,14 @@ class CiscoIosSwitch(CiscoIosDevice):
         if vlan_data:
             return vlan_data
 
-        # Fallback 3: Return raw string if all parsing fails
-        return raw_output
+        # Fallback 3: Return empty list if all parsing fails
+        return []
 
-    def get_interfaces_trunk(self) -> Union[List[Dict[str, Any]], str]:
+    def get_interfaces_trunk(self) -> List[Dict[str, Any]]:
         """
         Gets information about trunking interfaces.
         Attempts to parse using Netmiko's TextFSM, then falls back to custom Python parsing,
-        and finally to raw string if all parsing fails.
+        and finally to an empty list if all parsing fails.
         """
         command = "show interfaces trunk"
         raw_output = self.send_command(command)
@@ -476,7 +472,7 @@ class CiscoIosSwitch(CiscoIosDevice):
             pass  # Continue to fallback parsing
 
         # Attempt 2: Custom Python-based parsing
-        raw_output = self.send_command(command="show interfaces trunk")
+        # Use the raw_output from the first send_command call
 
         # Simple parsing for trunk interfaces
         trunk_data = []
@@ -511,8 +507,8 @@ class CiscoIosSwitch(CiscoIosDevice):
         if trunk_data:
             return trunk_data
 
-        # Fallback 3: Return raw string if all parsing fails
-        return raw_output
+        # Fallback 3: Return empty list if all parsing fails
+        return []
 
     def get_port_security(self) -> List[Dict[str, Any]]:
         """
@@ -536,7 +532,7 @@ class CiscoIosSwitch(CiscoIosDevice):
         raw_output = self.send_command(command)
         return self.parse_cli_output(command, raw_output)
 
-    def get_vlan_config(self) -> Union[List[Dict[str, Any]], str]:
+    def get_vlan_config(self) -> List[Dict[str, Any]]:
         """
         Gets the detailed VLAN configuration from the running configuration.
         Uses parse_cli_output for structured parsing with fallback.

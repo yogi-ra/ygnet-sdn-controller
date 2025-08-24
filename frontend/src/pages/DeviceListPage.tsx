@@ -48,9 +48,15 @@ const DeviceListPage = () => {
 
         const data: Device[] = await response.json();
         setDevices(data);
-      } catch (err) {
+      } catch (err: any) {
         console.error("Error fetching devices:", err);
-        setError("Failed to load devices. Please try again later.");
+        if (err.message && err.message.includes("Could not validate credentials")) {
+          setError("Authentication failed. Please log in again.");
+          logout();
+          navigate("/login");
+        } else {
+          setError("Failed to load devices. Please try again later.");
+        }
       }
     };
 
@@ -96,7 +102,13 @@ const DeviceListPage = () => {
       alert("Device deleted successfully!");
     } catch (err: any) {
       console.error("Error deleting device:", err);
-      setError(err.message || "Failed to delete device. Please try again.");
+      if (err.message && err.message.includes("Could not validate credentials")) {
+        setError("Authentication failed. Please log in again.");
+        logout();
+        navigate("/login");
+      } else {
+        setError(err.message || "Failed to delete device. Please try again.");
+      }
     }
   };
 

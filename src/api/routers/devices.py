@@ -19,6 +19,7 @@ from ..dependencies import (
     get_method_compatible_handler,
 )
 from ..utils import get_handler_from_device_id
+from ..decorators import cache_response
 
 router = APIRouter(
     prefix="/devices",
@@ -126,7 +127,9 @@ def update_device(
     updated_device = crud.update_device(
         db, device_id=device_id, device_update=device_update
     )
-    redis_client.delete(f"device:{device_id}:details")  # Invalidate cache
+    # Invalidate all caches related to this device
+    for key in redis_client.scan_iter(f"device:{device_id}:*"):
+        redis_client.delete(key)
     return updated_device
 
 
@@ -145,37 +148,28 @@ def delete_device(
     if not db_device:
         raise HTTPException(status_code=404, detail="Device not found")
     crud.delete_device(db, device_id=device_id)
-    redis_client.delete(f"device:{device_id}:details")  # Invalidate cache
+    # Invalidate all caches related to this device
+    for key in redis_client.scan_iter(f"device:{device_id}:*"):
+        redis_client.delete(key)
     return
 
 
 @router.get(
     "/{device_id}/version",
-    response_model=Union[dict, str],
+    response_model=dict,
     dependencies=[Depends(require_read_privileges)],
 )
+@cache_response(cache_key_prefix="device:version", ttl=300)
 def get_version(
     device_id: int,
     handler: Annotated[Any, Depends(get_method_compatible_handler("get_version_info"))],
-    redis_client: Any = Depends(get_redis_client),
 ):
     """
     Connects to a device and retrieves its version information, utilizing Redis cache.
     """
-    CACHE_TTL = 300  # Cache for 5 minutes
-    cache_key = f"device:{device_id}:version"
-
-    cached_data = redis_client.get(cache_key)
-    if cached_data:
-        try:
-            return json.loads(cached_data)
-        except json.JSONDecodeError:
-            redis_client.delete(cache_key)
-
     try:
         with handler:
             version_info = handler.get_version_info()
-            redis_client.setex(cache_key, CACHE_TTL, json.dumps(version_info))
             return version_info
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -183,33 +177,22 @@ def get_version(
 
 @router.get(
     "/{device_id}/interfaces",
-    response_model=Union[List[dict], str],
+    response_model=List[dict],
     dependencies=[Depends(require_read_privileges)],
 )
+@cache_response(cache_key_prefix="device:interfaces", ttl=300)
 def get_interfaces(
     device_id: int,
     handler: Annotated[
         Any, Depends(get_method_compatible_handler("get_interfaces_brief"))
     ],
-    redis_client: Any = Depends(get_redis_client),
 ):
     """
     Connects to a device and retrieves its interface brief, utilizing Redis cache.
     """
-    CACHE_TTL = 300  # Cache for 5 minutes
-    cache_key = f"device:{device_id}:interfaces"
-
-    cached_data = redis_client.get(cache_key)
-    if cached_data:
-        try:
-            return json.loads(cached_data)
-        except json.JSONDecodeError:
-            redis_client.delete(cache_key)
-
     try:
         with handler:
             interfaces_brief = handler.get_interfaces_brief()
-            redis_client.setex(cache_key, CACHE_TTL, json.dumps(interfaces_brief))
             return interfaces_brief
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -220,35 +203,39 @@ def get_interfaces(
     response_model=str,
     dependencies=[Depends(require_read_privileges)],
 )
+@cache_response(cache_key_prefix="device:hostname", ttl=300)
 def get_hostname(
     device_id: int,
     handler: Annotated[Any, Depends(get_method_compatible_handler("get_hostname"))],
 ):
     """
-    Connects to a device and retrieves its hostname.
+    Connects to a device and retrieves its hostname, utilizing Redis cache.
     """
     try:
         with handler:
-            return handler.get_hostname()
+            hostname = handler.get_hostname()
+            return hostname
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get(
     "/{device_id}/active-users",
-    response_model=Union[List[dict], str],
+    response_model=List[dict],
     dependencies=[Depends(require_read_privileges)],
 )
+@cache_response(cache_key_prefix="device:active_users", ttl=300)
 def get_active_users(
     device_id: int,
     handler: Annotated[Any, Depends(get_method_compatible_handler("get_active_users"))],
 ):
     """
-    Connects to a device and retrieves a list of currently logged-in users (active sessions).
+    Connects to a device and retrieves a list of currently logged-in users (active sessions), utilizing Redis cache.
     """
     try:
         with handler:
-            return handler.get_active_users()
+            active_users = handler.get_active_users()
+            return active_users
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -258,16 +245,18 @@ def get_active_users(
     response_model=List[dict],
     dependencies=[Depends(require_read_privileges)],
 )
+@cache_response(cache_key_prefix="device:local_users", ttl=300)
 def get_local_users(
     device_id: int,
     handler: Annotated[Any, Depends(get_method_compatible_handler("get_local_users"))],
 ):
     """
-    Connects to a device and retrieves a list of locally configured users.
+    Connects to a device and retrieves a list of locally configured users, utilizing Redis cache.
     """
     try:
         with handler:
-            return handler.get_local_users()
+            local_users = handler.get_local_users()
+            return local_users
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -277,16 +266,18 @@ def get_local_users(
     response_model=datetime,
     dependencies=[Depends(require_read_privileges)],
 )
+@cache_response(cache_key_prefix="device:clock", ttl=300)
 def get_clock(
     device_id: int,
     handler: Annotated[Any, Depends(get_method_compatible_handler("get_clock"))],
 ):
     """
-    Connects to a device and retrieves its current clock/time.
+    Connects to a device and retrieves its current clock/time, utilizing Redis cache.
     """
     try:
         with handler:
-            return handler.get_clock()
+            clock = handler.get_clock()
+            return clock
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -296,16 +287,18 @@ def get_clock(
     response_model=List[dict],
     dependencies=[Depends(require_read_privileges)],
 )
+@cache_response(cache_key_prefix="device:vlan_details", ttl=300)
 def get_vlan_details(
     device_id: int,
     handler: Annotated[Any, Depends(get_method_compatible_handler("get_vlan_details"))],
 ):
     """
-    Connects to a device and retrieves detailed VLAN information.
+    Connects to a device and retrieves detailed VLAN information, utilizing Redis cache.
     """
     try:
         with handler:
-            return handler.get_vlan_details()
+            vlan_details = handler.get_vlan_details()
+            return vlan_details
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -315,25 +308,28 @@ def get_vlan_details(
     response_model=List[dict],
     dependencies=[Depends(require_read_privileges)],
 )
+@cache_response(cache_key_prefix="device:vtp_status", ttl=300)
 def get_vtp_status(
     device_id: int,
     handler: Annotated[Any, Depends(get_method_compatible_handler("get_vtp_status"))],
 ):
     """
-    Connects to a device and retrieves its VTP status.
+    Connects to a device and retrieves its VTP status, utilizing Redis cache.
     """
     try:
         with handler:
-            return handler.get_vtp_status()
+            vtp_status = handler.get_vtp_status()
+            return vtp_status
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get(
     "/{device_id}/spanning-tree-summary",
-    response_model=Union[List[dict], str],
+    response_model=List[dict],
     dependencies=[Depends(require_read_privileges)],
 )
+@cache_response(cache_key_prefix="device:spanning_tree_summary", ttl=300)
 def get_spanning_tree_summary(
     device_id: int,
     handler: Annotated[
@@ -341,20 +337,22 @@ def get_spanning_tree_summary(
     ],
 ):
     """
-    Connects to a device and retrieves a summary of its Spanning Tree Protocol status.
+    Connects to a device and retrieves a summary of its Spanning Tree Protocol status, utilizing Redis cache.
     """
     try:
         with handler:
-            return handler.get_spanning_tree_summary()
+            spanning_tree_summary = handler.get_spanning_tree_summary()
+            return spanning_tree_summary
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get(
     "/{device_id}/interfaces-trunk",
-    response_model=Union[List[dict], str],
+    response_model=List[dict],
     dependencies=[Depends(require_read_privileges)],
 )
+@cache_response(cache_key_prefix="device:interfaces_trunk", ttl=300)
 def get_interfaces_trunk(
     device_id: int,
     handler: Annotated[
@@ -362,11 +360,12 @@ def get_interfaces_trunk(
     ],
 ):
     """
-    Connects to a device and retrieves information about its trunking interfaces.
+    Connects to a device and retrieves information about its trunking interfaces, utilizing Redis cache.
     """
     try:
         with handler:
-            return handler.get_interfaces_trunk()
+            interfaces_trunk = handler.get_interfaces_trunk()
+            return interfaces_trunk
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -376,6 +375,7 @@ def get_interfaces_trunk(
     response_model=List[str],
     dependencies=[Depends(require_read_privileges)],
 )
+@cache_response(cache_key_prefix="device:interface_config", ttl=300)
 def get_interface_config(
     device_id: int,
     interface_name: str,
@@ -384,11 +384,12 @@ def get_interface_config(
     ],
 ):
     """
-    Connects to a device and retrieves the configuration for a specific interface.
+    Connects to a device and retrieves the configuration for a specific interface, utilizing Redis cache.
     """
     try:
         with handler:
-            return handler.get_interface_config(interface_name=interface_name)
+            interface_config = handler.get_interface_config(interface_name=interface_name)
+            return interface_config
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -398,82 +399,91 @@ def get_interface_config(
     response_model=List[str],
     dependencies=[Depends(require_read_privileges)],
 )
+@cache_response(cache_key_prefix="device:line_config", ttl=300)
 def get_line_config(
     device_id: int,
     handler: Annotated[Any, Depends(get_method_compatible_handler("get_line_config"))],
 ):
     """
-    Connects to a device and retrieves its line configuration.
+    Connects to a device and retrieves its line configuration, utilizing Redis cache.
     """
     try:
         with handler:
-            return handler.get_line_config()
+            line_config = handler.get_line_config()
+            return line_config
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get(
     "/{device_id}/banners",
-    response_model=Union[Dict[str, str], str],
+    response_model=Dict[str, str],
     dependencies=[Depends(require_read_privileges)],
 )
+@cache_response(cache_key_prefix="device:banners", ttl=300)
 def get_banners(
     device_id: int,
     handler: Annotated[Any, Depends(get_method_compatible_handler("get_banners"))],
 ):
     """
-    Connects to a device and retrieves its banner configuration.
+    Connects to a device and retrieves its banner configuration, utilizing Redis cache.
     """
     try:
         with handler:
-            return handler.get_banners()
+            banners = handler.get_banners()
+            return banners
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get(
     "/{device_id}/ntp-config",
-    response_model=Union[List[Dict[str, str]], str],
+    response_model=List[Dict[str, str]],
     dependencies=[Depends(require_read_privileges)],
 )
+@cache_response(cache_key_prefix="device:ntp_config", ttl=300)
 def get_ntp_config(
     device_id: int,
     handler: Annotated[Any, Depends(get_method_compatible_handler("get_ntp_config"))],
 ):
     """
-    Connects to a device and retrieves its NTP configuration.
+    Connects to a device and retrieves its NTP configuration, utilizing Redis cache.
     """
     try:
         with handler:
-            return handler.get_ntp_config()
+            ntp_config = handler.get_ntp_config()
+            return ntp_config
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get(
     "/{device_id}/snmp-config",
-    response_model=Union[List[Dict[str, str]], str],
+    response_model=List[Dict[str, str]],
     dependencies=[Depends(require_read_privileges)],
 )
+@cache_response(cache_key_prefix="device:snmp_config", ttl=300)
 def get_snmp_config(
     device_id: int,
     handler: Annotated[Any, Depends(get_method_compatible_handler("get_snmp_config"))],
 ):
     """
-    Connects to a device and retrieves its SNMP configuration.
+    Connects to a device and retrieves its SNMP configuration, utilizing Redis cache.
     """
     try:
         with handler:
-            return handler.get_snmp_config()
+            snmp_config = handler.get_snmp_config()
+            return snmp_config
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get(
     "/{device_id}/logging-config",
-    response_model=Union[List[Dict[str, str]], str],
+    response_model=List[Dict[str, str]],
     dependencies=[Depends(require_read_privileges)],
 )
+@cache_response(cache_key_prefix="device:logging_config", ttl=300)
 def get_logging_config(
     device_id: int,
     handler: Annotated[
@@ -481,49 +491,54 @@ def get_logging_config(
     ],
 ):
     """
-    Connects to a device and retrieves its logging configuration.
+    Connects to a device and retrieves its logging configuration, utilizing Redis cache.
     """
     try:
         with handler:
-            return handler.get_logging_config()
+            logging_config = handler.get_logging_config()
+            return logging_config
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get(
     "/{device_id}/acls",
-    response_model=Union[List[Dict[str, str]], str],
+    response_model=List[Dict[str, str]],
     dependencies=[Depends(require_read_privileges)],
 )
+@cache_response(cache_key_prefix="device:acls", ttl=300)
 def get_acls(
     device_id: int,
     handler: Annotated[Any, Depends(get_method_compatible_handler("get_acls"))],
 ):
     """
-    Connects to a device and retrieves its Access Control Lists (ACLs).
+    Connects to a device and retrieves its Access Control Lists (ACLs), utilizing Redis cache.
     """
     try:
         with handler:
-            return handler.get_acls()
+            acls = handler.get_acls()
+            return acls
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get(
     "/{device_id}/aaa-config",
-    response_model=Union[List[Dict[str, str]], str],
+    response_model=List[Dict[str, str]],
     dependencies=[Depends(require_read_privileges)],
 )
+@cache_response(cache_key_prefix="device:aaa_config", ttl=300)
 def get_aaa_config(
     device_id: int,
     handler: Annotated[Any, Depends(get_method_compatible_handler("get_aaa_config"))],
 ):
     """
-    Connects to a device and retrieves its AAA configuration.
+    Connects to a device and retrieves its AAA configuration, utilizing Redis cache.
     """
     try:
         with handler:
-            return handler.get_aaa_config()
+            aaa_config = handler.get_aaa_config()
+            return aaa_config
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -533,6 +548,7 @@ def get_aaa_config(
     response_model=List[dict],
     dependencies=[Depends(require_read_privileges)],
 )
+@cache_response(cache_key_prefix="device:cdp_neighbors", ttl=300)
 def get_cdp_neighbors(
     device_id: int,
     handler: Annotated[
@@ -540,11 +556,12 @@ def get_cdp_neighbors(
     ],
 ):
     """
-    Connects to a device and retrieves its CDP neighbors.
+    Connects to a device and retrieves its CDP neighbors, utilizing Redis cache.
     """
     try:
         with handler:
-            return handler.get_cdp_neighbors()
+            cdp_neighbors = handler.get_cdp_neighbors()
+            return cdp_neighbors
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -554,6 +571,7 @@ def get_cdp_neighbors(
     response_model=List[dict],
     dependencies=[Depends(require_read_privileges)],
 )
+@cache_response(cache_key_prefix="device:ospf_neighbors", ttl=300)
 def get_ospf_neighbors(
     device_id: int,
     handler: Annotated[
@@ -561,11 +579,12 @@ def get_ospf_neighbors(
     ],
 ):
     """
-    Connects to a device and retrieves its OSPF neighbors.
+    Connects to a device and retrieves its OSPF neighbors, utilizing Redis cache.
     """
     try:
         with handler:
-            return handler.get_ospf_neighbors()
+            ospf_neighbors = handler.get_ospf_neighbors()
+            return ospf_neighbors
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -575,6 +594,7 @@ def get_ospf_neighbors(
     response_model=List[dict],
     dependencies=[Depends(require_read_privileges)],
 )
+@cache_response(cache_key_prefix="device:eigrp_neighbors", ttl=300)
 def get_eigrp_neighbors(
     device_id: int,
     handler: Annotated[
@@ -582,20 +602,22 @@ def get_eigrp_neighbors(
     ],
 ):
     """
-    Connects to a device and retrieves its EIGRP neighbors.
+    Connects to a device and retrieves its EIGRP neighbors, utilizing Redis cache.
     """
     try:
         with handler:
-            return handler.get_eigrp_neighbors()
+            eigrp_neighbors = handler.get_eigrp_neighbors()
+            return eigrp_neighbors
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get(
     "/{device_id}/routing-protocol-config",
-    response_model=Union[List[Dict[str, str]], str],
+    response_model=List[Dict[str, str]],
     dependencies=[Depends(require_read_privileges)],
 )
+@cache_response(cache_key_prefix="device:routing_protocol_config", ttl=300)
 def get_routing_protocol_config(
     device_id: int,
     handler: Annotated[
@@ -603,49 +625,54 @@ def get_routing_protocol_config(
     ],
 ):
     """
-    Connects to a device and retrieves its routing protocol configuration.
+    Connects to a device and retrieves its routing protocol configuration, utilizing Redis cache.
     """
     try:
         with handler:
-            return handler.get_routing_protocol_config()
+            routing_protocol_config = handler.get_routing_protocol_config()
+            return routing_protocol_config
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get(
     "/{device_id}/nat-config",
-    response_model=Union[List[Dict[str, str]], str],
+    response_model=List[Dict[str, str]],
     dependencies=[Depends(require_read_privileges)],
 )
+@cache_response(cache_key_prefix="device:nat_config", ttl=300)
 def get_nat_config(
     device_id: int,
     handler: Annotated[Any, Depends(get_method_compatible_handler("get_nat_config"))],
 ):
     """
-    Connects to a device and retrieves its NAT configuration.
+    Connects to a device and retrieves its NAT configuration, utilizing Redis cache.
     """
     try:
         with handler:
-            return handler.get_nat_config()
+            nat_config = handler.get_nat_config()
+            return nat_config
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get(
     "/{device_id}/vpn-config",
-    response_model=Union[List[Dict[str, str]], str],
+    response_model=List[Dict[str, str]],
     dependencies=[Depends(require_read_privileges)],
 )
+@cache_response(cache_key_prefix="device:vpn_config", ttl=300)
 def get_vpn_config(
     device_id: int,
     handler: Annotated[Any, Depends(get_method_compatible_handler("get_vpn_config"))],
 ):
     """
-    Connects to a device and retrieves its VPN configuration.
+    Connects to a device and retrieves its VPN configuration, utilizing Redis cache.
     """
     try:
         with handler:
-            return handler.get_vpn_config()
+            vpn_config = handler.get_vpn_config()
+            return vpn_config
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -655,6 +682,7 @@ def get_vpn_config(
     response_model=List[dict],
     dependencies=[Depends(require_read_privileges)],
 )
+@cache_response(cache_key_prefix="device:lldp_neighbors", ttl=300)
 def get_lldp_neighbors(
     device_id: int,
     handler: Annotated[
@@ -662,11 +690,12 @@ def get_lldp_neighbors(
     ],
 ):
     """
-    Connects to a device and retrieves its LLDP neighbors.
+    Connects to a device and retrieves its LLDP neighbors, utilizing Redis cache.
     """
     try:
         with handler:
-            return handler.get_lldp_neighbors()
+            lldp_neighbors = handler.get_lldp_neighbors()
+            return lldp_neighbors
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -676,6 +705,7 @@ def get_lldp_neighbors(
     response_model=List[dict],
     dependencies=[Depends(require_read_privileges)],
 )
+@cache_response(cache_key_prefix="device:port_security", ttl=300)
 def get_port_security(
     device_id: int,
     handler: Annotated[
@@ -683,11 +713,12 @@ def get_port_security(
     ],
 ):
     """
-    Connects to a device and retrieves its port security configuration.
+    Connects to a device and retrieves its port security configuration, utilizing Redis cache.
     """
     try:
         with handler:
-            return handler.get_port_security()
+            port_security = handler.get_port_security()
+            return port_security
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -697,6 +728,7 @@ def get_port_security(
     response_model=List[dict],
     dependencies=[Depends(require_read_privileges)],
 )
+@cache_response(cache_key_prefix="device:etherchannel_summary", ttl=300)
 def get_etherchannel_summary(
     device_id: int,
     handler: Annotated[
@@ -704,30 +736,33 @@ def get_etherchannel_summary(
     ],
 ):
     """
-    Connects to a device and retrieves its EtherChannel summary.
+    Connects to a device and retrieves its EtherChannel summary, utilizing Redis cache.
     """
     try:
         with handler:
-            return handler.get_etherchannel_summary()
+            etherchannel_summary = handler.get_etherchannel_summary()
+            return etherchannel_summary
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get(
     "/{device_id}/vlan-config",
-    response_model=Union[List[Dict[str, str]], str],
+    response_model=List[Dict[str, str]],
     dependencies=[Depends(require_read_privileges)],
 )
+@cache_response(cache_key_prefix="device:vlan_config", ttl=300)
 def get_vlan_config(
     device_id: int,
     handler: Annotated[Any, Depends(get_method_compatible_handler("get_vlan_config"))],
 ):
     """
-    Connects to a device and retrieves its detailed VLAN configuration.
+    Connects to a device and retrieves its detailed VLAN configuration, utilizing Redis cache.
     """
     try:
         with handler:
-            return handler.get_vlan_config()
+            vlan_config = handler.get_vlan_config()
+            return vlan_config
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -737,6 +772,7 @@ def get_vlan_config(
     response_model=List[dict],
     dependencies=[Depends(require_read_privileges)],
 )
+@cache_response(cache_key_prefix="device:interface_vlan_membership", ttl=300)
 def get_interface_vlan_membership(
     device_id: int,
     handler: Annotated[
@@ -744,20 +780,22 @@ def get_interface_vlan_membership(
     ],
 ):
     """
-    Connects to a device and retrieves its interface VLAN membership information.
+    Connects to a device and retrieves its interface VLAN membership information, utilizing Redis cache.
     """
     try:
         with handler:
-            return handler.get_interface_vlan_membership()
+            interface_vlan_membership = handler.get_interface_vlan_membership()
+            return interface_vlan_membership
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get(
     "/{device_id}/interfaces/{interface_name}/trunk-config",
-    response_model=Union[List[Dict[str, str]], str],
+    response_model=List[Dict[str, str]],
     dependencies=[Depends(require_read_privileges)],
 )
+@cache_response(cache_key_prefix="device:trunk_port_config", ttl=300)
 def get_trunk_port_config(
     device_id: int,
     interface_name: str,
@@ -766,11 +804,12 @@ def get_trunk_port_config(
     ],
 ):
     """
-    Connects to a device and retrieves the detailed trunk port configuration for a specific interface.
+    Connects to a device and retrieves the detailed trunk port configuration for a specific interface, utilizing Redis cache.
     """
     try:
         with handler:
-            return handler.get_trunk_port_config(interface_name=interface_name)
+            trunk_port_config = handler.get_trunk_port_config(interface_name=interface_name)
+            return trunk_port_config
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -780,6 +819,7 @@ def get_trunk_port_config(
     response_model=List[dict],
     dependencies=[Depends(require_read_privileges)],
 )
+@cache_response(cache_key_prefix="device:interface_port_security", ttl=300)
 def get_interface_port_security(
     device_id: int,
     handler: Annotated[
@@ -790,11 +830,12 @@ def get_interface_port_security(
     ),
 ):
     """
-    Connects to a device and retrieves the port security configuration for a specific interface.
+    Connects to a device and retrieves the port security configuration for a specific interface, utilizing Redis cache.
     """
     try:
         with handler:
-            return handler.get_interface_port_security(interface_name=interface_name)
+            interface_port_security = handler.get_interface_port_security(interface_name=interface_name)
+            return interface_port_security
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -863,18 +904,19 @@ def run_command(
                 print(f"Raw output from command: {raw_output}")
                 current_prompt = handler.connection.find_prompt()
 
-                # Try to parse for non-config commands, if it fails, send raw.
+                # Try to parse for non-config commands. If parsing yields an empty list, send raw.
                 try:
                     parsed_output = handler.parse_cli_output(
                         command_to_send, raw_output
                     )
-                    if isinstance(parsed_output, (dict, list)):
+                    if parsed_output:  # Check if parsed_output is not empty
                         return {
                             "output": json.dumps(parsed_output, indent=2),
                             "device_level": current_prompt,
                         }
-                    return {"output": parsed_output, "device_level": current_prompt}
-                except Exception:
+                    else: # If parsed_output is empty (no template found or no data), return raw_output
+                        return {"output": raw_output, "device_level": current_prompt}
+                except Exception: # If an actual exception occurs during parsing, return raw_output
                     return {"output": raw_output, "device_level": current_prompt}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

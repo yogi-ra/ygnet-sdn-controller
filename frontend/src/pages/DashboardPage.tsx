@@ -41,7 +41,11 @@ const DashboardPage = () => {
         setActiveDevicesCount(activeCount);
 
       } catch (e: any) {
-        setError(e.message);
+        if (e.message && e.message.includes("Could not validate credentials")) {
+          navigate('/login');
+        } else {
+          setError(e.message);
+        }
       } finally {
         setLoading(false);
       }

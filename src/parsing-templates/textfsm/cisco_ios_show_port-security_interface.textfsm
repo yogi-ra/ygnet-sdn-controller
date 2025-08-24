@@ -1,0 +1,26 @@
+Value PORT_SECURITY (\S+)
+Value PORT_STATUS (\S+)
+Value VIOLATION_MODE (\S+)
+Value AGING_TIME (\d+)\s+mins
+Value AGING_TYPE (\S+)
+Value SECURE_ADDRESS_AGING (\S+)
+Value MAXIMUM_MAC_ADDRESSES (\d+)
+Value TOTAL_MAC_ADDRESSES (\d+)
+Value CONFIGURED_MAC_ADDRESSES (\d+)
+Value STICKY_MAC_ADDRESSES (\d+)
+Value LAST_SOURCE_ADDRESS_VLAN (\S+):(\d+)
+Value SECURITY_VIOLATION_COUNT (\d+)
+
+Start
+  ^Port Security\s+:\s+${PORT_SECURITY}
+  ^Port Status\s+:\s+${PORT_STATUS}
+  ^Violation Mode\s+:\s+${VIOLATION_MODE}
+  ^Aging Time\s+:\s+${AGING_TIME}
+  ^Aging Type\s+:\s+${AGING_TYPE}
+  ^Secure Address Aging\s+:\s+${SECURE_ADDRESS_AGING}
+  ^Maximum MAC Addresses\s+:\s+${MAXIMUM_MAC_ADDRESSES}
+  ^Total MAC Addresses\s+:\s+${TOTAL_MAC_ADDRESSES}
+  ^Configured MAC Addresses\s+:\s+${CONFIGURED_MAC_ADDRESSES}
+  ^Sticky MAC Addresses\s+:\s+${STICKY_MAC_ADDRESSES}
+  ^Last Source Address:Vlan\s+:\s+${LAST_SOURCE_ADDRESS_VLAN}
+  ^\s+Security Violation Count\s+:\s+${SECURITY_VIOLATION_COUNT} -> Record

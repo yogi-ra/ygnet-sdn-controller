@@ -74,8 +74,8 @@ def check_device_method_compatibility(device_id: int, db: Session, method_name: 
     handler = get_handler_from_device_id(device_id, db)
     if not hasattr(handler, method_name):
         raise HTTPException(
-            status_code=400,
-            detail=f"Device with ID {device_id} does not support the method '{method_name}'.",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Method '{method_name}' not supported for device with ID {device_id} ({handler.__class__.__name__}).",
         )
     return handler
 

@@ -1,0 +1,5 @@
+Template,Command
+cisco_ios_show_running_config_include_snmp_server.textfsm,show running-config | include snmp-server
+cisco_ios_show_running_config_section_aaa.textfsm,show running-config | section aaa
+cisco_ios_show_running_config_section_access_list.textfsm,show running-config | section access-list
+cisco_ios_show_port-security.textfsm,show port-security

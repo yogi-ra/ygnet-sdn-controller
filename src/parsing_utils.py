@@ -2,7 +2,7 @@ import logging
 import os
 from typing import Any, Dict, List, Optional, Union
 
-from ntc_templates.parse import parse_output as ntc_parse_output
+from ntc_templates.parse import parse_output as ntc_parse_output, ParsingException
 import ttp
 
 # Import Genie (assuming it's installed)
@@ -17,9 +17,10 @@ except ImportError:
 # Path to the templates directory
 # Adjust this path based on where parsing_utils.py is relative to the project root
 TEMPLATES_DIR = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "..", "..", "parsing-templates"
+    os.path.dirname(os.path.abspath(__file__)), "parsing-templates"
 )
 TTP_TEMPLATES_DIR = os.path.join(TEMPLATES_DIR, "ttp")
+TEXTFSM_TEMPLATES_DIR = os.path.join(TEMPLATES_DIR, "textfsm")
 
 logger = logging.getLogger(__name__)
 
@@ -45,25 +46,46 @@ def parse_cli_output(
     2. TTP
     3. Genie (placeholder)
     """
-    # Attempt 1: TextFSM parsing using ntc_templates.parse.parse_output
+    # Attempt 1: TextFSM parsing using ntc_templates.parse.parse_output (official templates)
     try:
         logger.debug(
-            f"TextFSM parsing - netmiko_device_type: {netmiko_device_type}, device_type: {device_type}"
+            f"TextFSM parsing (official) - netmiko_device_type: {netmiko_device_type}, command: {command}"
         )
-        # ntc_templates.parse.parse_output automatically finds the template
-        # based on the command and platform (device_type).
-        # It expects the platform to be the Netmiko device_type (e.g., 'cisco_ios').
         parsed_data = ntc_parse_output(
             platform=netmiko_device_type, command=command, data=raw_output
         )
 
         if parsed_data:
-            logger.debug(f"TextFSM parsing succeeded for command '{command}'.")
+            logger.debug(f"TextFSM parsing (official) succeeded for command '{command}'.")
             return parsed_data
 
+    except ParsingException as e:
+        if "No template found" in str(e):
+            logger.debug(
+                f"TextFSM template not found for command '{command}' in official templates. Trying custom templates."
+            )
+            # Attempt 1.1: TextFSM parsing using custom templates as fallback
+            try:
+                parsed_data = ntc_parse_output(
+                    platform=netmiko_device_type,
+                    command=command,
+                    data=raw_output,
+                    template_dir=TEXTFSM_TEMPLATES_DIR,
+                )
+                if parsed_data:
+                    logger.debug(f"TextFSM parsing (custom) succeeded for command '{command}'.")
+                    return parsed_data
+            except Exception as e_custom:
+                logger.error(
+                    f"TextFSM parsing (custom) failed for command '{command}': {type(e_custom).__name__}: {e_custom}"
+                )
+        else:
+            logger.error(
+                f"TextFSM parsing (official) failed for command '{command}': {type(e).__name__}: {e}"
+            )
     except Exception as e:
         logger.error(
-            f"TextFSM parsing failed for command '{command}': {type(e).__name__}: {e}"
+            f"TextFSM parsing (official) failed for command '{command}': {type(e).__name__}: {e}"
         )
 
     # Attempt 2: TTP Parsing
@@ -103,6 +125,6 @@ def parse_cli_output(
             )
 
     logger.warning(
-        f"No parser succeeded for command '{command}'. Returning raw output."
+        f"No parser succeeded for command '{command}'. Returning empty list."
     )
-    return raw_output
+    return []
