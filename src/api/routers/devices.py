@@ -43,10 +43,20 @@ def create_device(device: schemas.DeviceCreate, db: Session = Depends(get_db)):
 )
 def read_devices(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     """
-    Retrieve all network devices from the database.
+    Retrieve all network devices from the database, including their reachability status.
     """
-    devices = crud.get_devices(db, skip=skip, limit=limit)
-    return [schemas.Device.from_orm(device) for device in devices]
+    db_devices = crud.get_devices(db, skip=skip, limit=limit)
+    devices_with_status = []
+    for db_device in db_devices:
+        device_dict = schemas.Device.from_orm(db_device).dict()
+        try:
+            handler = get_handler_from_device_id(db_device.id, db)
+            device_dict["is_reachable"] = handler.check_reachability()
+        except Exception as e:
+            device_dict["is_reachable"] = False
+            print(f"Error checking reachability for device {db_device.id}: {e}")
+        devices_with_status.append(device_dict)
+    return devices_with_status
 
 
 @router.get(
