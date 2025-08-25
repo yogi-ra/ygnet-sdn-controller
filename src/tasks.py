@@ -27,7 +27,7 @@ async def check_device_for_changes():
             try:
                 handler = get_handler_from_device_id(device.id, db)
                 with handler:
-                    current_version = handler.get_version_info()
+                    current_version = handler.system.get_version_info()
 
                 # In a real scenario, you'd compare this to a stored 'last_known_version'
                 # For now, we'll just invalidate if we can fetch it, assuming any fetch implies potential change
