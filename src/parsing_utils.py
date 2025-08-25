@@ -58,6 +58,7 @@ def parse_cli_output(
             platform=netmiko_device_type, command=command, data=raw_output, try_fallback=True, template_dir=TEXTFSM_TEMPLATES_DIR
         )
 
+        logger.info(f"Parsed data from TextFSM (official) for command '{command}': {parsed_data}")
         if parsed_data:
             logger.debug(f"TextFSM parsing (official) succeeded for command '{command}'.")
             return parsed_data
