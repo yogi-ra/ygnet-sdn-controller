@@ -41,31 +41,27 @@ def sample_cisco_router_info():
 
 
 # --- BaseDevice Tests (via factory) ---
-def test_connect_success(mock_connection_manager, sample_cisco_router_info):
-    """Test successful connection using the IP address."""
+def test_check_reachability_success(mock_connection_manager, sample_cisco_router_info):
+    """Test successful reachability check."""
     handler = get_device_handler(sample_cisco_router_info)
-    handler.connect()
-
-    mock_connection_manager.get_connection.assert_called_once_with(
+    assert handler.check_reachability() is True
+    mock_connection_manager.assert_called_once_with(
         sample_cisco_router_info, handler.netmiko_device_type
     )
-    mock_connection_manager.get_connection.return_value.enable.assert_called_once()
 
 
-def test_connect_raises_authentication_error(mock_connection_manager, sample_cisco_router_info):
-    """Test that DeviceAuthenticationError is raised correctly."""
-    mock_connection_manager.get_connection.side_effect = NetmikoAuthenticationException
-    with pytest.raises(DeviceAuthenticationError):
-        handler = get_device_handler(sample_cisco_router_info)
-        handler.connect()
+def test_check_reachability_raises_authentication_error(mock_connection_manager, sample_cisco_router_info):
+    """Test that check_reachability handles authentication errors."""
+    mock_connection_manager.side_effect = NetmikoAuthenticationException
+    handler = get_device_handler(sample_cisco_router_info)
+    assert handler.check_reachability() is False
 
 
-def test_connect_raises_timeout_error(mock_connection_manager, sample_cisco_router_info):
-    """Test that DeviceTimeoutError is raised correctly."""
-    mock_connection_manager.get_connection.side_effect = NetmikoTimeoutException
-    with pytest.raises(DeviceTimeoutError):
-        handler = get_device_handler(sample_cisco_router_info)
-        handler.connect()
+def test_check_reachability_raises_timeout_error(mock_connection_manager, sample_cisco_router_info):
+    """Test that check_reachability handles timeout errors."""
+    mock_connection_manager.side_effect = NetmikoTimeoutException
+    handler = get_device_handler(sample_cisco_router_info)
+    assert handler.check_reachability() is False
 
 
 # --- CiscoIosDevice Specific Method Tests (using router info) ---
@@ -86,14 +82,14 @@ def test_cisco_get_version_info(mock_connection_manager, mocker, sample_cisco_ro
             "config_register": "0x2102",
         }
     ]
-    mock_connection_manager.get_connection.return_value.send_command.return_value = "raw output of show version"
+    mock_connection_manager.return_value.send_command.return_value = "raw output of show version"
     mock_parse_cli_output.return_value = expected_data
 
     handler = get_device_handler(sample_cisco_router_info)
-    handler.connect() # Ensure connection is established
-    version_info = handler.system.get_version_info()
+    with handler:
+        version_info = handler.system.get_version_info()
 
-    mock_connection_manager.get_connection.return_value.send_command.assert_called_once_with("show version")
+    mock_connection_manager.return_value.send_command.assert_called_once_with("show version")
     mock_parse_cli_output.assert_called_once_with(
         "show version", "raw output of show version", handler.device_info.device_type, handler.netmiko_device_type
     )
@@ -112,14 +108,14 @@ def test_cisco_get_interfaces_brief(mock_connection_manager, mocker, sample_cisc
         },
         {"intf": "Loopback0", "ipaddr": "1.1.1.1", "status": "up", "proto": "up"},
     ]
-    mock_connection_manager.get_connection.return_value.send_command.return_value = "raw output of show ip interface brief"
+    mock_connection_manager.return_value.send_command.return_value = "raw output of show ip interface brief"
     mock_parse_cli_output.return_value = expected_data
 
     handler = get_device_handler(sample_cisco_router_info)
-    handler.connect() # Ensure connection is established
-    interfaces = handler.interfaces.get_interfaces_brief()
+    with handler:
+        interfaces = handler.interfaces.get_interfaces_brief()
 
-    mock_connection_manager.get_connection.return_value.send_command.assert_called_once_with("show ip interface brief")
+    mock_connection_manager.return_value.send_command.assert_called_once_with("show ip interface brief")
     mock_parse_cli_output.assert_called_once_with(
         "show ip interface brief", "raw output of show ip interface brief", handler.device_info.device_type, handler.netmiko_device_type
     )
@@ -155,14 +151,14 @@ def test_cisco_get_active_users(mock_connection_manager, mocker, sample_cisco_ro
             "location": "10.100.100.1",
         }
     ]
-    mock_connection_manager.get_connection.return_value.send_command.return_value = "raw output of show users"
+    mock_connection_manager.return_value.send_command.return_value = "raw output of show users"
     mock_parse_cli_output.return_value = expected_data
 
     handler = get_device_handler(sample_cisco_router_info)
-    handler.connect() # Ensure connection is established
-    active_users = handler.system.get_active_users()
+    with handler:
+        active_users = handler.system.get_active_users()
 
-    mock_connection_manager.get_connection.return_value.send_command.assert_called_once_with("show users")
+    mock_connection_manager.return_value.send_command.assert_called_once_with("show users")
     mock_parse_cli_output.assert_called_once_with(
         "show users", "raw output of show users", handler.device_info.device_type, handler.netmiko_device_type
     )
@@ -173,13 +169,13 @@ def test_cisco_get_clock(mock_connection_manager, sample_cisco_router_info):
     Test the get_clock method parses the output into a datetime object.
     """
     real_device_clock_output = "*13:26:03.945 UTC Thu Aug 21 2025"
-    mock_connection_manager.get_connection.return_value.send_command.return_value = real_device_clock_output
+    mock_connection_manager.return_value.send_command.return_value = real_device_clock_output
 
     handler = get_device_handler(sample_cisco_router_info)
-    handler.connect() # Ensure connection is established
-    clock = handler.system.get_clock()
+    with handler:
+        clock = handler.system.get_clock()
 
-    mock_connection_manager.get_connection.return_value.send_command.assert_called_once_with("show clock")
+    mock_connection_manager.return_value.send_command.assert_called_once_with("show clock")
     assert isinstance(clock, datetime)
     assert clock.year == 2025
     assert clock.month == 8
@@ -199,14 +195,14 @@ def test_cisco_router_get_routing_table(mock_connection_manager, mocker, sample_
         {"protocol": "C", "network": "10.0.0.0/24", "interface": "GigabitEthernet0/0"},
         {"protocol": "S", "network": "0.0.0.0/0", "nexthop": "192.168.1.1"},
     ]
-    mock_connection_manager.get_connection.return_value.send_command.return_value = "raw output of show ip route"
+    mock_connection_manager.return_value.send_command.return_value = "raw output of show ip route"
     mock_parse_cli_output.return_value = expected_data
 
     handler = get_device_handler(sample_cisco_router_info)
-    handler.connect() # Ensure connection is established
-    routing_table = handler.routing.get_routing_table()
+    with handler:
+        routing_table = handler.routing.get_routing_table()
 
-    mock_connection_manager.get_connection.return_value.send_command.assert_called_once_with("show ip route")
+    mock_connection_manager.return_value.send_command.assert_called_once_with("show ip route")
     mock_parse_cli_output.assert_called_once_with(
         "show ip route", "raw output of show ip route", handler.device_info.device_type, handler.netmiko_device_type
     )
@@ -226,14 +222,14 @@ def test_cisco_router_get_bgp_summary(mock_connection_manager, mocker, sample_ci
             "state_pfxrcd": "Idle",
         }
     ]
-    mock_connection_manager.get_connection.return_value.send_command.return_value = "raw output of show ip bgp summary"
+    mock_connection_manager.return_value.send_command.return_value = "raw output of show ip bgp summary"
     mock_parse_cli_output.return_value = expected_data
 
     handler = get_device_handler(sample_cisco_router_info)
-    handler.connect() # Ensure connection is established
-    bgp_summary = handler.routing.get_bgp_summary()
+    with handler:
+        bgp_summary = handler.routing.get_bgp_summary()
 
-    mock_connection_manager.get_connection.return_value.send_command.assert_called_once_with("show ip bgp summary")
+    mock_connection_manager.return_value.send_command.assert_called_once_with("show ip bgp summary")
     mock_parse_cli_output.assert_called_once_with(
         "show ip bgp summary", "raw output of show ip bgp summary", handler.device_info.device_type, handler.netmiko_device_type
     )
@@ -247,11 +243,11 @@ def test_cisco_get_local_users(mock_connection_manager, sample_cisco_router_info
         "username guest password 0 guestpass\n"
         "username network_ops privilege 1 secret 5 $1$def$uvw"
     )
-    mock_connection_manager.get_connection.return_value.send_command.return_value = raw_output
+    mock_connection_manager.return_value.send_command.return_value = raw_output
 
     handler = get_device_handler(sample_cisco_router_info)
-    handler.connect() # Ensure connection is established
-    local_users = handler.system.get_local_users()
+    with handler:
+        local_users = handler.system.get_local_users()
 
     expected_users = [
         {"username": "admin", "privilege": "15"},
@@ -260,7 +256,7 @@ def test_cisco_get_local_users(mock_connection_manager, sample_cisco_router_info
     ]
 
     assert local_users == expected_users
-    mock_connection_manager.get_connection.return_value.send_command.assert_called_once_with(
+    mock_connection_manager.return_value.send_command.assert_called_once_with(
         "show running-config | include ^username"
     )
 

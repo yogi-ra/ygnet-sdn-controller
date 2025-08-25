@@ -7,7 +7,7 @@ from src.device_info import DeviceConnectionInfo
 
 logger = logging.getLogger(__name__)
 
-from src.parsing_utils import parse_cli_output
+from ..parsing_utils import parse_cli_output
 
 from ..exceptions import (
     DeviceConnectionError,
@@ -29,7 +29,7 @@ class BaseDevice(ABC):
         """
         self.device_info = device_info
         self.connection = None
-        self.logger = logging.getLogger(self.__class__.__name__) # Initialize logger
+        self.logger = logging.getLogger(self.__class__.__name__)  # Initialize logger
 
     @property
     @abstractmethod
@@ -43,7 +43,9 @@ class BaseDevice(ABC):
         """
         Establishes an SSH connection to the device using the connection manager.
         """
-        self.connection = connection_manager.get_connection(self.device_info, self.netmiko_device_type)
+        self.connection = connection_manager.get_connection(
+            self.device_info, self.netmiko_device_type
+        )
 
     def disconnect(self):
         """
@@ -82,7 +84,9 @@ class BaseDevice(ABC):
         if not self.connection:
             raise DeviceConnectionError("Error: Not connected to any device.")
         output = self.connection.send_multiline(command_patterns)
-        logger.debug(f"Raw output from Netmiko for multiline commands: {command_patterns}\n{output}")
+        logger.debug(
+            f"Raw output from Netmiko for multiline commands: {command_patterns}\n{output}"
+        )
         return output
 
     def parse_cli_output(
@@ -94,3 +98,13 @@ class BaseDevice(ABC):
         return parse_cli_output(
             command, raw_output, self.device_info.device_type, self.netmiko_device_type
         )
+
+    def check_reachability(self) -> bool:
+        try:
+            # Attempt to get a connection. If successful, the device is reachable.
+            # The connection manager handles caching, so this won't create a new connection every time.
+            connection_manager.get_connection(self.device_info, self.netmiko_device_type)
+            return True
+        except Exception as e:
+            self.logger.debug(f"Device {self.device_info.ip_address} is not reachable: {e}")
+            return False

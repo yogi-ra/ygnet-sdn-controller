@@ -17,9 +17,8 @@ def mock_connection_manager(mocker):
     # Patch the ConnectHandler class as it's imported and used in connection_manager.py
     mocker.patch("src.connection_manager.ConnectHandler", return_value=mock_netmiko_instance)
 
-    # Also patch the connection_manager.ConnectionManager.get_connection method
-    # to return the same mock_netmiko_instance
-    mock_connection_manager_class = mocker.patch("src.connection_manager.ConnectionManager")
-    mock_connection_manager_class.get_connection.return_value = mock_netmiko_instance
+    # Patch the connection_manager.get_connection method (the instance)
+    mock_get_connection = mocker.patch("src.connection_manager.connection_manager.get_connection")
+    mock_get_connection.return_value = mock_netmiko_instance
 
-    return mock_connection_manager_class
+    return mock_get_connection

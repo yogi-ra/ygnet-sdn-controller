@@ -46,8 +46,4 @@ class CiscoIosSwitch(CiscoIosDevice):
     def __init__(self, device_info):
         super().__init__(device_info)
 
-    def get_mac_address_table(self):
-        raise NotImplementedError("get_mac_address_table not implemented for CiscoIosSwitch")
-
-    def get_spanning_tree_summary(self):
-        raise NotImplementedError("get_spanning_tree_summary not implemented for CiscoIosSwitch")
+    

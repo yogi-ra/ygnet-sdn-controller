@@ -39,3 +39,21 @@ class CiscoIosVlans(BaseVlans):
         except Exception as e:
             self.device_handler.logger.error(f"Error getting VLAN config: {e}")
             return []
+
+    def get_mac_address_table(self) -> List[Dict[str, Any]]:
+        try:
+            command = "show mac address-table"
+            raw_output = self.device_handler.send_command(command)
+            return self.device_handler.parse_cli_output(command, raw_output)
+        except Exception as e:
+            self.device_handler.logger.error(f"Error getting MAC address table: {e}")
+            return []
+
+    def get_spanning_tree_summary(self) -> List[Dict[str, Any]]:
+        try:
+            command = "show spanning-tree summary"
+            raw_output = self.device_handler.send_command(command)
+            return self.device_handler.parse_cli_output(command, raw_output)
+        except Exception as e:
+            self.device_handler.logger.error(f"Error getting spanning-tree summary: {e}")
+            return []
