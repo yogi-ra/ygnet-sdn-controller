@@ -13,3 +13,5 @@ pytest-mock
 genie
 ttp
 APScheduler
+pydantic_settings
+passlib
