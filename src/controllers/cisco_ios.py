@@ -2,6 +2,7 @@ from .base import BaseDevice
 from typing import List, Dict, Any, Union
 from datetime import datetime
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -58,17 +59,30 @@ class CiscoIosDevice(BaseDevice):
         raw_output = self.send_command(command)
         return self.parse_cli_output(command, raw_output)
 
-    def get_local_users(self) -> List[Dict[str, Any]]:
+    def get_local_users(self) -> List[Dict[str, str]]:
         """
         Retrieves local user accounts configured on the Cisco IOS device.
-        Parses the output of 'show running-config | include ^username'.
+        Returns a list of dictionaries, each containing the username
+        and optionally the privilege level.
         """
         command = "show running-config | include ^username"
         output = self.send_command(command=command)
-        # Use parse_cli_output which will leverage parsing_utils.parse_output
-        # and the TTP template for this command.
-        parsed_users = self.parse_cli_output(command, output)
-        return parsed_users
+        lines = output.strip().splitlines()
+
+        results = []
+        for line in lines:
+            parts = line.split()
+            if len(parts) >= 2:
+                username = parts[1]
+                user_data = {"username": username}
+
+                match = re.search(r'privilege\s+(\d+)', line)
+                if match:
+                    user_data["privilege"] = match.group(1)
+
+                results.append(user_data)
+
+        return results
 
     def get_clock(self) -> datetime:
         """

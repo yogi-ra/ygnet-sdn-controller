@@ -168,9 +168,7 @@ def get_version(
     Connects to a device and retrieves its version information, utilizing Redis cache.
     """
     try:
-        with handler:
-            version_info = handler.get_version_info()
-            return version_info
+        return handler.get_version_info()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -192,9 +190,7 @@ def get_interfaces(
     Connects to a device and retrieves its interface brief, utilizing Redis cache.
     """
     try:
-        with handler:
-            interfaces_brief = handler.get_interfaces_brief()
-            return interfaces_brief
+        return handler.get_interfaces_brief()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -214,9 +210,7 @@ def get_hostname(
     Connects to a device and retrieves its hostname, utilizing Redis cache.
     """
     try:
-        with handler:
-            hostname = handler.get_hostname()
-            return hostname
+        return handler.get_hostname()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -236,9 +230,7 @@ def get_active_users(
     Connects to a device and retrieves a list of currently logged-in users (active sessions), utilizing Redis cache.
     """
     try:
-        with handler:
-            active_users = handler.get_active_users()
-            return active_users
+        return handler.get_active_users()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -258,9 +250,7 @@ def get_local_users(
     Connects to a device and retrieves a list of locally configured users, utilizing Redis cache.
     """
     try:
-        with handler:
-            local_users = handler.get_local_users()
-            return local_users
+        return handler.get_local_users()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -280,9 +270,7 @@ def get_clock(
     Connects to a device and retrieves its current clock/time, utilizing Redis cache.
     """
     try:
-        with handler:
-            clock = handler.get_clock()
-            return clock
+        return handler.get_clock()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -302,9 +290,7 @@ def get_vlan_details(
     Connects to a device and retrieves detailed VLAN information, utilizing Redis cache.
     """
     try:
-        with handler:
-            vlan_details = handler.get_vlan_details()
-            return vlan_details
+        return handler.get_vlan_details()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -324,9 +310,7 @@ def get_vtp_status(
     Connects to a device and retrieves its VTP status, utilizing Redis cache.
     """
     try:
-        with handler:
-            vtp_status = handler.get_vtp_status()
-            return vtp_status
+        return handler.get_vtp_status()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -348,9 +332,7 @@ def get_spanning_tree_summary(
     Connects to a device and retrieves a summary of its Spanning Tree Protocol status, utilizing Redis cache.
     """
     try:
-        with handler:
-            spanning_tree_summary = handler.get_spanning_tree_summary()
-            return spanning_tree_summary
+        return handler.get_spanning_tree_summary()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -372,9 +354,7 @@ def get_interfaces_trunk(
     Connects to a device and retrieves information about its trunking interfaces, utilizing Redis cache.
     """
     try:
-        with handler:
-            interfaces_trunk = handler.get_interfaces_trunk()
-            return interfaces_trunk
+        return handler.get_interfaces_trunk()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -397,9 +377,7 @@ def get_interface_config(
     Connects to a device and retrieves the configuration for a specific interface, utilizing Redis cache.
     """
     try:
-        with handler:
-            interface_config = handler.get_interface_config(interface_name=interface_name)
-            return interface_config
+        return handler.get_interface_config(interface_name=interface_name)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -419,9 +397,7 @@ def get_line_config(
     Connects to a device and retrieves its line configuration, utilizing Redis cache.
     """
     try:
-        with handler:
-            line_config = handler.get_line_config()
-            return line_config
+        return handler.get_line_config()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -441,9 +417,7 @@ def get_banners(
     Connects to a device and retrieves its banner configuration, utilizing Redis cache.
     """
     try:
-        with handler:
-            banners = handler.get_banners()
-            return banners
+        return handler.get_banners()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -463,9 +437,7 @@ def get_ntp_config(
     Connects to a device and retrieves its NTP configuration, utilizing Redis cache.
     """
     try:
-        with handler:
-            ntp_config = handler.get_ntp_config()
-            return ntp_config
+        return handler.get_ntp_config()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -485,9 +457,7 @@ def get_snmp_config(
     Connects to a device and retrieves its SNMP configuration, utilizing Redis cache.
     """
     try:
-        with handler:
-            snmp_config = handler.get_snmp_config()
-            return snmp_config
+        return handler.get_snmp_config()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -509,9 +479,7 @@ def get_logging_config(
     Connects to a device and retrieves its logging configuration, utilizing Redis cache.
     """
     try:
-        with handler:
-            logging_config = handler.get_logging_config()
-            return logging_config
+        return handler.get_logging_config()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -531,9 +499,7 @@ def get_acls(
     Connects to a device and retrieves its Access Control Lists (ACLs), utilizing Redis cache.
     """
     try:
-        with handler:
-            acls = handler.get_acls()
-            return acls
+        return handler.get_acls()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -553,9 +519,7 @@ def get_aaa_config(
     Connects to a device and retrieves its AAA configuration, utilizing Redis cache.
     """
     try:
-        with handler:
-            aaa_config = handler.get_aaa_config()
-            return aaa_config
+        return handler.get_aaa_config()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -577,9 +541,7 @@ def get_cdp_neighbors(
     Connects to a device and retrieves its CDP neighbors, utilizing Redis cache.
     """
     try:
-        with handler:
-            cdp_neighbors = handler.get_cdp_neighbors()
-            return cdp_neighbors
+        return handler.get_cdp_neighbors()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -601,9 +563,7 @@ def get_ospf_neighbors(
     Connects to a device and retrieves its OSPF neighbors, utilizing Redis cache.
     """
     try:
-        with handler:
-            ospf_neighbors = handler.get_ospf_neighbors()
-            return ospf_neighbors
+        return handler.get_ospf_neighbors()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -625,9 +585,7 @@ def get_eigrp_neighbors(
     Connects to a device and retrieves its EIGRP neighbors, utilizing Redis cache.
     """
     try:
-        with handler:
-            eigrp_neighbors = handler.get_eigrp_neighbors()
-            return eigrp_neighbors
+        return handler.get_eigrp_neighbors()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -649,9 +607,7 @@ def get_routing_protocol_config(
     Connects to a device and retrieves its routing protocol configuration, utilizing Redis cache.
     """
     try:
-        with handler:
-            routing_protocol_config = handler.get_routing_protocol_config()
-            return routing_protocol_config
+        return handler.get_routing_protocol_config()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -671,9 +627,7 @@ def get_nat_config(
     Connects to a device and retrieves its NAT configuration, utilizing Redis cache.
     """
     try:
-        with handler:
-            nat_config = handler.get_nat_config()
-            return nat_config
+        return handler.get_nat_config()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -693,9 +647,7 @@ def get_vpn_config(
     Connects to a device and retrieves its VPN configuration, utilizing Redis cache.
     """
     try:
-        with handler:
-            vpn_config = handler.get_vpn_config()
-            return vpn_config
+        return handler.get_vpn_config()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -717,9 +669,7 @@ def get_lldp_neighbors(
     Connects to a device and retrieves its LLDP neighbors, utilizing Redis cache.
     """
     try:
-        with handler:
-            lldp_neighbors = handler.get_lldp_neighbors()
-            return lldp_neighbors
+        return handler.get_lldp_neighbors()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -741,9 +691,7 @@ def get_port_security(
     Connects to a device and retrieves its port security configuration, utilizing Redis cache.
     """
     try:
-        with handler:
-            port_security = handler.get_port_security()
-            return port_security
+        return handler.get_port_security()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -765,9 +713,7 @@ def get_etherchannel_summary(
     Connects to a device and retrieves its EtherChannel summary, utilizing Redis cache.
     """
     try:
-        with handler:
-            etherchannel_summary = handler.get_etherchannel_summary()
-            return etherchannel_summary
+        return handler.get_etherchannel_summary()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -787,9 +733,7 @@ def get_vlan_config(
     Connects to a device and retrieves its detailed VLAN configuration, utilizing Redis cache.
     """
     try:
-        with handler:
-            vlan_config = handler.get_vlan_config()
-            return vlan_config
+        return handler.get_vlan_config()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -811,9 +755,7 @@ def get_interface_vlan_membership(
     Connects to a device and retrieves its interface VLAN membership information, utilizing Redis cache.
     """
     try:
-        with handler:
-            interface_vlan_membership = handler.get_interface_vlan_membership()
-            return interface_vlan_membership
+        return handler.get_interface_vlan_membership()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -836,9 +778,7 @@ def get_trunk_port_config(
     Connects to a device and retrieves the detailed trunk port configuration for a specific interface, utilizing Redis cache.
     """
     try:
-        with handler:
-            trunk_port_config = handler.get_trunk_port_config(interface_name=interface_name)
-            return trunk_port_config
+        return handler.get_trunk_port_config(interface_name=interface_name)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -863,9 +803,7 @@ def get_interface_port_security(
     Connects to a device and retrieves the port security configuration for a specific interface, utilizing Redis cache.
     """
     try:
-        with handler:
-            interface_port_security = handler.get_interface_port_security(interface_name=interface_name)
-            return interface_port_security
+        return handler.get_interface_port_security(interface_name=interface_name)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

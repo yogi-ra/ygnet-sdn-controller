@@ -248,14 +248,10 @@ def test_cisco_router_get_bgp_summary(mocker, sample_cisco_router_info):
     assert bgp_summary == expected_data
 
 
-def test_cisco_get_local_users_with_parsing_utils(mocker, sample_cisco_router_info):
-    """
-    Test the get_local_users method after refactoring to use parsing_utils.
-    """
+def test_cisco_get_local_users(mocker, sample_cisco_router_info):
+    """Test the get_local_users method for Cisco IOS devices."""
     mock_send_command = mocker.patch.object(CiscoIosDevice, "send_command")
-    mock_parse_cli_output = mocker.patch.object(CiscoIosDevice, "parse_cli_output")
-
-    # Mock the raw output that send_command would return
+    
     raw_output = (
         "username admin privilege 15 secret 5 $1$abc$xyz\n"
         "username guest password 0 guestpass\n"
@@ -263,21 +259,16 @@ def test_cisco_get_local_users_with_parsing_utils(mocker, sample_cisco_router_in
     )
     mock_send_command.return_value = raw_output
 
-    # Mock the parsed output that parse_cli_output would return
-    expected_parsed_data = [
+    handler = get_device_handler(sample_cisco_router_info)
+    local_users = handler.get_local_users()
+
+    expected_users = [
         {"username": "admin", "privilege": "15"},
         {"username": "guest"},
         {"username": "network_ops", "privilege": "1"},
     ]
-    mock_parse_cli_output.return_value = expected_parsed_data
 
-    handler = get_device_handler(sample_cisco_router_info)
-    local_users = handler.get_local_users()
-
+    assert local_users == expected_users
     mock_send_command.assert_called_once_with(
         command="show running-config | include ^username"
     )
-    mock_parse_cli_output.assert_called_once_with(
-        "show running-config | include ^username", raw_output
-    )
-    assert local_users == expected_parsed_data

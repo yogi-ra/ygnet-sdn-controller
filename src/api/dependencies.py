@@ -67,21 +67,24 @@ def require_write_privileges(
     return current_user
 
 
-def check_device_method_compatibility(device_id: int, db: Session, method_name: str):
-    """
-    Retrieves a device handler and checks if it has the specified method.
-    """
-    handler = get_handler_from_device_id(device_id, db)
-    if not hasattr(handler, method_name):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Method '{method_name}' not supported for device with ID {device_id} ({handler.__class__.__name__}).",
-        )
-    return handler
-
-
 def get_method_compatible_handler(method_name: str):
+    """
+    Dependency that provides a connected and compatible device handler.
+    It ensures that the device connection is properly closed after the request.
+    """
+
     def _get_handler(device_id: int, db: Session = Depends(get_db)):
-        return check_device_method_compatibility(device_id, db, method_name)
+        handler = get_handler_from_device_id(device_id, db)
+        if not hasattr(handler, method_name):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Method '{method_name}' not supported for device with ID {device_id} ({handler.__class__.__name__}).",
+            )
+        
+        try:
+            handler.connect()
+            yield handler
+        finally:
+            handler.disconnect()
 
     return _get_handler

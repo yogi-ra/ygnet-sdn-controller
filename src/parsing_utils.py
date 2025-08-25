@@ -51,8 +51,11 @@ def parse_cli_output(
         logger.debug(
             f"TextFSM parsing (official) - netmiko_device_type: {netmiko_device_type}, command: {command}"
         )
+        logger.debug(
+            f"Trying to parse this raw_output {raw_output}"
+        )
         parsed_data = ntc_parse_output(
-            platform=netmiko_device_type, command=command, data=raw_output
+            platform=netmiko_device_type, command=command, data=raw_output, try_fallback=True, template_dir=TEXTFSM_TEMPLATES_DIR
         )
 
         if parsed_data:
@@ -64,21 +67,6 @@ def parse_cli_output(
             logger.debug(
                 f"TextFSM template not found for command '{command}' in official templates. Trying custom templates."
             )
-            # Attempt 1.1: TextFSM parsing using custom templates as fallback
-            try:
-                parsed_data = ntc_parse_output(
-                    platform=netmiko_device_type,
-                    command=command,
-                    data=raw_output,
-                    template_dir=TEXTFSM_TEMPLATES_DIR,
-                )
-                if parsed_data:
-                    logger.debug(f"TextFSM parsing (custom) succeeded for command '{command}'.")
-                    return parsed_data
-            except Exception as e_custom:
-                logger.error(
-                    f"TextFSM parsing (custom) failed for command '{command}': {type(e_custom).__name__}: {e_custom}"
-                )
         else:
             logger.error(
                 f"TextFSM parsing (official) failed for command '{command}': {type(e).__name__}: {e}"

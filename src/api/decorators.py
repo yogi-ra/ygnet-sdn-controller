@@ -49,8 +49,18 @@ async def _handle_cache(
 ):
     redis_client = kwargs.get("redis_client") or get_redis_client()
 
-    # Build cache key from the request URL
-    cache_key = f"{prefix}:{request.url.path}"
+    # Build a more specific cache key
+    device_id = kwargs.get("device_id")
+    if device_id:
+        interface_name = kwargs.get("interface_name")
+        if interface_name:
+            cache_key = f"{prefix}:{device_id}:{interface_name}"
+        else:
+            cache_key = f"{prefix}:{device_id}"
+    else:
+        # Fallback for endpoints without device_id, though most have it
+        cache_key = f"{prefix}:{request.url.path}"
+
 
     # try cache first
     cached_data = redis_client.get(cache_key)

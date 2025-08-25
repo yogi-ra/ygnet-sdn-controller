@@ -66,6 +66,10 @@ class LoginRequest(BaseModel):
 
 
 # --- Token Schemas ---
+
+class LocalUser(BaseModel):
+    line: str
+    privilege: Optional[str] = None
 class Token(BaseModel):
     access_token: str
     token_type: str
