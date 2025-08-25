@@ -7,9 +7,7 @@ load_dotenv()
 
 
 class Settings(BaseSettings):
-    DATABASE_URL_BASE: str = os.getenv(
-        "DATABASE_URL_BASE", "sqlite:///./sdn_project.db"
-    )
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./sdn_project.db")
     DB_PASSWORD: str = os.getenv("DB_PASSWORD", "")
 
     @property
