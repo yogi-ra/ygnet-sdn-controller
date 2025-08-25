@@ -1,35 +1,17 @@
-from dataclasses import dataclass
-from typing import Optional, List, Dict, Any, Union
-from netmiko import ConnectHandler
-from netmiko.exceptions import NetmikoTimeoutException, NetmikoAuthenticationException
+from typing import List, Dict, Any, Union
 from abc import ABC, abstractmethod
 import logging
 
+from src.connection_manager import connection_manager
+from src.device_info import DeviceConnectionInfo
+
 logger = logging.getLogger(__name__)
 
-from src.parsing_utils import parse_cli_output  # New import
+from src.parsing_utils import parse_cli_output
 
 from ..exceptions import (
-    DeviceAuthenticationError,
-    DeviceTimeoutError,
     DeviceConnectionError,
 )
-
-
-@dataclass
-class DeviceConnectionInfo:
-    """
-    Represents the connection details for a network device.
-    This dataclass holds the raw information retrieved from the database.
-    """
-
-    ip_address: str
-    device_type: str  # Our internal granular type (e.g., cisco_ios, juniper_junos)
-    username: str
-    password: str
-    port: int = 22
-    name: Optional[str] = None
-    secret: Optional[str] = None
 
 
 class BaseDevice(ABC):
@@ -47,6 +29,7 @@ class BaseDevice(ABC):
         """
         self.device_info = device_info
         self.connection = None
+        self.logger = logging.getLogger(self.__class__.__name__) # Initialize logger
 
     @property
     @abstractmethod
@@ -58,43 +41,16 @@ class BaseDevice(ABC):
 
     def connect(self) -> None:
         """
-        Establishes an SSH connection to the device using its IP address.
-
-        Raises:
-            DeviceAuthenticationError: If authentication fails.
-            DeviceTimeoutError: If the connection times out.
-            DeviceConnectionError: For other connection errors.
+        Establishes an SSH connection to the device using the connection manager.
         """
-        try:
-            self.connection = ConnectHandler(
-                host=self.device_info.ip_address,
-                username=self.device_info.username,
-                password=self.device_info.password,
-                port=self.device_info.port,  # Use the custom port
-                device_type=self.netmiko_device_type,  # Use the abstract property
-                secret=self.device_info.secret,
-            )
-            if self.device_info.secret:
-                self.connection.enable()
-        except NetmikoAuthenticationException as e:
-            raise DeviceAuthenticationError(
-                f"Authentication failed for {self.device_info.ip_address}: {e}"
-            ) from e
-        except NetmikoTimeoutException as e:
-            raise DeviceTimeoutError(
-                f"Connection timed out for {self.device_info.ip_address}: {e}"
-            ) from e
-        except Exception as e:
-            raise DeviceConnectionError(
-                f"Failed to connect to {self.device_info.ip_address}: {e}"
-            ) from e
+        self.connection = connection_manager.get_connection(self.device_info, self.netmiko_device_type)
 
     def disconnect(self):
         """
-        Closes the SSH connection.
+        Does not close the SSH connection to allow for reuse.
+        The connection manager handles the lifecycle.
         """
-        if self.connection:
-            self.connection.disconnect()
+        pass  # We no longer disconnect here
 
     def __enter__(self):
         """
@@ -105,7 +61,7 @@ class BaseDevice(ABC):
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """
-        Context manager exit point. Closes connection.
+        Context manager exit point. Does not close connection.
         """
         self.disconnect()
 

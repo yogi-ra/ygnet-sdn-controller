@@ -1,100 +1,81 @@
-# GEMINI.md
+# Refactoring Plan: Towards a Standardized and Extensible Architecture
 
-# 📌 Project Update (August 24, 2025)
+This document outlines a plan to refactor the codebase to make it more standardized, extensible, and easier to maintain. The goal is to address the current issues of code tangling, lack of clear structure, and difficulty in adding new device types.
 
----
+## 1. Feature-Based Architecture
 
-### Frontend Changes (August 24, 2025)
+We will move away from monolithic device controller classes and adopt a more granular, feature-based architecture.
 
-This update introduces **edit** and **delete** functionality for devices in the frontend.
+### 1.1. Feature Modules
 
-#### New Components
+The functionality will be broken down into smaller, feature-based modules. Each module will be responsible for a specific area of device interaction. The initial set of feature modules will be:
 
-- **`frontend/src/components/DeviceForm.tsx`**
-  - Reusable form for both **adding** and **editing** device details.
-  - Handles inputs for: `name`, `type`, `IP address`, `port`, `username`, `password`, `secret`.
-  - During editing, password and secret are **optional**.
+-   `system`: For system-level information like version, hostname, and users.
+-   `interfaces`: For managing device interfaces.
+-   `vlans`: For managing VLANs.
+-   `routing`: For routing-related information.
+-   `acls`: For managing Access Control Lists.
+-   `snmp`: For SNMP configuration.
+-   `logging`: For logging configuration.
+-   `ntp`: For NTP configuration.
+-   `aaa`: For AAA configuration.
 
-#### Modified Pages
+These modules will be located in `src/controllers/features/`.
 
-- **`frontend/src/pages/AddDevicePage.tsx`**
-  - Refactored to use `DeviceForm.tsx` for creating devices.
+### 1.2. Abstract Base Classes (ABCs)
 
-- **`frontend/src/pages/EditDevicePage.tsx`** _(new)_
-  - Fetches device data from API based on URL parameter (`/devices/edit/:id`).
-  - Populates `DeviceForm.tsx` for editing.
-  - Submits changes via **`PUT`** request to backend API.
+For each feature module, we will define an Abstract Base Class (ABC) that specifies a common interface. For example, `src/controllers/features/system/base.py` will contain a `BaseSystem` class with abstract methods like `get_version_info()` and `get_hostname()`.
 
-- **`frontend/src/pages/DeviceListPage.tsx`**
-  - Added `onClick` handlers for "Edit" and "Delete".
-  - **Edit** → navigates to `/devices/edit/:id`.
-  - **Delete** → confirmation dialog, then sends **`DELETE`** request to backend API.
-  - Updates device list on successful deletion.
+### 1.3. Device-Specific Implementations
 
-#### Routing Updates
+For each supported device type (e.g., Cisco IOS), we will provide a concrete implementation of the feature ABCs. For example, `src/controllers/features/system/cisco_ios.py` will contain a `CiscoIosSystem` class that inherits from `BaseSystem` and implements the abstract methods for Cisco IOS devices.
 
-- **`frontend/src/App.tsx`**
-  - Added new route:
+## 2. Composition over Inheritance
 
-    ```tsx
-    <Route path="/devices/edit/:id" element={<EditDevicePage />} />
-    ```
+The main device controller classes (e.g., `CiscoIosRouter`) will be composed of the feature-based classes. This means that instead of inheriting all the methods, the controller will have attributes that are instances of the feature classes.
 
-  - Enables navigation to device editing interface.
+For example, the `CiscoIosRouter` class will look something like this:
 
----
+```python
+from .features.system.cisco_ios import CiscoIosSystem
+from .features.interfaces.cisco_ios import CiscoIosInterface
+# ... other feature imports
 
-### Project Overview
+class CiscoIosRouter(BaseDevice):
+    def __init__(self, device_info):
+        super().__init__(device_info)
+        self.system = CiscoIosSystem(self)
+        self.interfaces = CiscoIosInterface(self)
+        # ... other feature initializations
+```
 
-This project is a **Software-Defined Networking (SDN) Controller API** built with Python and FastAPI.  
-It provides a RESTful interface to manage and interact with network devices from various vendors.
+## 3. API Simplification
 
-- Modular, object-oriented design.
-- Device controllers for specific types (e.g., Cisco IOS, Juniper Junos).
-- SQLAlchemy for DB interactions, Netmiko for device automation, Redis for caching.
+The API will be simplified to interact with the new feature-based architecture.
 
----
+### 3.1. Generic Feature-Based Endpoints
 
-### Key Technologies
+We will create generic, feature-based endpoints in the API. For example, instead of having a specific endpoint for every "show" command, we will have endpoints that are structured around features.
 
-- **Backend:** Python, FastAPI
-- **Database:** SQLAlchemy, PostgreSQL (psycopg2)
-- **Device Automation:** Netmiko
-- **Caching:** Redis
-- **Authentication:** JWT
-- **Testing:** Pytest
+For example:
+-   `GET /devices/{device_id}/system/version`
+-   `GET /devices/{device_id}/interfaces/brief`
+-   `GET /devices/{device_id}/vlans/brief`
 
----
+This will make the API more consistent and easier to use.
 
-### Architecture
+### 3.2. Simplified API Router
 
-- **`main.py`**: FastAPI entry point.
-- **`src/database.py`**: Database connection + session.
-- **`src/models.py`**: SQLAlchemy models.
-- **`src/schemas.py`**: Pydantic schemas.
-- **`src/crud.py`**: Database CRUD logic.
-- **`src/controllers/`**: Vendor-specific device controllers.
-- **`src/api/`**: FastAPI routers and endpoints.
-- **`src/security.py`**: Authentication + password hashing.
-- **`src/tasks.py`**: Scheduler for unknown device update.
-- **`src/config.py`**: Application settings and environment.
+The API router in `src/api/routers/devices.py` will be significantly simplified. The large number of repetitive endpoints will be replaced by a smaller number of generic, feature-based endpoints.
 
----
+## 4. Device Type Handling
 
-### Building and Running
+We will ensure that the `device_type` is handled correctly and consistently.
 
-#### Prerequisites
+### 4.1. Distinct `device_type` for Routers and Switches
 
-- Python 3.12+
-- PostgreSQL
-- Redis
+The `device_type` for our custom Cisco IOS router and switch will be distinct (e.g., `"cisco_ios_router"` and `"cisco_ios_switch"`). This will be reflected in the `DEVICE_HANDLER_MAP` in `src/controllers/__init__.py` and in the database.
 
-#### Installation
+### 4.2. Clear Separation of Device-Specific Logic
 
-1. Clone the repository:
-
-   ```bash
-   git clone <repository-url>
-   cd <repository-directory>
-   ```
-
+Device-specific logic will be clearly separated into the device-specific feature implementations. This will make it easy to add new device types without affecting the existing code.

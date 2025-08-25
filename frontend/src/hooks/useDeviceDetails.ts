@@ -22,31 +22,16 @@ interface DeviceDetail extends Device {
     proto: string;
   }[];
   hostname?: string;
-  activeUsers?: any[];
-  localUsers?: any[];
-  clock?: string;
-  vlanDetails?: any[];
-  vtpStatus?: any[];
-  spanningTreeSummary?: any[];
-  interfacesTrunk?: any[];
-  lineConfig?: string[];
-  banners?: { [key: string]: string };
-  ntpConfig?: any[];
-  snmpConfig?: any[];
-  loggingConfig?: any[];
-  acls?: any[];
-  aaaConfig?: any[];
-  cdpNeighbors?: any[];
-  ospfNeighbors?: any[];
-  eigrpNeighbors?: any[];
-  routingProtocolConfig?: any[];
-  natConfig?: any[];
-  vpnConfig?: any[];
-  lldpNeighbors?: any[];
-  portSecurity?: any[];
-  etherchannelSummary?: any[];
-  vlanConfig?: any[];
-  interfaceVlanMembership?: any[];
+  active_users?: any[];
+  local_users?: any[];
+  current_clock?: string;
+  vlan_brief?: any[];
+  routing_table?: any[];
+  acls_data?: any[];
+  snmp_config_data?: any[];
+  logging_config_data?: any[];
+  ntp_config_data?: any[];
+  aaa_config_data?: any[];
 }
 
 // State for the hook
@@ -136,46 +121,51 @@ export const useDeviceDetails = (deviceId: string | undefined) => {
         return;
       }
 
-      // Fetch all other details in parallel
-      const detailEndpoints: { key: keyof DeviceDetail; url: string }[] = [
-        { key: "hostname", url: `/api/devices/${deviceId}/hostname` },
-        { key: "activeUsers", url: `/api/devices/${deviceId}/active-users` },
-        { key: "localUsers", url: `/api/devices/${deviceId}/local-users` },
-        { key: "clock", url: `/api/devices/${deviceId}/clock` },
-        { key: "vlanDetails", url: `/api/devices/${deviceId}/vlan-details` },
-        { key: "vtpStatus", url: `/api/devices/${deviceId}/vtp-status` },
-        { key: "spanningTreeSummary", url: `/api/devices/${deviceId}/spanning-tree-summary` },
-        { key: "interfacesTrunk", url: `/api/devices/${deviceId}/interfaces-trunk` },
-        { key: "lineConfig", url: `/api/devices/${deviceId}/line-config` },
-        { key: "banners", url: `/api/devices/${deviceId}/banners` },
-        { key: "ntpConfig", url: `/api/devices/${deviceId}/ntp-config` },
-        { key: "snmpConfig", url: `/api/devices/${deviceId}/snmp-config` },
-        { key: "loggingConfig", url: `/api/devices/${deviceId}/logging-config` },
-        { key: "acls", url: `/api/devices/${deviceId}/acls` },
-        { key: "aaaConfig", url: `/api/devices/${deviceId}/aaa-config` },
-        { key: "cdpNeighbors", url: `/api/devices/${deviceId}/cdp-neighbors` },
-        { key: "ospfNeighbors", url: `/api/devices/${deviceId}/ospf-neighbors` },
-        { key: "eigrpNeighbors", url: `/api/devices/${deviceId}/eigrp-neighbors` },
-        { key: "routingProtocolConfig", url: `/api/devices/${deviceId}/routing-protocol-config` },
-        { key: "natConfig", url: `/api/devices/${deviceId}/nat-config` },
-        { key: "vpnConfig", url: `/api/devices/${deviceId}/vpn-config` },
-        { key: "lldpNeighbors", url: `/api/devices/${deviceId}/lldp-neighbors` },
-        { key: "portSecurity", url: `/api/devices/${deviceId}/port-security` },
-        { key: "etherchannelSummary", url: `/api/devices/${deviceId}/etherchannel-summary` },
-        { key: "vlanConfig", url: `/api/devices/${deviceId}/vlan-config` },
-        { key: "interfaceVlanMembership", url: `/api/devices/${deviceId}/interface-vlan-membership` },
+      // Fetch all other details in parallel using the unified /features endpoint
+      const featureEndpoints = [
+        { key: "hostname", feature: "system", extract: (data: any) => data?.hostname },
+        { key: "active_users", feature: "active_users", extract: (data: any) => data },
+        { key: "local_users", feature: "local_users", extract: (data: any) => data },
+        { key: "current_clock", feature: "clock", extract: (data: any) => data },
+        { key: "vlan_brief", feature: "vlans", extract: (data: any) => data },
+        { key: "routing_table", feature: "routing", extract: (data: any) => data },
+        { key: "acls_data", feature: "acls", extract: (data: any) => data },
+        { key: "snmp_config_data", feature: "snmp", extract: (data: any) => data },
+        { key: "logging_config_data", feature: "logging", extract: (data: any) => data },
+        { key: "ntp_config_data", feature: "ntp", extract: (data: any) => data },
+        { key: "aaa_config_data", feature: "aaa", extract: (data: any) => data },
       ];
 
-      const results = await Promise.all(
-        detailEndpoints.map((ep) => fetchDetail(ep.url, ep.key))
+      // Collect unique feature names to avoid redundant API calls
+      const uniqueFeaturesToFetch = Array.from(new Set(featureEndpoints.map(ep => ep.feature)));
+
+      const featureResults = await Promise.all(
+        uniqueFeaturesToFetch.map(featureName =>
+          fetchDetail(`/api/devices/${deviceId}/features/${featureName}`, featureName)
+        )
       );
 
-      const additionalDetails = detailEndpoints.reduce((acc, ep, index) => {
-        if (results[index] !== null) {
-          acc[ep.key] = results[index];
+      const additionalDetails: Partial<DeviceDetail> = {};
+      featureEndpoints.forEach(ep => {
+        const resultIndex = uniqueFeaturesToFetch.indexOf(ep.feature);
+        if (resultIndex !== -1 && featureResults[resultIndex] !== null) {
+          try {
+            const extractedData = ep.extract(featureResults[resultIndex]);
+            if (extractedData !== undefined) {
+              (additionalDetails as any)[ep.key] = extractedData;
+            }
+          } catch (e) {
+            console.error(`Error extracting ${ep.key} from ${ep.feature} data:`, e);
+            setState((prevState) => ({
+              ...prevState,
+              errors: {
+                ...prevState.errors,
+                [ep.key]: `Failed to parse ${ep.key} data.`,
+              },
+            }));
+          }
         }
-        return acc;
-      }, {} as Partial<DeviceDetail>);
+      });
 
       setState((prevState) => ({
         ...prevState,

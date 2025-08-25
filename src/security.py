@@ -4,6 +4,9 @@ from passlib.context import CryptContext
 import jwt  # Using PyJWT
 from cryptography.fernet import Fernet
 from .config import settings
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Generate a key for encryption. In a real app, load this from config/secrets management.
 # For this example, we'll derive it from the SECRET_KEY for simplicity.
@@ -41,11 +44,15 @@ def encrypt_data(data: str) -> str:
     return fernet.encrypt(data.encode()).decode()
 
 
-def decrypt_data(encrypted_data: str) -> str:
-    """Decrypts a string."""
+def decrypt_data(encrypted_data: str) -> Optional[str]:
+    """Decrypts a string. Returns None if decryption fails."""
     if not encrypted_data:
         return None
-    return fernet.decrypt(encrypted_data.encode()).decode()
+    try:
+        return fernet.decrypt(encrypted_data.encode()).decode()
+    except Exception as e:
+        logger.error(f"Failed to decrypt data: {e}")
+        return None
 
 
 # --- JWT Token Handling ---

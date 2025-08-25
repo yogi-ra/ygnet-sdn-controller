@@ -7,14 +7,14 @@ load_dotenv()
 
 
 class Settings(BaseSettings):
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./sdn_project.db")
+    DATABASE_BASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./sdn_project.db")
     DB_PASSWORD: str = os.getenv("DB_PASSWORD", "")
 
     @property
     def DATABASE_URL(self) -> str:
         # URL-encode the password before inserting it into the URL
         encoded_password = quote_plus(self.DB_PASSWORD)
-        return self.DATABASE_URL_BASE.replace(
+        return self.DATABASE_BASE_URL.replace(
             "DB_PASSWORD_PLACEHOLDER", encoded_password
         )
 

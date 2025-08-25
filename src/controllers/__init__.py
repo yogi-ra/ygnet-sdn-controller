@@ -3,19 +3,16 @@ This package contains device controller classes and a factory function to instan
 """
 from typing import Dict, Type
 
-from .base import BaseDevice, DeviceConnectionInfo
-from .cisco_ios import CiscoIosDevice, CiscoIosRouter, CiscoIosSwitch
-from .juniper_junos import JuniperJunosDevice
+from .base import BaseDevice
+from .cisco_ios import CiscoIosRouter, CiscoIosSwitch, CiscoIosDevice
+from ..device_info import DeviceConnectionInfo
 
 # The map that the factory function uses to find the correct class
 # Maps our internal device_type string to the corresponding handler class
 DEVICE_HANDLER_MAP: Dict[str, Type[BaseDevice]] = {
     "cisco_ios_router": CiscoIosRouter,
     "cisco_ios_switch": CiscoIosSwitch,
-    "juniper_junos": JuniperJunosDevice,
 }
-
-_handler_cache: Dict[str, BaseDevice] = {}
 
 def get_device_handler(device_info: DeviceConnectionInfo) -> BaseDevice:
     """
@@ -30,24 +27,18 @@ def get_device_handler(device_info: DeviceConnectionInfo) -> BaseDevice:
     Raises:
         NotImplementedError: If the device_type is not supported.
     """
-    if device_info.name in _handler_cache:
-        return _handler_cache[device_info.name]
-
     handler_class = DEVICE_HANDLER_MAP.get(device_info.device_type)
     if not handler_class:
         raise NotImplementedError(f"Device type '{device_info.device_type}' is not supported.")
     
-    handler = handler_class(device_info)
-    _handler_cache[device_info.name] = handler
-    return handler
+    return handler_class(device_info)
 
 # Make the public interface cleaner
 __all__ = [
     "get_device_handler",
     "DeviceConnectionInfo",
     "BaseDevice",
-    "CiscoIosDevice",
     "CiscoIosRouter",
     "CiscoIosSwitch",
-    "JuniperJunosDevice"
+    "CiscoIosDevice",
 ]

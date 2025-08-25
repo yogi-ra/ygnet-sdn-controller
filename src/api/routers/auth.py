@@ -3,7 +3,8 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import timedelta
 
-from ... import crud, models, schemas, security
+from ...crud import crud
+from ... import models, schemas, security
 from ...database import get_db
 from ...config import settings
 from ...schemas import LoginRequest

@@ -32,7 +32,7 @@ def get_current_user(
     except PyJWTError:
         raise credentials_exception
 
-    user = crud.get_user_by_username(db, username=username)
+    user = crud.crud.get_user_by_username(db, username=username)
     if user is None:
         raise credentials_exception
     return user
