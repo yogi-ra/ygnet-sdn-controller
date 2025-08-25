@@ -13,7 +13,7 @@ import {
   Table,
   Badge,
   Tabs, // Added
-  Tab,  // Added
+  Tab, // Added
 } from "react-bootstrap";
 import { useAuth } from "../hooks/useAuth";
 import { useDeviceDetails } from "../hooks/useDeviceDetails";
@@ -32,7 +32,7 @@ const DeviceDetailPage = () => {
   const [commandError, setCommandError] = useState<string | null>(null);
 
   // State for active tab
-  const [key, setKey] = useState('general'); // Added
+  const [key, setKey] = useState("general"); // Added
 
   const handleExecuteCommand = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -104,13 +104,24 @@ const DeviceDetailPage = () => {
     );
   }
 
-  const renderCard = (title: string, dataKey: keyof typeof device, render: (data: any) => JSX.Element) => (
-    <Card className="mb-4"> {/* Removed Col wrapper here, will be handled by Tab.Pane */}
-      <Card.Body style={{ maxHeight: '400px', overflowY: 'auto' }}>
+  const renderCard = (
+    title: string,
+    dataKey: keyof typeof device,
+    render: (data: any) => JSX.Element,
+  ) => (
+    <Card className="mb-4">
+      {" "}
+      {/* Removed Col wrapper here, will be handled by Tab.Pane */}
+      <Card.Body style={{ maxHeight: "400px", overflowY: "auto" }}>
         <Card.Title as="h2">{title}</Card.Title>
         {errors[dataKey] ? (
-          <Alert variant="warning">Could not load {title.toLowerCase()}: {errors[dataKey]}</Alert>
-        ) : device[dataKey] && (Array.isArray(device[dataKey]) ? (device[dataKey] as any[]).length > 0 : device[dataKey]) ? (
+          <Alert variant="warning">
+            Could not load {title.toLowerCase()}: {errors[dataKey]}
+          </Alert>
+        ) : device[dataKey] &&
+          (Array.isArray(device[dataKey])
+            ? (device[dataKey] as any[]).length > 0
+            : device[dataKey]) ? (
           render(device[dataKey])
         ) : (
           <Card.Text>No {title.toLowerCase()} information available.</Card.Text>
@@ -160,16 +171,26 @@ const DeviceDetailPage = () => {
                     <br />
                     <strong>Version:</strong> {device.version || "N/A"}
                     <br />
-                    <strong>Hostname:</strong> {errors.hostname ? <span className="text-danger">Error</span> : device.hostname || "N/A"}
+                    <strong>Hostname:</strong>{" "}
+                    {errors.hostname ? (
+                      <span className="text-danger">Error</span>
+                    ) : (
+                      device.hostname || "N/A"
+                    )}
                     <br />
-                    <strong>Clock:</strong> {errors.current_clock ? <span className="text-danger">Error</span> : device.current_clock || "N/A"}
+                    <strong>Clock:</strong>{" "}
+                    {errors.current_clock ? (
+                      <span className="text-danger">Error</span>
+                    ) : (
+                      device.current_clock || "N/A"
+                    )}
                   </Card.Text>
                 </Card.Body>
               </Card>
             </Col>
             <Col md={6}>
               <Card>
-                <Card.Body style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                <Card.Body style={{ maxHeight: "400px", overflowY: "auto" }}>
                   <Card.Title as="h2">Execute Command</Card.Title>
                   <Form onSubmit={handleExecuteCommand}>
                     <Form.Group className="mb-3" controlId="commandInput">
@@ -183,7 +204,10 @@ const DeviceDetailPage = () => {
                         required
                       />
                     </Form.Group>
-                    <Form.Group className="mb-3" controlId="isConfigCommandCheckbox">
+                    <Form.Group
+                      className="mb-3"
+                      controlId="isConfigCommandCheckbox"
+                    >
                       <Form.Check
                         type="checkbox"
                         label="Configuration Command"
@@ -196,14 +220,34 @@ const DeviceDetailPage = () => {
                       type="submit"
                       disabled={executingCommand}
                     >
-                      {executingCommand ? <Spinner as="span" animation="border" size="sm" /> : "Execute"}
+                      {executingCommand ? (
+                        <Spinner as="span" animation="border" size="sm" />
+                      ) : (
+                        "Execute"
+                      )}
                     </Button>
                   </Form>
-                  {commandError && <Alert variant="danger" className="mt-3">{commandError}</Alert>}
+                  {commandError && (
+                    <Alert variant="danger" className="mt-3">
+                      {commandError}
+                    </Alert>
+                  )}
                   {commandOutput && (
-                    <div className="mt-3 p-3 bg-light rounded" style={{ whiteSpace: "pre-wrap", fontFamily: "monospace" }}>
-                      {deviceLevel && <><strong>Device Level:</strong> {deviceLevel}<br /></>}
-                      <strong>Output:</strong><br />
+                    <div
+                      className="mt-3 p-3 bg-light rounded"
+                      style={{
+                        whiteSpace: "pre-wrap",
+                        fontFamily: "monospace",
+                      }}
+                    >
+                      {deviceLevel && (
+                        <>
+                          <strong>Device Level:</strong> {deviceLevel}
+                          <br />
+                        </>
+                      )}
+                      <strong>Output:</strong>
+                      <br />
                       {commandOutput}
                     </div>
                   )}
@@ -288,7 +332,7 @@ const DeviceDetailPage = () => {
                   <tbody>
                     {data.map((user: any, index: number) => (
                       <tr key={index}>
-                        <td>{user.username}</td>
+                        <td>{user.user}</td>
                         <td>{user.line}</td>
                         <td>{user.idle}</td>
                         <td>{user.location}</td>
@@ -302,9 +346,16 @@ const DeviceDetailPage = () => {
               {renderCard("Local Users", "local_users", (data) => (
                 <ListGroup>
                   {data.map((user: any, index: number) => (
-                    <ListGroup.Item key={index} className="d-flex justify-content-between align-items-center">
-                      <span className="text-monospace small">{user.username}</span>
-                      {user.privilege && <Badge bg="info">Privilege: {user.privilege}</Badge>}
+                    <ListGroup.Item
+                      key={index}
+                      className="d-flex justify-content-between align-items-center"
+                    >
+                      <span className="text-monospace small">
+                        {user.username}
+                      </span>
+                      {user.privilege && (
+                        <Badge bg="info">Privilege: {user.privilege}</Badge>
+                      )}
                     </ListGroup.Item>
                   ))}
                 </ListGroup>
@@ -382,7 +433,7 @@ const DeviceDetailPage = () => {
                 <ListGroup>
                   {data.map((acl: any, index: number) => (
                     <ListGroup.Item key={index}>
-                      <strong>{acl.name}</strong>: {acl.rules.join('; ')}
+                      <strong>{acl.name}</strong>: {acl.rules.join("; ")}
                     </ListGroup.Item>
                   ))}
                 </ListGroup>
@@ -392,9 +443,7 @@ const DeviceDetailPage = () => {
               {renderCard("AAA Config", "aaa_config_data", (data) => (
                 <ListGroup>
                   {data.map((config: any, index: number) => (
-                    <ListGroup.Item key={index}>
-                      {config.line}
-                    </ListGroup.Item>
+                    <ListGroup.Item key={index}>{config.line}</ListGroup.Item>
                   ))}
                 </ListGroup>
               ))}
@@ -408,9 +457,7 @@ const DeviceDetailPage = () => {
               {renderCard("Logging Config", "logging_config_data", (data) => (
                 <ListGroup>
                   {data.map((config: any, index: number) => (
-                    <ListGroup.Item key={index}>
-                      {config.line}
-                    </ListGroup.Item>
+                    <ListGroup.Item key={index}>{config.line}</ListGroup.Item>
                   ))}
                 </ListGroup>
               ))}
@@ -424,9 +471,7 @@ const DeviceDetailPage = () => {
               {renderCard("SNMP Config", "snmp_config_data", (data) => (
                 <ListGroup>
                   {data.map((config: any, index: number) => (
-                    <ListGroup.Item key={index}>
-                      {config.line}
-                    </ListGroup.Item>
+                    <ListGroup.Item key={index}>{config.line}</ListGroup.Item>
                   ))}
                 </ListGroup>
               ))}
@@ -440,16 +485,13 @@ const DeviceDetailPage = () => {
               {renderCard("NTP Config", "ntp_config_data", (data) => (
                 <ListGroup>
                   {data.map((config: any, index: number) => (
-                    <ListGroup.Item key={index}>
-                      {config.line}
-                    </ListGroup.Item>
+                    <ListGroup.Item key={index}>{config.line}</ListGroup.Item>
                   ))}
                 </ListGroup>
               ))}
             </Col>
           </Row>
         </Tab>
-
       </Tabs>
     </Container>
   );
