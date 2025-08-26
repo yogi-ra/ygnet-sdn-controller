@@ -91,7 +91,11 @@ const DeviceDetailPage = () => {
 
   // Interfaces Tab
   useEffect(() => {
-    if (!device?.is_reachable) return; // Do not fetch if device is offline
+    if (!device?.is_reachable) {
+      setInterfacesData(null);
+      setInterfacesTrunkData(null);
+      return; // Do not fetch if device is offline
+    }
     if (key === "interfaces" && id && !interfacesData && !loadingInterfaces) {
       setLoadingInterfaces(true);
       setInterfacesError(null);
@@ -123,7 +127,11 @@ const DeviceDetailPage = () => {
 
   // Users Tab
   useEffect(() => {
-    if (!device?.is_reachable) return; // Do not fetch if device is offline
+    if (!device?.is_reachable) {
+      setActiveUsersData(null);
+      setLocalUsersData(null);
+      return; // Do not fetch if device is offline
+    }
     if (key === "users" && id && !activeUsersData && !loadingActiveUsers) {
       setLoadingActiveUsers(true);
       setActiveUsersError(null);
@@ -156,7 +164,10 @@ const DeviceDetailPage = () => {
 
   // VLANs Tab
   useEffect(() => {
-    if (!device?.is_reachable) return; // Do not fetch if device is offline
+    if (!device?.is_reachable) {
+      setVlanBriefData(null);
+      return; // Do not fetch if device is offline
+    }
     if (key === "vlans" && id && !vlanBriefData && !loadingVlanBrief) {
       setLoadingVlanBrief(true);
       setVlanBriefError(null);
@@ -175,7 +186,10 @@ const DeviceDetailPage = () => {
 
   // Routing Tab
   useEffect(() => {
-    if (!device?.is_reachable) return; // Do not fetch if device is offline
+    if (!device?.is_reachable) {
+      setRoutingTableData(null);
+      return; // Do not fetch if device is offline
+    }
     if (key === "routing" && id && !routingTableData && !loadingRoutingTable) {
       setLoadingRoutingTable(true);
       setRoutingTableError(null);
@@ -194,7 +208,11 @@ const DeviceDetailPage = () => {
 
   // Security Tab
   useEffect(() => {
-    if (!device?.is_reachable) return; // Do not fetch if device is offline
+    if (!device?.is_reachable) {
+      setAclsData(null);
+      setAaaConfigData(null);
+      return; // Do not fetch if device is offline
+    }
     if (key === "security" && id && !aclsData && !loadingAcls) {
       setLoadingAcls(true);
       setAclsError(null);
@@ -227,7 +245,10 @@ const DeviceDetailPage = () => {
 
   // Logging Tab
   useEffect(() => {
-    if (!device?.is_reachable) return; // Do not fetch if device is offline
+    if (!device?.is_reachable) {
+      setLoggingConfigData(null);
+      return; // Do not fetch if device is offline
+    }
     if (key === "logging" && id && !loggingConfigData && !loadingLoggingConfig) {
       setLoadingLoggingConfig(true);
       setLoggingConfigError(null);
@@ -246,7 +267,10 @@ const DeviceDetailPage = () => {
 
   // SNMP Tab
   useEffect(() => {
-    if (!device?.is_reachable) return; // Do not fetch if device is offline
+    if (!device?.is_reachable) {
+      setSnmpConfigData(null);
+      return; // Do not fetch if device is offline
+    }
     if (key === "snmp" && id && !snmpConfigData && !loadingSnmpConfig) {
       setLoadingSnmpConfig(true);
       setSnmpConfigError(null);
@@ -265,7 +289,10 @@ const DeviceDetailPage = () => {
 
   // NTP Tab
   useEffect(() => {
-    if (!device?.is_reachable) return; // Do not fetch if device is offline
+    if (!device?.is_reachable) {
+      setNtpConfigData(null);
+      return; // Do not fetch if device is offline
+    }
     if (key === "ntp" && id && !ntpConfigData && !loadingNtpConfig) {
       setLoadingNtpConfig(true);
       setNtpConfigError(null);
@@ -284,7 +311,10 @@ const DeviceDetailPage = () => {
 
   // Clock for General Tab
   useEffect(() => {
-    if (!device?.is_reachable) return; // Do not fetch if device is offline
+    if (!device?.is_reachable) {
+      setClockData(null);
+      return; // Do not fetch if device is offline
+    }
     if (key === "general" && id && !clockData && !loadingClock) {
       setLoadingClock(true);
       setClockError(null);
