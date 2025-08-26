@@ -2,26 +2,23 @@ from typing import List, Dict, Any, Union
 from abc import ABC, abstractmethod
 import logging
 from concurrent.futures import TimeoutError
-from netmiko import (
-    NetmikoAuthenticationException,
-)  # Import NetmikoAuthenticationException
+
+from netmiko import NetmikoAuthenticationException
 
 from src.connection_manager import ConnectionManager
-
-connection_manager = ConnectionManager() # Get the singleton instance
 from src.device_info import DeviceConnectionInfo
 from src.config import settings
-
-logger = logging.getLogger(__name__)
-
 from ..parsing_utils import parse_cli_output
-
 from ..exceptions import (
     DeviceConnectionError,
     DeviceTimeoutError,
     DeviceAuthenticationError,
     DeviceError,
 )
+
+logger = logging.getLogger(__name__)
+
+connection_manager = ConnectionManager() # Get the singleton instance
 
 
 class BaseDevice(ABC):

@@ -5,7 +5,6 @@ from functools import wraps
 from typing import Any, Callable
 from fastapi import HTTPException, status, Request
 from fastapi.encoders import jsonable_encoder
-from datetime import datetime
 from ..cache import get_redis_client
 
 

@@ -3,17 +3,13 @@ from typing import Optional
 from passlib.context import CryptContext
 import jwt  # Using PyJWT
 from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.backends import default_backend
+import base64
 from .config import settings
 import logging
 
 logger = logging.getLogger(__name__)
-
-# Generate a key for encryption. In a real app, load this from config/secrets management.
-# For this example, we'll derive it from the SECRET_KEY for simplicity.
-# IMPORTANT: If SECRET_KEY changes, all encrypted data will be unreadable.
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.backends import default_backend
-import base64
 
 digest = hashes.Hash(hashes.SHA256(), backend=default_backend())
 digest.update(settings.SECRET_KEY.encode())

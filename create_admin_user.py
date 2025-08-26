@@ -1,5 +1,5 @@
 from src.database import get_db
-from src.crud import crud, schemas, security
+from src.crud import crud, schemas
 from sqlalchemy.orm import Session
 
 
@@ -16,8 +16,7 @@ def create_admin_user():
         print(f"User '{username}' already exists.")
         return
 
-    # Hash the password
-    hashed_password = security.get_password_hash(password)
+    
 
     # Create user schema
     user_create = schemas.UserCreate(

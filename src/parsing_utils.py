@@ -7,8 +7,8 @@ import ttp
 
 # Import Genie (assuming it's installed)
 try:
-    from genie import testbed
-    from genie.libs import parser as genie_parser
+    from genie import testbed # noqa: F401
+    from genie.libs import parser as genie_parser # noqa: F401
 
     GENIE_AVAILABLE = True
 except ImportError:

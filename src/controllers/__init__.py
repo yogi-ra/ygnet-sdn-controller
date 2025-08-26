@@ -5,6 +5,7 @@ from typing import Dict, Type
 
 from .base import BaseDevice
 from .cisco_ios import CiscoIosRouter, CiscoIosSwitch, CiscoIosDevice
+from .aruba_procurve import ArubaProcurve
 from ..device_info import DeviceConnectionInfo
 
 # The map that the factory function uses to find the correct class
@@ -12,6 +13,7 @@ from ..device_info import DeviceConnectionInfo
 DEVICE_HANDLER_MAP: Dict[str, Type[BaseDevice]] = {
     "cisco_ios_router": CiscoIosRouter,
     "cisco_ios_switch": CiscoIosSwitch,
+    "aruba_procurve": ArubaProcurve,
 }
 
 def get_device_handler(device_info: DeviceConnectionInfo) -> BaseDevice:
@@ -41,4 +43,5 @@ __all__ = [
     "CiscoIosRouter",
     "CiscoIosSwitch",
     "CiscoIosDevice",
+    "ArubaProcurve",
 ]

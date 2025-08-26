@@ -1,16 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
-from typing import List, Any, Annotated, Union, Dict
-from datetime import datetime
+from typing import List, Any
 import json
 
 from ...crud import crud, schemas
 from ...database import get_db
 from ...cache import get_redis_client
 
-from ...controllers import (
-    get_device_handler,
-)
 from ..dependencies import (
     require_read_privileges,
     require_write_privileges,
