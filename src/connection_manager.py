@@ -10,6 +10,7 @@ from src.exceptions import (
     DeviceTimeoutError,
     DeviceConnectionError,
 )
+from src.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,7 @@ class ConnectionManager:
                     port=device_info.port,
                     device_type=netmiko_device_type,
                     secret=device_info.secret,
+                    conn_timeout=settings.NETMIKO_TIMEOUT,
                 )
                 if device_info.secret:
                     new_connection.enable()

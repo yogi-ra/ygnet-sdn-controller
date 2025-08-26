@@ -4,6 +4,7 @@ import logging
 
 from src.connection_manager import connection_manager
 from src.device_info import DeviceConnectionInfo
+from src.config import settings # Import settings
 
 logger = logging.getLogger(__name__)
 
@@ -67,13 +68,13 @@ class BaseDevice(ABC):
         """
         self.disconnect()
 
-    def send_command(self, command: str) -> str:
+    def send_command(self, command: str, read_timeout: int = settings.NETMIKO_READ_TIMEOUT) -> str:
         """
         Sends a single command to the device.
         """
         if not self.connection:
             raise DeviceConnectionError("Error: Not connected to any device.")
-        output = self.connection.send_command(command)
+        output = self.connection.send_command(command, read_timeout=read_timeout)
         logger.debug(f"Raw output from Netmiko for command '{command}':\n{output}")
         return output
 

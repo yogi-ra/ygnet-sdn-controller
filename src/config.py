@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REDIS_HOST: str = os.getenv("REDIS_HOST", "localhost")
     REDIS_PORT: int = int(os.getenv("REDIS_PORT", 6379))
+    NETMIKO_TIMEOUT: int = int(os.getenv("NETMIKO_TIMEOUT", 60))
+    NETMIKO_READ_TIMEOUT: int = int(os.getenv("NETMIKO_READ_TIMEOUT", 60))
 
 
 settings = Settings()

@@ -140,6 +140,8 @@ export const useDeviceDetails = (deviceId: string | undefined) => {
     [deviceId, fetchDetail]
   );
 
+  
+
   useEffect(() => {
     if (!deviceId) {
       setState((prevState) => ({
@@ -186,7 +188,7 @@ export const useDeviceDetails = (deviceId: string | undefined) => {
     fetchPrimaryDetails();
   }, [deviceId, fetchDetail]);
 
-  // Update the state with the fetchFeature function after initial render
+  // Update the state with the fetchFeature and reFetchPrimaryDetails functions after initial render
   useEffect(() => {
     setState((prevState) => ({
       ...prevState,

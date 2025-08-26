@@ -32,6 +32,10 @@ const DeviceDetailPage = () => {
   const [executingCommand, setExecutingCommand] = useState(false);
   const [commandError, setCommandError] = useState<string | null>(null);
 
+  const [clearingCache, setClearingCache] = useState(false);
+  const [cacheClearSuccess, setCacheClearSuccess] = useState<string | null>(null);
+  const [cacheClearError, setCacheClearError] = useState<string | null>(null);
+
   const [key, setKey] = useState("general");
 
   // --- New State Variables for Lazy Loaded Data ---
@@ -330,6 +334,72 @@ const DeviceDetailPage = () => {
     }
   };
 
+  const handleClearCache = async () => {
+    if (!id) return;
+
+    setClearingCache(true);
+    setCacheClearSuccess(null);
+    setCacheClearError(null);
+
+    const endpoint = `/api/devices/${id}/cache/clear`;
+    const prefixesToClear = [
+      "details", // Clear specific device details cache
+      "system",
+      "interfaces",
+      "vlans",
+      "routing",
+      "acls",
+      "snmp",
+      "logging",
+      "ntp",
+      "aaa",
+      "active_users",
+      "local_users",
+      "clock",
+    ];
+
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ prefixes: prefixesToClear }),
+      });
+
+      if (response.status === 401) {
+        logout();
+        navigate("/login");
+        return;
+      }
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || "Failed to clear cache");
+      }
+
+      setCacheClearSuccess("Cache cleared successfully!");
+      // For now, just clear the local state of fetched data to force re-fetch on tab switch
+      setInterfacesData(null);
+      setInterfacesTrunkData(null);
+      setActiveUsersData(null);
+      setLocalUsersData(null);
+      setVlanBriefData(null);
+      setRoutingTableData(null);
+      setAclsData(null);
+      setAaaConfigData(null);
+      setLoggingConfigData(null);
+      setSnmpConfigData(null);
+      setNtpConfigData(null);
+      setClockData(null);
+    } catch (err: any) {
+      setCacheClearError(err.message || "An unknown error occurred while clearing cache.");
+    } finally {
+      setClearingCache(false);
+    }
+  };
+
   if (loading) {
     return (
       <Container fluid className="mt-4 text-center">
@@ -504,6 +574,35 @@ const DeviceDetailPage = () => {
                       <br />
                       {commandOutput}
                     </div>
+                  )}
+                </Card.Body>
+              </Card>
+            </Col>
+            <Col md={6}>
+              <Card>
+                <Card.Body>
+                  <Card.Title as="h2">Cache Management</Card.Title>
+                  <Button
+                    variant="warning"
+                    onClick={handleClearCache}
+                    disabled={clearingCache}
+                    className="mt-3"
+                  >
+                    {clearingCache ? (
+                      <Spinner as="span" animation="border" size="sm" />
+                    ) : (
+                      "Clear Device Cache"
+                    )}
+                  </Button>
+                  {cacheClearSuccess && (
+                    <Alert variant="success" className="mt-3">
+                      {cacheClearSuccess}
+                    </Alert>
+                  )}
+                  {cacheClearError && (
+                    <Alert variant="danger" className="mt-3">
+                      {cacheClearError}
+                    </Alert>
                   )}
                 </Card.Body>
               </Card>

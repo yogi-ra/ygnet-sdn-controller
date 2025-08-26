@@ -120,3 +120,8 @@ class MultilineCommandRequest(BaseModel):
 
 class MultilineCommandOutput(BaseModel):
     output: str
+
+
+# --- Cache Schemas ---
+class CacheClearInput(BaseModel):
+    prefixes: List[str] = Field(..., description="A list of cache key prefixes to be cleared.")

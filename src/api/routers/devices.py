@@ -214,6 +214,42 @@ async def get_feature(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post(
+    "/{device_id}/cache/clear",
+    status_code=204,
+    dependencies=[Depends(require_write_privileges)],
+)
+def clear_cache(
+    device_id: int,
+    cache_clear_input: schemas.CacheClearInput,
+    redis_client: Any = Depends(get_redis_client),
+):
+    """
+    Invalidates the cache for specific feature(s) of a device.
+    """
+    cleared_keys = []
+    # Use a more generic scan to clear all keys related to the device_id
+    # This pattern matches keys like "device:details:{device_id}", "device:{device_id}:features:{feature_name}", etc.
+    for key in redis_client.scan_iter(f"device:{device_id}:*"):
+        redis_client.delete(key)
+        cleared_keys.append(key)
+
+    # Also clear the specific device details cache if it doesn't match the above pattern exactly
+    # (e.g., if it was just "device:details" without the device_id in the prefix)
+    detail_key = f"device:details:{device_id}"
+    if redis_client.exists(detail_key):
+        redis_client.delete(detail_key)
+        cleared_keys.append(detail_key)
+
+    if not cleared_keys:
+        raise HTTPException(
+            status_code=404,
+            detail="No matching cache keys found for the given prefixes.",
+        )
+
+    return
+
+
 @router.get(
     "/{device_id}/check-reachability",
     response_model=bool,

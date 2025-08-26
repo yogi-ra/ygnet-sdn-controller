@@ -34,6 +34,21 @@ def load_ttp_template(template_name: str) -> Optional[str]:
     return None
 
 
+def _handle_none_in_numerical_fields(data: Any) -> Any:
+    """
+    Recursively converts None values in fields that are likely numerical to 0.
+    """
+    if isinstance(data, dict):
+        for key, value in data.items():
+            if value is None and any(num_key in key.lower() for num_key in ["count", "value", "rate", "number", "bytes", "packets", "errors", "drops", "utilization"]):
+                data[key] = 0
+            else:
+                data[key] = _handle_none_in_numerical_fields(value)
+    elif isinstance(data, list):
+        data = [_handle_none_in_numerical_fields(item) for item in data]
+    return data
+
+
 def parse_cli_output(
     command: str,
     raw_output: str,
@@ -60,8 +75,9 @@ def parse_cli_output(
 
         logger.info(f"Parsed data from TextFSM (official) for command '{command}': {parsed_data}")
         if parsed_data:
+            processed_data = _handle_none_in_numerical_fields(parsed_data)
             logger.debug(f"TextFSM parsing (official) succeeded for command '{command}'.")
-            return parsed_data
+            return processed_data
 
     except ParsingException as e:
         if "No template found" in str(e):
@@ -89,11 +105,13 @@ def parse_cli_output(
 
             if result and result[0]:
                 if isinstance(result[0], list) and result[0]:
+                    processed_data = _handle_none_in_numerical_fields(result[0])
                     logger.debug(f"TTP parsing succeeded for command '{command}'.")
-                    return result[0]
+                    return processed_data
                 elif isinstance(result[0], dict):
+                    processed_data = _handle_none_in_numerical_fields([result[0]])
                     logger.debug(f"TTP parsing succeeded for command '{command}'.")
-                    return [result[0]]
+                    return processed_data
         except Exception as e:
             logger.error(
                 f"TTP parsing failed for command '{command}': {type(e).__name__}: {e}"
