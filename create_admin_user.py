@@ -1,12 +1,13 @@
 from src.database import get_db
-from src import crud, schemas, security
+from src.crud import crud, schemas, security
 from sqlalchemy.orm import Session
+
 
 def create_admin_user():
     db: Session = next(get_db())
-    
+
     username = "admin"
-    password = "adminpassword" # You can change this to a stronger password
+    password = "adminpassword"  # You can change this to a stronger password
     role = "admin"
 
     # Check if user already exists
@@ -21,13 +22,14 @@ def create_admin_user():
     # Create user schema
     user_create = schemas.UserCreate(
         username=username,
-        password=password, # The password field in UserCreate is not hashed
-        role=role
+        password=password,  # The password field in UserCreate is not hashed
+        role=role,
     )
 
     # Create user in DB
     user = crud.create_user(db=db, user=user_create)
     print(f"Admin user '{user.username}' created successfully with role '{user.role}'.")
+
 
 if __name__ == "__main__":
     create_admin_user()
