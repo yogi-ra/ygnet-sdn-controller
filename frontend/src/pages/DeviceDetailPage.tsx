@@ -79,6 +79,10 @@ const DeviceDetailPage = () => {
   const [loadingNtpConfig, setLoadingNtpConfig] = useState(false);
   const [ntpConfigError, setNtpConfigError] = useState<string | null>(null);
 
+  const [clockData, setClockData] = useState<string | null>(null);
+  const [loadingClock, setLoadingClock] = useState(false);
+  const [clockError, setClockError] = useState<string | null>(null);
+
   // --- useEffects for Lazy Loading ---
 
   // Interfaces Tab
@@ -266,6 +270,24 @@ const DeviceDetailPage = () => {
     }
   }, [key, id, fetchFeature, ntpConfigData, loadingNtpConfig]);
 
+  // Clock for General Tab
+  useEffect(() => {
+    if (key === "general" && id && !clockData && !loadingClock) {
+      setLoadingClock(true);
+      setClockError(null);
+      fetchFeature("clock", "current_clock")
+        .then((data) => {
+          setClockData(data);
+        })
+        .catch((err) => {
+          setClockError(err.message || "Failed to load clock.");
+        })
+        .finally(() => {
+          setLoadingClock(false);
+        });
+    }
+  }, [key, id, fetchFeature, clockData, loadingClock]);
+
   // ... rest of the component
   const handleExecuteCommand = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -409,10 +431,12 @@ const DeviceDetailPage = () => {
                     <strong>Hostname:</strong> {device.version?.hostname || "N/A"}
                     <br />
                     <strong>Clock:</strong>{" "}
-                    {errors.current_clock ? (
-                      <span className="text-danger">Error</span>
+                    {loadingClock ? (
+                      <Spinner animation="border" size="sm" />
+                    ) : clockError ? (
+                      <span className="text-danger">Error: {clockError}</span>
                     ) : (
-                      device.current_clock || "N/A"
+                      clockData || "N/A"
                     )}
                   </Card.Text>
                 </Card.Body>

@@ -1,7 +1,7 @@
 from .base import BaseSystem
 from typing import List, Dict, Any
-from datetime import datetime
 import re
+
 
 class CiscoIosSystem(BaseSystem):
     """Cisco IOS implementation of system features."""
@@ -43,7 +43,7 @@ class CiscoIosSystem(BaseSystem):
                     username = parts[1]
                     user_data = {"username": username}
 
-                    match = re.search(r'privilege\s+(\d+)', line)
+                    match = re.search(r"privilege\s+(\d+)", line)
                     if match:
                         user_data["privilege"] = match.group(1)
 
@@ -54,12 +54,12 @@ class CiscoIosSystem(BaseSystem):
             self.device_handler.logger.error(f"Error getting local users: {e}")
             return []
 
-    def get_clock(self) -> datetime:
+    def get_clock(self) -> str:
         try:
             output = self.device_handler.send_command(command="show clock")
             if output.startswith("*"):
                 output = output[1:].strip()
-            return datetime.strptime(output, "%H:%M:%S.%f UTC %a %b %d %Y")
-        except Exception as e: # Catch general Exception instead of just ValueError
+            return output
+        except Exception as e:
             self.device_handler.logger.error(f"Error getting clock: {e}")
-            return None # Return None on error
+            return f"Error: {e}"
