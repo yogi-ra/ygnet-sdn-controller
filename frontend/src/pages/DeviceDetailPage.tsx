@@ -382,9 +382,9 @@ const DeviceDetailPage = () => {
                       {data.map((vlan: any, index: number) => (
                         <tr key={index}>
                           <td>{vlan.vlan_id}</td>
-                          <td>{vlan.name}</td>
+                          <td>{vlan.vlan_name}</td>
                           <td>{vlan.status}</td>
-                          <td>{vlan.ports}</td>
+                          <td>{Array.isArray(vlan.interfaces) ? vlan.interfaces.join(", ") : vlan.interfaces}</td>
                         </tr>
                       ))}
                     </tbody>
