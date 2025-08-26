@@ -28,7 +28,7 @@ async def startup_event():
     # Runs every 5 minutes
     scheduler.add_job(check_device_for_changes, "interval", minutes=5)
     # Add the new job for device reachability status
-    scheduler.add_job(update_device_reachability_status, "interval", minutes=1) # Run every 1 minute
+    scheduler.add_job(update_device_reachability_status, "interval", seconds=5) # Run every 5 seconds
     scheduler.start()
 
 

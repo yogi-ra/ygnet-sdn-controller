@@ -50,6 +50,19 @@ class ConnectionManager:
                     if device_key in self._connections:
                         del self._connections[device_key]
                     raise
+            else:
+                # Connection exists, perform a liveness check
+                connection = self._connections[device_key]
+                try:
+                    # Attempt a simple command to check if the connection is still live
+                    connection.find_prompt()
+                    print(f"Connection to {device_info.ip_address} is still live.")
+                except Exception as e:
+                    print(f"Cached connection to {device_info.ip_address} is stale: {e}. Reconnecting...")
+                    if device_key in self._connections:
+                        del self._connections[device_key] # Remove stale connection
+                    # Re-raise to force a new connection attempt in the next iteration
+                    raise # Re-raise the exception to trigger a new connection attempt
             return self._connections[device_key]
 
     def get_connection(self, device_info: DeviceConnectionInfo, netmiko_device_type: str):
