@@ -496,130 +496,136 @@ const DeviceDetailPage = () => {
         className="mb-3"
       >
         <Tab eventKey="general" title="General Information">
-          <Row className="mt-3">
-            <Col md={6}>
-              <Card>
-                <Card.Body>
-                  <Card.Title as="h2">Basic Details</Card.Title>
-                  <Card.Text>
-                    <strong>IP Address:</strong> {device.ip_address}
-                    <br />
-                    <strong>Port:</strong> {device.port}
-                    <br />
-                    <strong>Username:</strong> {device.username}
-                    <br />
-                    <strong>Version:</strong> {device.version?.software_image} {device.version?.version || "N/A"}
-                    <br />
-                    <strong>Hostname:</strong> {device.version?.hostname || "N/A"}
-                    <br />
-                    <strong>Clock:</strong>{" "}
-                    {loadingClock ? (
-                      <Spinner animation="border" size="sm" />
-                    ) : clockError ? (
-                      <span className="text-danger">Error: {clockError}</span>
-                    ) : (
-                      clockData || "N/A"
+          {device.is_reachable ? (
+            <Row className="mt-3">
+              <Col md={6}>
+                <Card>
+                  <Card.Body>
+                    <Card.Title as="h2">Basic Details</Card.Title>
+                    <Card.Text>
+                      <strong>IP Address:</strong> {device.ip_address}
+                      <br />
+                      <strong>Port:</strong> {device.port}
+                      <br />
+                      <strong>Username:</strong> {device.username}
+                      <br />
+                      <strong>Version:</strong> {device.version?.software_image} {device.version?.version || "N/A"}
+                      <br />
+                      <strong>Hostname:</strong> {device.version?.hostname || "N/A"}
+                      <br />
+                      <strong>Clock:</strong>{" "}
+                      {loadingClock ? (
+                        <Spinner animation="border" size="sm" />
+                      ) : clockError ? (
+                        <span className="text-danger">Error: {clockError}</span>
+                      ) : (
+                        clockData || "N/A"
+                      )}
+                    </Card.Text>
+                  </Card.Body>
+                </Card>
+              </Col>
+              <Col md={6}>
+                <Card>
+                  <Card.Body style={{ maxHeight: "400px", overflowY: "auto" }}>
+                    <Card.Title as="h2">Execute Command</Card.Title>
+                    <Form onSubmit={handleExecuteCommand}>
+                      <Form.Group className="mb-3" controlId="commandInput">
+                        <Form.Label>Command</Form.Label>
+                        <Form.Control
+                          as="textarea"
+                          rows={3}
+                          placeholder="Enter command to execute"
+                          value={command}
+                          onChange={(e) => setCommand(e.target.value)}
+                          required
+                        />
+                      </Form.Group>
+                      <Form.Group
+                        className="mb-3"
+                        controlId="isConfigCommandCheckbox"
+                      >
+                        <Form.Check
+                          type="checkbox"
+                          label="Configuration Command"
+                          checked={isConfigCommand}
+                          onChange={(e) => setIsConfigCommand(e.target.checked)}
+                        />
+                      </Form.Group>
+                      <Button
+                        variant="primary"
+                        type="submit"
+                        disabled={executingCommand}
+                      >
+                        {executingCommand ? (
+                          <Spinner as="span" animation="border" size="sm" />
+                        ) : (
+                          "Execute"
+                        )}
+                      </Button>
+                    </Form>
+                    {commandError && (
+                      <Alert variant="danger" className="mt-3">
+                        {commandError}
+                      </Alert>
                     )}
-                  </Card.Text>
-                </Card.Body>
-              </Card>
-            </Col>
-            <Col md={6}>
-              <Card>
-                <Card.Body style={{ maxHeight: "400px", overflowY: "auto" }}>
-                  <Card.Title as="h2">Execute Command</Card.Title>
-                  <Form onSubmit={handleExecuteCommand}>
-                    <Form.Group className="mb-3" controlId="commandInput">
-                      <Form.Label>Command</Form.Label>
-                      <Form.Control
-                        as="textarea"
-                        rows={3}
-                        placeholder="Enter command to execute"
-                        value={command}
-                        onChange={(e) => setCommand(e.target.value)}
-                        required
-                      />
-                    </Form.Group>
-                    <Form.Group
-                      className="mb-3"
-                      controlId="isConfigCommandCheckbox"
-                    >
-                      <Form.Check
-                        type="checkbox"
-                        label="Configuration Command"
-                        checked={isConfigCommand}
-                        onChange={(e) => setIsConfigCommand(e.target.checked)}
-                      />
-                    </Form.Group>
+                    {commandOutput && (
+                      <div
+                        className="mt-3 p-3 bg-light rounded"
+                        style={{
+                          whiteSpace: "pre-wrap",
+                          fontFamily: "monospace",
+                        }}
+                      >
+                        {deviceLevel && (
+                          <>
+                            <strong>Device Level:</strong> {deviceLevel}
+                            <br />
+                          </>
+                        )}
+                        <strong>Output:</strong>
+                        <br />
+                        {commandOutput}
+                      </div>
+                    )}
+                  </Card.Body>
+                </Card>
+              </Col>
+              <Col md={6}>
+                <Card>
+                  <Card.Body>
+                    <Card.Title as="h2">Cache Management</Card.Title>
                     <Button
-                      variant="primary"
-                      type="submit"
-                      disabled={executingCommand}
+                      variant="warning"
+                      onClick={handleClearCache}
+                      disabled={clearingCache}
+                      className="mt-3"
                     >
-                      {executingCommand ? (
+                      {clearingCache ? (
                         <Spinner as="span" animation="border" size="sm" />
                       ) : (
-                        "Execute"
+                        "Clear Device Cache"
                       )}
                     </Button>
-                  </Form>
-                  {commandError && (
-                    <Alert variant="danger" className="mt-3">
-                      {commandError}
-                    </Alert>
-                  )}
-                  {commandOutput && (
-                    <div
-                      className="mt-3 p-3 bg-light rounded"
-                      style={{
-                        whiteSpace: "pre-wrap",
-                        fontFamily: "monospace",
-                      }}
-                    >
-                      {deviceLevel && (
-                        <>
-                          <strong>Device Level:</strong> {deviceLevel}
-                          <br />
-                        </>
-                      )}
-                      <strong>Output:</strong>
-                      <br />
-                      {commandOutput}
-                    </div>
-                  )}
-                </Card.Body>
-              </Card>
-            </Col>
-            <Col md={6}>
-              <Card>
-                <Card.Body>
-                  <Card.Title as="h2">Cache Management</Card.Title>
-                  <Button
-                    variant="warning"
-                    onClick={handleClearCache}
-                    disabled={clearingCache}
-                    className="mt-3"
-                  >
-                    {clearingCache ? (
-                      <Spinner as="span" animation="border" size="sm" />
-                    ) : (
-                      "Clear Device Cache"
+                    {cacheClearSuccess && (
+                      <Alert variant="success" className="mt-3">
+                        {cacheClearSuccess}
+                      </Alert>
                     )}
-                  </Button>
-                  {cacheClearSuccess && (
-                    <Alert variant="success" className="mt-3">
-                      {cacheClearSuccess}
-                    </Alert>
-                  )}
-                  {cacheClearError && (
-                    <Alert variant="danger" className="mt-3">
-                      {cacheClearError}
-                    </Alert>
-                  )}
-                </Card.Body>
-              </Card>
-            </Col>
-          </Row>
+                    {cacheClearError && (
+                      <Alert variant="danger" className="mt-3">
+                        {cacheClearError}
+                      </Alert>
+                    )}
+                  </Card.Body>
+                </Card>
+              </Col>
+            </Row>
+          ) : (
+            <Alert variant="info" className="mt-3">
+              Device is offline. General information and command execution are not available.
+            </Alert>
+          )}
         </Tab>
 
         <Tab eventKey="interfaces" title="Interfaces">

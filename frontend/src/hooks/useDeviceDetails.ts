@@ -1,4 +1,5 @@
 
+import { useQuery } from "@tanstack/react-query";
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "./useAuth";
@@ -11,6 +12,7 @@ interface Device {
   ip_address: string;
   port: number;
   username: string;
+  is_reachable: boolean;
 }
 
 // Make all feature-related fields optional in DeviceDetail
@@ -37,6 +39,7 @@ interface VersionInfo {
 
 // Make all feature-related fields optional in DeviceDetail
 interface DeviceDetail extends Device {
+  is_reachable?: boolean; // Add is_reachable to the interface
   version?: VersionInfo;
   interfaces?: {
     interface: string;
@@ -59,39 +62,27 @@ interface DeviceDetail extends Device {
 }
 
 // State for the hook
-interface DeviceDetailsState {
-  device: DeviceDetail | null;
-  loading: boolean;
-  errors: { [key: string]: string | null };
-  // New: Functions to fetch specific features
-  fetchFeature: (featureName: string, key: string) => Promise<any>;
-}
-
-// The custom hook
 export const useDeviceDetails = (deviceId: string | undefined) => {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
-  const [state, setState] = useState<DeviceDetailsState>({
-    device: null,
-    loading: true,
-    errors: {},
-    fetchFeature: async () => {}, // Placeholder, will be replaced in useEffect
-  });
 
-  // Helper to fetch individual details and handle errors
-  const fetchDetail = useCallback(
-    async (url: string, key: string) => {
+  // New: Function to fetch a specific feature
+  const fetchFeature = useCallback(
+    async (featureName: string, key: string) => {
       if (!token) {
         logout();
         navigate("/login");
         return null;
       }
       try {
-        const response = await fetch(url, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
+        const response = await fetch(
+          `/api/devices/${deviceId}/features/${featureName}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
         if (response.status === 401) {
           logout();
           navigate("/login");
@@ -102,100 +93,52 @@ export const useDeviceDetails = (deviceId: string | undefined) => {
         }
         return await response.json();
       } catch (error: any) {
-        setState((prevState) => ({
-          ...prevState,
-          errors: {
-            ...prevState.errors,
-            [key]: error.message || `Failed to fetch ${key}`,
-          },
-        }));
-        return null;
+        console.error(`Failed to fetch ${key}:`, error);
+        throw error; // Re-throw to be caught by the component's state
       }
     },
-    [token, logout, navigate]
+    [deviceId, token, logout, navigate]
   );
 
-  // New: Function to fetch a specific feature
-  const fetchFeature = useCallback(
-    async (featureName: string, key: string) => {
-      setState((prevState) => ({
-        ...prevState,
-        errors: { ...prevState.errors, [key]: null }, // Clear previous error
-      }));
-      const data = await fetchDetail(
-        `/api/devices/${deviceId}/features/${featureName}`,
-        key
-      );
-      if (data) {
-        setState((prevState) => ({
-          ...prevState,
-          device: {
-            ...prevState.device,
-            [key]: data, // Store the fetched feature data
-          } as DeviceDetail, // Type assertion
-        }));
+  const { data: device, isLoading: loading, error: primaryError } = useQuery<DeviceDetail, Error>({
+    queryKey: ["device", deviceId],
+    queryFn: async () => {
+      if (!token) {
+        logout();
+        navigate("/login");
+        throw new Error("No authentication token found. Please log in.");
       }
-      return data;
+      const response = await fetch(`/api/devices/${deviceId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (response.status === 401) {
+        logout();
+        navigate("/login");
+        throw new Error("Session expired or unauthorized. Please log in again.");
+      }
+      if (!response.ok) {
+        throw new Error(`Failed to fetch device details: ${response.statusText}`);
+      }
+      return response.json();
     },
-    [deviceId, fetchDetail]
-  );
-
-  
-
-  useEffect(() => {
-    if (!deviceId) {
-      setState((prevState) => ({
-        ...prevState,
-        device: null,
-        loading: false,
-        errors: { general: "No device ID provided." },
-      }));
-      return;
+    enabled: !!deviceId, // Only run query if deviceId is available
+    refetchInterval: 5000, // Refetch every 5 seconds
+    onError: (err) => {
+        console.error("Error fetching primary device details:", err);
+        if (err.message.includes("Authentication failed") || err.message.includes("Session expired")) {
+          logout();
+          navigate("/login");
+        }
+      },
     }
+  );
 
-    const fetchPrimaryDetails = async () => {
-      setState((prevState) => ({
-        ...prevState,
-        device: null,
-        loading: true,
-        errors: {},
-      }));
-
-      const primaryDetails = await fetchDetail(
-        `/api/devices/${deviceId}`,
-        "primary"
-      );
-
-      if (!primaryDetails) {
-        setState((prevState) => ({
-          ...prevState,
-          loading: false,
-          errors: {
-            ...prevState.errors,
-            primary: "Failed to fetch essential device details.",
-          },
-        }));
-        return;
-      }
-
-      setState((prevState) => ({
-        ...prevState,
-        device: primaryDetails,
-        loading: false,
-      }));
-    };
-
-    fetchPrimaryDetails();
-  }, [deviceId, fetchDetail]);
-
-  // Update the state with the fetchFeature and reFetchPrimaryDetails functions after initial render
-  useEffect(() => {
-    setState((prevState) => ({
-      ...prevState,
-      fetchFeature: fetchFeature,
-    }));
-  }, [fetchFeature]);
-
-
-  return state;
+  return {
+    device: device || null,
+    loading,
+    errors: { primary: primaryError?.message || null },
+    fetchFeature,
+  };
 };
