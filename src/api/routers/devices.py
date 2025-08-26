@@ -86,7 +86,7 @@ def read_device(request: Request, device_id: int, db: Session = Depends(get_db))
 
     device_detail = schemas.DeviceDetail(
         **db_device.__dict__,
-        version=str(version_info) if version_info else None,
+        version=version_info if version_info else None,
         interfaces=interfaces_brief if interfaces_brief else [],
     )
 

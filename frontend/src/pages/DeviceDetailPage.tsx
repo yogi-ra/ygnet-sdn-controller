@@ -404,14 +404,9 @@ const DeviceDetailPage = () => {
                     <br />
                     <strong>Username:</strong> {device.username}
                     <br />
-                    <strong>Version:</strong> {device.version || "N/A"}
+                    <strong>Version:</strong> {device.version?.software_image} {device.version?.version || "N/A"}
                     <br />
-                    <strong>Hostname:</strong>{" "}
-                    {errors.hostname ? (
-                      <span className="text-danger">Error</span>
-                    ) : (
-                      device.hostname || "N/A"
-                    )}
+                    <strong>Hostname:</strong> {device.version?.hostname || "N/A"}
                     <br />
                     <strong>Clock:</strong>{" "}
                     {errors.current_clock ? (

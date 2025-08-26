@@ -29,8 +29,28 @@ class Device(DeviceBase):
     model_config = ConfigDict(from_attributes=True)
 
 
-class DeviceDetail(Device):
+class VersionInfo(BaseModel):
+    software_image: Optional[str] = None
     version: Optional[str] = None
+    release: Optional[str] = None
+    rommon: Optional[str] = None
+    hostname: Optional[str] = None
+    uptime: Optional[str] = None
+    uptime_years: Optional[str] = None
+    uptime_weeks: Optional[str] = None
+    uptime_days: Optional[str] = None
+    uptime_hours: Optional[str] = None
+    uptime_minutes: Optional[str] = None
+    reload_reason: Optional[str] = None
+    running_image: Optional[str] = None
+    hardware: Optional[List[str]] = None
+    serial: Optional[List[str]] = None
+    config_register: Optional[str] = None
+    mac_address: Optional[List[str]] = None
+    restarted: Optional[str] = None
+
+class DeviceDetail(Device):
+    version: Optional[VersionInfo] = None
     interfaces: Optional[list[dict]] = None # Changed to list[dict] based on common Netmiko output for interfaces
     is_reachable: bool = False # Add is_reachable to the schema
 

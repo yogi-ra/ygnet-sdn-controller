@@ -14,8 +14,30 @@ interface Device {
 }
 
 // Make all feature-related fields optional in DeviceDetail
-interface DeviceDetail extends Device {
+interface VersionInfo {
+  software_image?: string;
   version?: string;
+  release?: string;
+  rommon?: string;
+  hostname?: string;
+  uptime?: string;
+  uptime_years?: string;
+  uptime_weeks?: string;
+  uptime_days?: string;
+  uptime_hours?: string;
+  uptime_minutes?: string;
+  reload_reason?: string;
+  running_image?: string;
+  hardware?: string[];
+  serial?: string[];
+  config_register?: string;
+  mac_address?: string[];
+  restarted?: string;
+}
+
+// Make all feature-related fields optional in DeviceDetail
+interface DeviceDetail extends Device {
+  version?: VersionInfo;
   interfaces?: {
     interface: string;
     ip_address: string;
