@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "./useAuth";
 
@@ -13,9 +13,10 @@ interface Device {
   username: string;
 }
 
+// Make all feature-related fields optional in DeviceDetail
 interface DeviceDetail extends Device {
-  version: string;
-  interfaces: {
+  version?: string;
+  interfaces?: {
     interface: string;
     ip_address: string;
     status: string;
@@ -32,6 +33,7 @@ interface DeviceDetail extends Device {
   logging_config_data?: any[];
   ntp_config_data?: any[];
   aaa_config_data?: any[];
+  interfacesTrunk?: any[]; // Added this as it's used in DeviceDetailPage
 }
 
 // State for the hook
@@ -39,6 +41,8 @@ interface DeviceDetailsState {
   device: DeviceDetail | null;
   loading: boolean;
   errors: { [key: string]: string | null };
+  // New: Functions to fetch specific features
+  fetchFeature: (featureName: string, key: string) => Promise<any>;
 }
 
 // The custom hook
@@ -49,61 +53,90 @@ export const useDeviceDetails = (deviceId: string | undefined) => {
     device: null,
     loading: true,
     errors: {},
+    fetchFeature: async () => {}, // Placeholder, will be replaced in useEffect
   });
 
-  useEffect(() => {
-    if (!deviceId) {
-      setState({
-        device: null,
-        loading: false,
-        errors: { general: "No device ID provided." },
-      });
-      return;
-    }
-
-    const fetchAllDetails = async () => {
+  // Helper to fetch individual details and handle errors
+  const fetchDetail = useCallback(
+    async (url: string, key: string) => {
       if (!token) {
         logout();
         navigate("/login");
-        return;
+        return null;
       }
+      try {
+        const response = await fetch(url, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        if (response.status === 401) {
+          logout();
+          navigate("/login");
+          return null;
+        }
+        if (!response.ok) {
+          throw new Error(`Failed to fetch ${key}`);
+        }
+        return await response.json();
+      } catch (error: any) {
+        setState((prevState) => ({
+          ...prevState,
+          errors: {
+            ...prevState.errors,
+            [key]: error.message || `Failed to fetch ${key}`,
+          },
+        }));
+        return null;
+      }
+    },
+    [token, logout, navigate]
+  );
 
-      setState({
+  // New: Function to fetch a specific feature
+  const fetchFeature = useCallback(
+    async (featureName: string, key: string) => {
+      setState((prevState) => ({
+        ...prevState,
+        errors: { ...prevState.errors, [key]: null }, // Clear previous error
+      }));
+      const data = await fetchDetail(
+        `/api/devices/${deviceId}/features/${featureName}`,
+        key
+      );
+      if (data) {
+        setState((prevState) => ({
+          ...prevState,
+          device: {
+            ...prevState.device,
+            [key]: data, // Store the fetched feature data
+          } as DeviceDetail, // Type assertion
+        }));
+      }
+      return data;
+    },
+    [deviceId, fetchDetail]
+  );
+
+  useEffect(() => {
+    if (!deviceId) {
+      setState((prevState) => ({
+        ...prevState,
+        device: null,
+        loading: false,
+        errors: { general: "No device ID provided." },
+      }));
+      return;
+    }
+
+    const fetchPrimaryDetails = async () => {
+      setState((prevState) => ({
+        ...prevState,
         device: null,
         loading: true,
         errors: {},
-      });
+      }));
 
-      const headers = {
-        Authorization: `Bearer ${token}`,
-      };
-
-      // Helper to fetch individual details and handle errors
-      const fetchDetail = async (url: string, key: string) => {
-        try {
-          const response = await fetch(url, { headers });
-          if (response.status === 401) {
-            logout();
-            navigate("/login");
-            return null;
-          }
-          if (!response.ok) {
-            throw new Error(`Failed to fetch ${key}`);
-          }
-          return await response.json();
-        } catch (error: any) {
-          setState((prevState) => ({
-            ...prevState,
-            errors: {
-              ...prevState.errors,
-              [key]: error.message || `Failed to fetch ${key}`,
-            },
-          }));
-          return null;
-        }
-      };
-
-      // Fetch primary device details first
       const primaryDetails = await fetchDetail(
         `/api/devices/${deviceId}`,
         "primary"
@@ -121,61 +154,24 @@ export const useDeviceDetails = (deviceId: string | undefined) => {
         return;
       }
 
-      // Fetch all other details in parallel using the unified /features endpoint
-      const featureEndpoints = [
-        { key: "hostname", feature: "system", extract: (data: any) => data?.hostname },
-        { key: "active_users", feature: "active_users", extract: (data: any) => data },
-        { key: "local_users", feature: "local_users", extract: (data: any) => data },
-        { key: "current_clock", feature: "clock", extract: (data: any) => data },
-        { key: "vlan_brief", feature: "vlans", extract: (data: any) => data },
-        { key: "routing_table", feature: "routing", extract: (data: any) => data },
-        { key: "acls_data", feature: "acls", extract: (data: any) => data },
-        { key: "snmp_config_data", feature: "snmp", extract: (data: any) => data },
-        { key: "logging_config_data", feature: "logging", extract: (data: any) => data },
-        { key: "ntp_config_data", feature: "ntp", extract: (data: any) => data },
-        { key: "aaa_config_data", feature: "aaa", extract: (data: any) => data },
-      ];
-
-      // Collect unique feature names to avoid redundant API calls
-      const uniqueFeaturesToFetch = Array.from(new Set(featureEndpoints.map(ep => ep.feature)));
-
-      const featureResults = await Promise.all(
-        uniqueFeaturesToFetch.map(featureName =>
-          fetchDetail(`/api/devices/${deviceId}/features/${featureName}`, featureName)
-        )
-      );
-
-      const additionalDetails: Partial<DeviceDetail> = {};
-      featureEndpoints.forEach(ep => {
-        const resultIndex = uniqueFeaturesToFetch.indexOf(ep.feature);
-        if (resultIndex !== -1 && featureResults[resultIndex] !== null) {
-          try {
-            const extractedData = ep.extract(featureResults[resultIndex]);
-            if (extractedData !== undefined) {
-              (additionalDetails as any)[ep.key] = extractedData;
-            }
-          } catch (e) {
-            console.error(`Error extracting ${ep.key} from ${ep.feature} data:`, e);
-            setState((prevState) => ({
-              ...prevState,
-              errors: {
-                ...prevState.errors,
-                [ep.key]: `Failed to parse ${ep.key} data.`,
-              },
-            }));
-          }
-        }
-      });
-
       setState((prevState) => ({
         ...prevState,
-        device: { ...primaryDetails, ...additionalDetails },
+        device: primaryDetails,
         loading: false,
       }));
     };
 
-    fetchAllDetails();
-  }, [deviceId, token, navigate, logout]);
+    fetchPrimaryDetails();
+  }, [deviceId, fetchDetail]);
+
+  // Update the state with the fetchFeature function after initial render
+  useEffect(() => {
+    setState((prevState) => ({
+      ...prevState,
+      fetchFeature: fetchFeature,
+    }));
+  }, [fetchFeature]);
+
 
   return state;
 };

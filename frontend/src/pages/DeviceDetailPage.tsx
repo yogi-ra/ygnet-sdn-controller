@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   Container,
@@ -12,8 +12,8 @@ import {
   ListGroup,
   Table,
   Badge,
-  Tabs, // Added
-  Tab, // Added
+  Tabs,
+  Tab,
 } from "react-bootstrap";
 import { useAuth } from "../hooks/useAuth";
 import { useDeviceDetails } from "../hooks/useDeviceDetails";
@@ -22,7 +22,8 @@ const DeviceDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { token, logout } = useAuth();
-  const { device, loading, errors } = useDeviceDetails(id);
+  // Destructure fetchFeature from the hook
+  const { device, loading, errors, fetchFeature } = useDeviceDetails(id);
 
   const [command, setCommand] = useState("");
   const [isConfigCommand, setIsConfigCommand] = useState(false);
@@ -31,9 +32,241 @@ const DeviceDetailPage = () => {
   const [executingCommand, setExecutingCommand] = useState(false);
   const [commandError, setCommandError] = useState<string | null>(null);
 
-  // State for active tab
-  const [key, setKey] = useState("general"); // Added
+  const [key, setKey] = useState("general");
 
+  // --- New State Variables for Lazy Loaded Data ---
+  const [interfacesData, setInterfacesData] = useState<any[] | null>(null);
+  const [loadingInterfaces, setLoadingInterfaces] = useState(false);
+  const [interfacesError, setInterfacesError] = useState<string | null>(null);
+
+  const [interfacesTrunkData, setInterfacesTrunkData] = useState<any[] | null>(null);
+  const [loadingInterfacesTrunk, setLoadingInterfacesTrunk] = useState(false);
+  const [interfacesTrunkError, setInterfacesTrunkError] = useState<string | null>(null);
+
+  const [activeUsersData, setActiveUsersData] = useState<any[] | null>(null);
+  const [loadingActiveUsers, setLoadingActiveUsers] = useState(false);
+  const [activeUsersError, setActiveUsersError] = useState<string | null>(null);
+
+  const [localUsersData, setLocalUsersData] = useState<any[] | null>(null);
+  const [loadingLocalUsers, setLoadingLocalUsers] = useState(false);
+  const [localUsersError, setLocalUsersError] = useState<string | null>(null);
+
+  const [vlanBriefData, setVlanBriefData] = useState<any[] | null>(null);
+  const [loadingVlanBrief, setLoadingVlanBrief] = useState(false);
+  const [vlanBriefError, setVlanBriefError] = useState<string | null>(null);
+
+  const [routingTableData, setRoutingTableData] = useState<any[] | null>(null);
+  const [loadingRoutingTable, setLoadingRoutingTable] = useState(false);
+  const [routingTableError, setRoutingTableError] = useState<string | null>(null);
+
+  const [aclsData, setAclsData] = useState<any[] | null>(null);
+  const [loadingAcls, setLoadingAcls] = useState(false);
+  const [aclsError, setAclsError] = useState<string | null>(null);
+
+  const [aaaConfigData, setAaaConfigData] = useState<any[] | null>(null);
+  const [loadingAaaConfig, setLoadingAaaConfig] = useState(false);
+  const [aaaConfigError, setAaaConfigError] = useState<string | null>(null);
+
+  const [loggingConfigData, setLoggingConfigData] = useState<any[] | null>(null);
+  const [loadingLoggingConfig, setLoadingLoggingConfig] = useState(false);
+  const [loggingConfigError, setLoggingConfigError] = useState<string | null>(null);
+
+  const [snmpConfigData, setSnmpConfigData] = useState<any[] | null>(null);
+  const [loadingSnmpConfig, setLoadingSnmpConfig] = useState(false);
+  const [snmpConfigError, setSnmpConfigError] = useState<string | null>(null);
+
+  const [ntpConfigData, setNtpConfigData] = useState<any[] | null>(null);
+  const [loadingNtpConfig, setLoadingNtpConfig] = useState(false);
+  const [ntpConfigError, setNtpConfigError] = useState<string | null>(null);
+
+  // --- useEffects for Lazy Loading ---
+
+  // Interfaces Tab
+  useEffect(() => {
+    if (key === "interfaces" && id && !interfacesData && !loadingInterfaces) {
+      setLoadingInterfaces(true);
+      setInterfacesError(null);
+      fetchFeature("interfaces", "interfaces")
+        .then((data) => {
+          setInterfacesData(data);
+        })
+        .catch((err) => {
+          setInterfacesError(err.message || "Failed to load interfaces.");
+        })
+        .finally(() => {
+          setLoadingInterfaces(false);
+        });
+
+      setLoadingInterfacesTrunk(true);
+      setInterfacesTrunkError(null);
+      fetchFeature("interfaces_trunk", "interfacesTrunk") // Assuming a new feature endpoint for trunk
+        .then((data) => {
+          setInterfacesTrunkData(data);
+        })
+        .catch((err) => {
+          setInterfacesTrunkError(err.message || "Failed to load interfaces trunk.");
+        })
+        .finally(() => {
+          setLoadingInterfacesTrunk(false);
+        });
+    }
+  }, [key, id, fetchFeature, interfacesData, loadingInterfaces, interfacesTrunkData, loadingInterfacesTrunk]);
+
+  // Users Tab
+  useEffect(() => {
+    if (key === "users" && id && !activeUsersData && !loadingActiveUsers) {
+      setLoadingActiveUsers(true);
+      setActiveUsersError(null);
+      fetchFeature("active_users", "active_users")
+        .then((data) => {
+          setActiveUsersData(data);
+        })
+        .catch((err) => {
+          setActiveUsersError(err.message || "Failed to load active users.");
+        })
+        .finally(() => {
+          setLoadingActiveUsers(false);
+        });
+    }
+    if (key === "users" && id && !localUsersData && !loadingLocalUsers) {
+      setLoadingLocalUsers(true);
+      setLocalUsersError(null);
+      fetchFeature("local_users", "local_users")
+        .then((data) => {
+          setLocalUsersData(data);
+        })
+        .catch((err) => {
+          setLocalUsersError(err.message || "Failed to load local users.");
+        })
+        .finally(() => {
+          setLoadingLocalUsers(false);
+        });
+    }
+  }, [key, id, fetchFeature, activeUsersData, loadingActiveUsers, localUsersData, loadingLocalUsers]);
+
+  // VLANs Tab
+  useEffect(() => {
+    if (key === "vlans" && id && !vlanBriefData && !loadingVlanBrief) {
+      setLoadingVlanBrief(true);
+      setVlanBriefError(null);
+      fetchFeature("vlans", "vlan_brief")
+        .then((data) => {
+          setVlanBriefData(data);
+        })
+        .catch((err) => {
+          setVlanBriefError(err.message || "Failed to load VLANs.");
+        })
+        .finally(() => {
+          setLoadingVlanBrief(false);
+        });
+    }
+  }, [key, id, fetchFeature, vlanBriefData, loadingVlanBrief]);
+
+  // Routing Tab
+  useEffect(() => {
+    if (key === "routing" && id && !routingTableData && !loadingRoutingTable) {
+      setLoadingRoutingTable(true);
+      setRoutingTableError(null);
+      fetchFeature("routing", "routing_table")
+        .then((data) => {
+          setRoutingTableData(data);
+        })
+        .catch((err) => {
+          setRoutingTableError(err.message || "Failed to load routing table.");
+        })
+        .finally(() => {
+          setLoadingRoutingTable(false);
+        });
+    }
+  }, [key, id, fetchFeature, routingTableData, loadingRoutingTable]);
+
+  // Security Tab
+  useEffect(() => {
+    if (key === "security" && id && !aclsData && !loadingAcls) {
+      setLoadingAcls(true);
+      setAclsError(null);
+      fetchFeature("acls", "acls_data")
+        .then((data) => {
+          setAclsData(data);
+        })
+        .catch((err) => {
+          setAclsError(err.message || "Failed to load ACLs.");
+        })
+        .finally(() => {
+          setLoadingAcls(false);
+        });
+    }
+    if (key === "security" && id && !aaaConfigData && !loadingAaaConfig) {
+      setLoadingAaaConfig(true);
+      setAaaConfigError(null);
+      fetchFeature("aaa", "aaa_config_data")
+        .then((data) => {
+          setAaaConfigData(data);
+        })
+        .catch((err) => {
+          setAaaConfigError(err.message || "Failed to load AAA config.");
+        })
+        .finally(() => {
+          setLoadingAaaConfig(false);
+        });
+    }
+  }, [key, id, fetchFeature, aclsData, loadingAcls, aaaConfigData, loadingAaaConfig]);
+
+  // Logging Tab
+  useEffect(() => {
+    if (key === "logging" && id && !loggingConfigData && !loadingLoggingConfig) {
+      setLoadingLoggingConfig(true);
+      setLoggingConfigError(null);
+      fetchFeature("logging", "logging_config_data")
+        .then((data) => {
+          setLoggingConfigData(data);
+        })
+        .catch((err) => {
+          setLoggingConfigError(err.message || "Failed to load logging config.");
+        })
+        .finally(() => {
+          setLoadingLoggingConfig(false);
+        });
+    }
+  }, [key, id, fetchFeature, loggingConfigData, loadingLoggingConfig]);
+
+  // SNMP Tab
+  useEffect(() => {
+    if (key === "snmp" && id && !snmpConfigData && !loadingSnmpConfig) {
+      setLoadingSnmpConfig(true);
+      setSnmpConfigError(null);
+      fetchFeature("snmp", "snmp_config_data")
+        .then((data) => {
+          setSnmpConfigData(data);
+        })
+        .catch((err) => {
+          setSnmpConfigError(err.message || "Failed to load SNMP config.");
+        })
+        .finally(() => {
+          setLoadingSnmpConfig(false);
+        });
+    }
+  }, [key, id, fetchFeature, snmpConfigData, loadingSnmpConfig]);
+
+  // NTP Tab
+  useEffect(() => {
+    if (key === "ntp" && id && !ntpConfigData && !loadingNtpConfig) {
+      setLoadingNtpConfig(true);
+      setNtpConfigError(null);
+      fetchFeature("ntp", "ntp_config_data")
+        .then((data) => {
+          setNtpConfigData(data);
+        })
+        .catch((err) => {
+          setNtpConfigError(err.message || "Failed to load NTP config.");
+        })
+        .finally(() => {
+          setLoadingNtpConfig(false);
+        });
+    }
+  }, [key, id, fetchFeature, ntpConfigData, loadingNtpConfig]);
+
+  // ... rest of the component
   const handleExecuteCommand = async (e: React.FormEvent) => {
     e.preventDefault();
     setExecutingCommand(true);
@@ -104,25 +337,27 @@ const DeviceDetailPage = () => {
     );
   }
 
+  // Modified renderCard to accept loading and error states
   const renderCard = (
     title: string,
-    dataKey: keyof typeof device,
+    data: any[] | null, // Now accepts specific data
+    loadingState: boolean, // New loading state
+    errorState: string | null, // New error state
     render: (data: any) => JSX.Element,
   ) => (
     <Card className="mb-4">
-      {" "}
-      {/* Removed Col wrapper here, will be handled by Tab.Pane */}
       <Card.Body style={{ maxHeight: "400px", overflowY: "auto" }}>
         <Card.Title as="h2">{title}</Card.Title>
-        {errors[dataKey] ? (
+        {loadingState ? (
+          <div className="text-center">
+            <Spinner animation="border" size="sm" /> Loading {title.toLowerCase()}...
+          </div>
+        ) : errorState ? (
           <Alert variant="warning">
-            Could not load {title.toLowerCase()}: {errors[dataKey]}
+            Could not load {title.toLowerCase()}: {errorState}
           </Alert>
-        ) : device[dataKey] &&
-          (Array.isArray(device[dataKey])
-            ? (device[dataKey] as any[]).length > 0
-            : device[dataKey]) ? (
-          render(device[dataKey])
+        ) : data && (Array.isArray(data) ? data.length > 0 : data) ? (
+          render(data)
         ) : (
           <Card.Text>No {title.toLowerCase()} information available.</Card.Text>
         )}
@@ -260,7 +495,7 @@ const DeviceDetailPage = () => {
         <Tab eventKey="interfaces" title="Interfaces">
           <Row className="mt-3">
             <Col md={12}>
-              {renderCard("Interfaces", "interfaces", (data) => (
+              {renderCard("Interfaces", interfacesData, loadingInterfaces, interfacesError, (data) => (
                 <div className="table-responsive">
                   <Table striped bordered hover size="sm">
                     <thead>
@@ -286,7 +521,7 @@ const DeviceDetailPage = () => {
               ))}
             </Col>
             <Col md={12}>
-              {renderCard("Interfaces Trunk", "interfacesTrunk", (data) => (
+              {renderCard("Interfaces Trunk", interfacesTrunkData, loadingInterfacesTrunk, interfacesTrunkError, (data) => (
                 <div className="table-responsive">
                   <Table striped bordered hover size="sm">
                     <thead>
@@ -319,7 +554,7 @@ const DeviceDetailPage = () => {
         <Tab eventKey="users" title="Users">
           <Row className="mt-3">
             <Col md={6}>
-              {renderCard("Active Users", "active_users", (data) => (
+              {renderCard("Active Users", activeUsersData, loadingActiveUsers, activeUsersError, (data) => (
                 <Table striped bordered hover size="sm">
                   <thead>
                     <tr>
@@ -343,7 +578,7 @@ const DeviceDetailPage = () => {
               ))}
             </Col>
             <Col md={6}>
-              {renderCard("Local Users", "local_users", (data) => (
+              {renderCard("Local Users", localUsersData, loadingLocalUsers, localUsersError, (data) => (
                 <ListGroup>
                   {data.map((user: any, index: number) => (
                     <ListGroup.Item
@@ -367,7 +602,7 @@ const DeviceDetailPage = () => {
         <Tab eventKey="vlans" title="VLANs">
           <Row className="mt-3">
             <Col md={12}>
-              {renderCard("VLAN Brief", "vlan_brief", (data) => (
+              {renderCard("VLAN Brief", vlanBriefData, loadingVlanBrief, vlanBriefError, (data) => (
                 <div className="table-responsive">
                   <Table striped bordered hover size="sm">
                     <thead>
@@ -398,7 +633,7 @@ const DeviceDetailPage = () => {
         <Tab eventKey="routing" title="Routing">
           <Row className="mt-3">
             <Col md={12}>
-              {renderCard("Routing Table", "routing_table", (data) => (
+              {renderCard("Routing Table", routingTableData, loadingRoutingTable, routingTableError, (data) => (
                 <div className="table-responsive">
                   <Table striped bordered hover size="sm">
                     <thead>
@@ -429,7 +664,7 @@ const DeviceDetailPage = () => {
         <Tab eventKey="security" title="Security">
           <Row className="mt-3">
             <Col md={12}>
-              {renderCard("ACLs", "acls_data", (data) => (
+              {renderCard("ACLs", aclsData, loadingAcls, aclsError, (data) => (
                 <ListGroup>
                   {data.map((acl: any, index: number) => (
                     <ListGroup.Item key={index}>
@@ -440,7 +675,7 @@ const DeviceDetailPage = () => {
               ))}
             </Col>
             <Col md={12}>
-              {renderCard("AAA Config", "aaa_config_data", (data) => (
+              {renderCard("AAA Config", aaaConfigData, loadingAaaConfig, aaaConfigError, (data) => (
                 <ListGroup>
                   {data.map((config: any, index: number) => (
                     <ListGroup.Item key={index}>{config.line}</ListGroup.Item>
@@ -454,7 +689,7 @@ const DeviceDetailPage = () => {
         <Tab eventKey="logging" title="Logging">
           <Row className="mt-3">
             <Col md={12}>
-              {renderCard("Logging Config", "logging_config_data", (data) => (
+              {renderCard("Logging Config", loggingConfigData, loadingLoggingConfig, loggingConfigError, (data) => (
                 <ListGroup>
                   {data.map((config: any, index: number) => (
                     <ListGroup.Item key={index}>{config.line}</ListGroup.Item>
@@ -468,7 +703,7 @@ const DeviceDetailPage = () => {
         <Tab eventKey="snmp" title="SNMP">
           <Row className="mt-3">
             <Col md={12}>
-              {renderCard("SNMP Config", "snmp_config_data", (data) => (
+              {renderCard("SNMP Config", snmpConfigData, loadingSnmpConfig, snmpConfigError, (data) => (
                 <ListGroup>
                   {data.map((config: any, index: number) => (
                     <ListGroup.Item key={index}>{config.line}</ListGroup.Item>
@@ -482,7 +717,7 @@ const DeviceDetailPage = () => {
         <Tab eventKey="ntp" title="NTP">
           <Row className="mt-3">
             <Col md={12}>
-              {renderCard("NTP Config", "ntp_config_data", (data) => (
+              {renderCard("NTP Config", ntpConfigData, loadingNtpConfig, ntpConfigError, (data) => (
                 <ListGroup>
                   {data.map((config: any, index: number) => (
                     <ListGroup.Item key={index}>{config.line}</ListGroup.Item>
