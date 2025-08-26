@@ -68,6 +68,22 @@ This will make the API more consistent and easier to use.
 
 The API router in `src/api/routers/devices.py` will be significantly simplified. The large number of repetitive endpoints will be replaced by a smaller number of generic, feature-based endpoints.
 
+### 3.3. Configuration Endpoints (PUT/POST)
+
+To enable full SDN capabilities, we will introduce `PUT` and `POST` endpoints for configuring device features. These endpoints will allow for modifying device configurations through the API, moving beyond just monitoring.
+
+For example:
+-   `PUT /devices/{device_id}/system/hostname` (to set hostname)
+-   `POST /devices/{device_id}/interfaces` (to create a new interface)
+-   `PUT /devices/{device_id}/interfaces/{interface_name}` (to modify an existing interface)
+-   `POST /devices/{device_id}/vlans` (to create a new VLAN)
+
+This will involve:
+1.  Defining new API endpoints in `src/api/routers/devices.py` for `PUT` and `POST` operations on features.
+2.  Creating new Pydantic schemas in `src/crud/schemas.py` to define the data structures for configuration requests.
+3.  Implementing corresponding configuration methods (e.g., `set_hostname`, `create_interface`, `update_interface`, `create_vlan`) within the device-specific feature classes (e.g., `src/controllers/features/system/cisco_ios.py`, `src/controllers/features/interfaces/cisco_ios.py`, `src/controllers/features/vlans/cisco_ios.py`). These methods will utilize Netmiko to send configuration commands to the devices.
+4.  Extending the feature mapping in the API router to include these new configuration methods.
+
 ## 4. Device Type Handling
 
 We will ensure that the `device_type` is handled correctly and consistently.
