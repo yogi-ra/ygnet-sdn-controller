@@ -639,18 +639,34 @@ const DeviceDetailPage = () => {
                     <thead>
                       <tr>
                         <th>Protocol</th>
+                        <th>VRF</th>
+                        <th>Type</th>
                         <th>Network</th>
-                        <th>Next Hop</th>
-                        <th>Interface</th>
+                        <th>Prefix Length</th>
+                        <th>Distance</th>
+                        <th>Metric</th>
+                        <th>Next Hop IP</th>
+                        <th>Next Hop VRF</th>
+                        <th>Next Hop Interface</th>
+                        <th>Uptime</th>
+                        <th>Flag</th>
                       </tr>
                     </thead>
                     <tbody>
                       {data.map((route: any, index: number) => (
                         <tr key={index}>
                           <td>{route.protocol}</td>
+                          <td>{route.vrf || "N/A"}</td>
+                          <td>{route.type || "N/A"}</td>
                           <td>{route.network}</td>
-                          <td>{route.nexthop || "N/A"}</td>
-                          <td>{route.interface || "N/A"}</td>
+                          <td>{route.prefix_length || "N/A"}</td>
+                          <td>{route.distance || "N/A"}</td>
+                          <td>{route.metric || "N/A"}</td>
+                          <td>{route.nexthop_ip || "N/A"}</td>
+                          <td>{route.nexthop_vrf || "N/A"}</td>
+                          <td>{route.nexthop_if || "N/A"}</td>
+                          <td>{route.uptime || "N/A"}</td>
+                          <td>{route.flag || "N/A"}</td>
                         </tr>
                       ))}
                     </tbody>
