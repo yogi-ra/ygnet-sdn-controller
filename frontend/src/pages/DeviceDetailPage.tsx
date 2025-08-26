@@ -433,7 +433,7 @@ const DeviceDetailPage = () => {
                 <ListGroup>
                   {data.map((acl: any, index: number) => (
                     <ListGroup.Item key={index}>
-                      <strong>{acl.name}</strong>: {acl.rules.join("; ")}
+                      <strong>{acl.line}</strong>{acl.rules?.join("; ") ?? ""}
                     </ListGroup.Item>
                   ))}
                 </ListGroup>
