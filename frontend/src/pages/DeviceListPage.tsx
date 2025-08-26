@@ -16,15 +16,18 @@ interface Device {
 const DeviceListPage = () => {
   const [devices, setDevices] = useState<Device[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const { token, logout } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
     const fetchDevices = async () => {
+      setIsLoading(true); // Set loading to true when fetching starts
       if (!token) {
         setError("No authentication token found. Please log in.");
         logout();
         navigate("/login");
+        setIsLoading(false); // Set loading to false if no token
         return;
       }
 
@@ -57,6 +60,8 @@ const DeviceListPage = () => {
         } else {
           setError("Failed to load devices. Please try again later.");
         }
+      } finally {
+        setIsLoading(false); // Always set loading to false when fetch completes
       }
     };
 
@@ -119,7 +124,11 @@ const DeviceListPage = () => {
       <Button variant="primary" onClick={handleAddDevice} className="mb-3">
         Add New Device
       </Button>
-      {devices.length === 0 ? (
+      {isLoading ? (
+        <Alert variant="info">
+          Loading devices...
+        </Alert>
+      ) : devices.length === 0 ? (
         <Alert variant="info">
           No devices found. Click "Add New Device" to add one.
         </Alert>

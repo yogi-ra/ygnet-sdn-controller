@@ -91,6 +91,7 @@ const DeviceDetailPage = () => {
 
   // Interfaces Tab
   useEffect(() => {
+    if (!device?.is_reachable) return; // Do not fetch if device is offline
     if (key === "interfaces" && id && !interfacesData && !loadingInterfaces) {
       setLoadingInterfaces(true);
       setInterfacesError(null);
@@ -118,10 +119,11 @@ const DeviceDetailPage = () => {
           setLoadingInterfacesTrunk(false);
         });
     }
-  }, [key, id, fetchFeature, interfacesData, loadingInterfaces, interfacesTrunkData, loadingInterfacesTrunk]);
+  }, [key, id, fetchFeature, interfacesData, loadingInterfaces, interfacesTrunkData, loadingInterfacesTrunk, device?.is_reachable]);
 
   // Users Tab
   useEffect(() => {
+    if (!device?.is_reachable) return; // Do not fetch if device is offline
     if (key === "users" && id && !activeUsersData && !loadingActiveUsers) {
       setLoadingActiveUsers(true);
       setActiveUsersError(null);
@@ -150,10 +152,11 @@ const DeviceDetailPage = () => {
           setLoadingLocalUsers(false);
         });
     }
-  }, [key, id, fetchFeature, activeUsersData, loadingActiveUsers, localUsersData, loadingLocalUsers]);
+  }, [key, id, fetchFeature, activeUsersData, loadingActiveUsers, localUsersData, loadingLocalUsers, device?.is_reachable]);
 
   // VLANs Tab
   useEffect(() => {
+    if (!device?.is_reachable) return; // Do not fetch if device is offline
     if (key === "vlans" && id && !vlanBriefData && !loadingVlanBrief) {
       setLoadingVlanBrief(true);
       setVlanBriefError(null);
@@ -168,10 +171,11 @@ const DeviceDetailPage = () => {
           setLoadingVlanBrief(false);
         });
     }
-  }, [key, id, fetchFeature, vlanBriefData, loadingVlanBrief]);
+  }, [key, id, fetchFeature, vlanBriefData, loadingVlanBrief, device?.is_reachable]);
 
   // Routing Tab
   useEffect(() => {
+    if (!device?.is_reachable) return; // Do not fetch if device is offline
     if (key === "routing" && id && !routingTableData && !loadingRoutingTable) {
       setLoadingRoutingTable(true);
       setRoutingTableError(null);
@@ -186,10 +190,11 @@ const DeviceDetailPage = () => {
           setLoadingRoutingTable(false);
         });
     }
-  }, [key, id, fetchFeature, routingTableData, loadingRoutingTable]);
+  }, [key, id, fetchFeature, routingTableData, loadingRoutingTable, device?.is_reachable]);
 
   // Security Tab
   useEffect(() => {
+    if (!device?.is_reachable) return; // Do not fetch if device is offline
     if (key === "security" && id && !aclsData && !loadingAcls) {
       setLoadingAcls(true);
       setAclsError(null);
@@ -218,10 +223,11 @@ const DeviceDetailPage = () => {
           setLoadingAaaConfig(false);
         });
     }
-  }, [key, id, fetchFeature, aclsData, loadingAcls, aaaConfigData, loadingAaaConfig]);
+  }, [key, id, fetchFeature, aclsData, loadingAcls, aaaConfigData, loadingAaaConfig, device?.is_reachable]);
 
   // Logging Tab
   useEffect(() => {
+    if (!device?.is_reachable) return; // Do not fetch if device is offline
     if (key === "logging" && id && !loggingConfigData && !loadingLoggingConfig) {
       setLoadingLoggingConfig(true);
       setLoggingConfigError(null);
@@ -236,10 +242,11 @@ const DeviceDetailPage = () => {
           setLoadingLoggingConfig(false);
         });
     }
-  }, [key, id, fetchFeature, loggingConfigData, loadingLoggingConfig]);
+  }, [key, id, fetchFeature, loggingConfigData, loadingLoggingConfig, device?.is_reachable]);
 
   // SNMP Tab
   useEffect(() => {
+    if (!device?.is_reachable) return; // Do not fetch if device is offline
     if (key === "snmp" && id && !snmpConfigData && !loadingSnmpConfig) {
       setLoadingSnmpConfig(true);
       setSnmpConfigError(null);
@@ -254,10 +261,11 @@ const DeviceDetailPage = () => {
           setLoadingSnmpConfig(false);
         });
     }
-  }, [key, id, fetchFeature, snmpConfigData, loadingSnmpConfig]);
+  }, [key, id, fetchFeature, snmpConfigData, loadingSnmpConfig, device?.is_reachable]);
 
   // NTP Tab
   useEffect(() => {
+    if (!device?.is_reachable) return; // Do not fetch if device is offline
     if (key === "ntp" && id && !ntpConfigData && !loadingNtpConfig) {
       setLoadingNtpConfig(true);
       setNtpConfigError(null);
@@ -272,10 +280,11 @@ const DeviceDetailPage = () => {
           setLoadingNtpConfig(false);
         });
     }
-  }, [key, id, fetchFeature, ntpConfigData, loadingNtpConfig]);
+  }, [key, id, fetchFeature, ntpConfigData, loadingNtpConfig, device?.is_reachable]);
 
   // Clock for General Tab
   useEffect(() => {
+    if (!device?.is_reachable) return; // Do not fetch if device is offline
     if (key === "general" && id && !clockData && !loadingClock) {
       setLoadingClock(true);
       setClockError(null);
@@ -290,7 +299,7 @@ const DeviceDetailPage = () => {
           setLoadingClock(false);
         });
     }
-  }, [key, id, fetchFeature, clockData, loadingClock]);
+  }, [key, id, fetchFeature, clockData, loadingClock, device?.is_reachable]);
 
   // ... rest of the component
   const handleExecuteCommand = async (e: React.FormEvent) => {
@@ -465,6 +474,9 @@ const DeviceDetailPage = () => {
             <Card.Body>
               <Card.Title as="h1" className="mb-3">
                 {device.name} ({device.ip_address})
+                <Badge bg={device.is_reachable ? "success" : "danger"} className="ms-2">
+                  {device.is_reachable ? "Online" : "Offline"}
+                </Badge>
               </Card.Title>
               <Card.Subtitle className="mb-2 text-muted">
                 {device.device_type}
@@ -611,255 +623,303 @@ const DeviceDetailPage = () => {
         </Tab>
 
         <Tab eventKey="interfaces" title="Interfaces">
-          <Row className="mt-3">
-            <Col md={12}>
-              {renderCard("Interfaces", interfacesData, loadingInterfaces, interfacesError, (data) => (
-                <div className="table-responsive">
-                  <Table striped bordered hover size="sm">
-                    <thead>
-                      <tr>
-                        <th>Interface</th>
-                        <th>IP Address</th>
-                        <th>Status</th>
-                        <th>Protocol</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.map((iface: any, index: number) => (
-                        <tr key={index}>
-                          <td>{iface.interface}</td>
-                          <td>{iface.ip_address || "Unassigned"}</td>
-                          <td>{iface.status}</td>
-                          <td>{iface.proto}</td>
+          {device.is_reachable ? (
+            <Row className="mt-3">
+              <Col md={12}>
+                {renderCard("Interfaces", interfacesData, loadingInterfaces, interfacesError, (data) => (
+                  <div className="table-responsive">
+                    <Table striped bordered hover size="sm">
+                      <thead>
+                        <tr>
+                          <th>Interface</th>
+                          <th>IP Address</th>
+                          <th>Status</th>
+                          <th>Protocol</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </Table>
-                </div>
-              ))}
-            </Col>
-            <Col md={12}>
-              {renderCard("Interfaces Trunk", interfacesTrunkData, loadingInterfacesTrunk, interfacesTrunkError, (data) => (
-                <div className="table-responsive">
-                  <Table striped bordered hover size="sm">
-                    <thead>
-                      <tr>
-                        <th>Port</th>
-                        <th>Mode</th>
-                        <th>Encapsulation</th>
-                        <th>Status</th>
-                        <th>VLANs Allowed</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.map((trunk: any, index: number) => (
-                        <tr key={index}>
-                          <td>{trunk.port}</td>
-                          <td>{trunk.mode}</td>
-                          <td>{trunk.encapsulation}</td>
-                          <td>{trunk.status}</td>
-                          <td>{trunk.vlans_allowed}</td>
+                      </thead>
+                      <tbody>
+                        {data.map((iface: any, index: number) => (
+                          <tr key={index}>
+                            <td>{iface.interface}</td>
+                            <td>{iface.ip_address || "Unassigned"}</td>
+                            <td>{iface.status}</td>
+                            <td>{iface.proto}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </Table>
+                  </div>
+                ))}
+              </Col>
+              <Col md={12}>
+                {renderCard("Interfaces Trunk", interfacesTrunkData, loadingInterfacesTrunk, interfacesTrunkError, (data) => (
+                  <div className="table-responsive">
+                    <Table striped bordered hover size="sm">
+                      <thead>
+                        <tr>
+                          <th>Port</th>
+                          <th>Mode</th>
+                          <th>Encapsulation</th>
+                          <th>Status</th>
+                          <th>VLANs Allowed</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </Table>
-                </div>
-              ))}
-            </Col>
-          </Row>
+                      </thead>
+                      <tbody>
+                        {data.map((trunk: any, index: number) => (
+                          <tr key={index}>
+                            <td>{trunk.port}</td>
+                            <td>{trunk.mode}</td>
+                            <td>{trunk.encapsulation}</td>
+                            <td>{trunk.status}</td>
+                            <td>{trunk.vlans_allowed}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </Table>
+                  </div>
+                ))}
+              </Col>
+            </Row>
+          ) : (
+            <Alert variant="info" className="mt-3">
+              Device is offline. Feature details are not available.
+            </Alert>
+          )}
         </Tab>
 
         <Tab eventKey="users" title="Users">
-          <Row className="mt-3">
-            <Col md={6}>
-              {renderCard("Active Users", activeUsersData, loadingActiveUsers, activeUsersError, (data) => (
-                <Table striped bordered hover size="sm">
-                  <thead>
-                    <tr>
-                      <th>Username</th>
-                      <th>Line</th>
-                      <th>Idle</th>
-                      <th>Location</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.map((user: any, index: number) => (
-                      <tr key={index}>
-                        <td>{user.user}</td>
-                        <td>{user.line}</td>
-                        <td>{user.idle}</td>
-                        <td>{user.location}</td>
+          {device.is_reachable ? (
+            <Row className="mt-3">
+              <Col md={6}>
+                {renderCard("Active Users", activeUsersData, loadingActiveUsers, activeUsersError, (data) => (
+                  <Table striped bordered hover size="sm">
+                    <thead>
+                      <tr>
+                        <th>Username</th>
+                        <th>Line</th>
+                        <th>Idle</th>
+                        <th>Location</th>
                       </tr>
+                    </thead>
+                    <tbody>
+                      {data.map((user: any, index: number) => (
+                        <tr key={index}>
+                          <td>{user.user}</td>
+                          <td>{user.line}</td>
+                          <td>{user.idle}</td>
+                          <td>{user.location}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                ))}
+              </Col>
+              <Col md={6}>
+                {renderCard("Local Users", localUsersData, loadingLocalUsers, localUsersError, (data) => (
+                  <ListGroup>
+                    {data.map((user: any, index: number) => (
+                      <ListGroup.Item
+                        key={index}
+                        className="d-flex justify-content-between align-items-center"
+                      >
+                        <span className="text-monospace small">
+                          {user.username}
+                        </span>
+                        {user.privilege && (
+                          <Badge bg="info">Privilege: {user.privilege}</Badge>
+                        )}
+                      </ListGroup.Item>
                     ))}
-                  </tbody>
-                </Table>
-              ))}
-            </Col>
-            <Col md={6}>
-              {renderCard("Local Users", localUsersData, loadingLocalUsers, localUsersError, (data) => (
-                <ListGroup>
-                  {data.map((user: any, index: number) => (
-                    <ListGroup.Item
-                      key={index}
-                      className="d-flex justify-content-between align-items-center"
-                    >
-                      <span className="text-monospace small">
-                        {user.username}
-                      </span>
-                      {user.privilege && (
-                        <Badge bg="info">Privilege: {user.privilege}</Badge>
-                      )}
-                    </ListGroup.Item>
-                  ))}
-                </ListGroup>
-              ))}
-            </Col>
-          </Row>
+                  </ListGroup>
+                ))}
+              </Col>
+            </Row>
+          ) : (
+            <Alert variant="info" className="mt-3">
+              Device is offline. Feature details are not available.
+            </Alert>
+          )}
         </Tab>
 
         <Tab eventKey="vlans" title="VLANs">
-          <Row className="mt-3">
-            <Col md={12}>
-              {renderCard("VLAN Brief", vlanBriefData, loadingVlanBrief, vlanBriefError, (data) => (
-                <div className="table-responsive">
-                  <Table striped bordered hover size="sm">
-                    <thead>
-                      <tr>
-                        <th>VLAN ID</th>
-                        <th>Name</th>
-                        <th>Status</th>
-                        <th>Ports</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.map((vlan: any, index: number) => (
-                        <tr key={index}>
-                          <td>{vlan.vlan_id}</td>
-                          <td>{vlan.vlan_name}</td>
-                          <td>{vlan.status}</td>
-                          <td>{Array.isArray(vlan.interfaces) ? vlan.interfaces.join(", ") : vlan.interfaces}</td>
+          {device.is_reachable ? (
+            <Row className="mt-3">
+              <Col md={12}>
+                {renderCard("VLAN Brief", vlanBriefData, loadingVlanBrief, vlanBriefError, (data) => (
+                  <div className="table-responsive">
+                    <Table striped bordered hover size="sm">
+                      <thead>
+                        <tr>
+                          <th>VLAN ID</th>
+                          <th>Name</th>
+                          <th>Status</th>
+                          <th>Ports</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </Table>
-                </div>
-              ))}
-            </Col>
-          </Row>
+                      </thead>
+                      <tbody>
+                        {data.map((vlan: any, index: number) => (
+                          <tr key={index}>
+                            <td>{vlan.vlan_id}</td>
+                            <td>{vlan.vlan_name}</td>
+                            <td>{vlan.status}</td>
+                            <td>{Array.isArray(vlan.interfaces) ? vlan.interfaces.join(", ") : vlan.interfaces}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </Table>
+                  </div>
+                ))}
+              </Col>
+            </Row>
+          ) : (
+            <Alert variant="info" className="mt-3">
+              Device is offline. Feature details are not available.
+            </Alert>
+          )}
         </Tab>
 
         <Tab eventKey="routing" title="Routing">
-          <Row className="mt-3">
-            <Col md={12}>
-              {renderCard("Routing Table", routingTableData, loadingRoutingTable, routingTableError, (data) => (
-                <div className="table-responsive">
-                  <Table striped bordered hover size="sm">
-                    <thead>
-                      <tr>
-                        <th>Protocol</th>
-                        <th>VRF</th>
-                        <th>Type</th>
-                        <th>Network</th>
-                        <th>Prefix Length</th>
-                        <th>Distance</th>
-                        <th>Metric</th>
-                        <th>Next Hop IP</th>
-                        <th>Next Hop VRF</th>
-                        <th>Next Hop Interface</th>
-                        <th>Uptime</th>
-                        <th>Flag</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.map((route: any, index: number) => (
-                        <tr key={index}>
-                          <td>{route.protocol}</td>
-                          <td>{route.vrf || "N/A"}</td>
-                          <td>{route.type || "N/A"}</td>
-                          <td>{route.network}</td>
-                          <td>{route.prefix_length || "N/A"}</td>
-                          <td>{route.distance || "N/A"}</td>
-                          <td>{route.metric || "N/A"}</td>
-                          <td>{route.nexthop_ip || "N/A"}</td>
-                          <td>{route.nexthop_vrf || "N/A"}</td>
-                          <td>{route.nexthop_if || "N/A"}</td>
-                          <td>{route.uptime || "N/A"}</td>
-                          <td>{route.flag || "N/A"}</td>
+          {device.is_reachable ? (
+            <Row className="mt-3">
+              <Col md={12}>
+                {renderCard("Routing Table", routingTableData, loadingRoutingTable, routingTableError, (data) => (
+                  <div className="table-responsive">
+                    <Table striped bordered hover size="sm">
+                      <thead>
+                        <tr>
+                          <th>Protocol</th>
+                          <th>VRF</th>
+                          <th>Type</th>
+                          <th>Network</th>
+                          <th>Prefix Length</th>
+                          <th>Distance</th>
+                          <th>Metric</th>
+                          <th>Next Hop IP</th>
+                          <th>Next Hop VRF</th>
+                          <th>Next Hop Interface</th>
+                          <th>Uptime</th>
+                          <th>Flag</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </Table>
-                </div>
-              ))}
-            </Col>
-          </Row>
+                      </thead>
+                      <tbody>
+                        {data.map((route: any, index: number) => (
+                          <tr key={index}>
+                            <td>{route.protocol}</td>
+                            <td>{route.vrf || "N/A"}</td>
+                            <td>{route.type || "N/A"}</td>
+                            <td>{route.network}</td>
+                            <td>{route.prefix_length || "N/A"}</td>
+                            <td>{route.distance || "N/A"}</td>
+                            <td>{route.metric || "N/A"}</td>
+                            <td>{route.nexthop_ip || "N/A"}</td>
+                            <td>{route.nexthop_vrf || "N/A"}</td>
+                            <td>{route.nexthop_if || "N/A"}</td>
+                            <td>{route.uptime || "N/A"}</td>
+                            <td>{route.flag || "N/A"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </Table>
+                  </div>
+                ))}
+              </Col>
+            </Row>
+          ) : (
+            <Alert variant="info" className="mt-3">
+              Device is offline. Feature details are not available.
+            </Alert>
+          )}
         </Tab>
 
         <Tab eventKey="security" title="Security">
-          <Row className="mt-3">
-            <Col md={12}>
-              {renderCard("ACLs", aclsData, loadingAcls, aclsError, (data) => (
-                <ListGroup>
-                  {data.map((acl: any, index: number) => (
-                    <ListGroup.Item key={index}>
-                      <strong>{acl.line}</strong>{acl.rules?.join("; ") ?? ""}
-                    </ListGroup.Item>
-                  ))}
-                </ListGroup>
-              ))}
-            </Col>
-            <Col md={12}>
-              {renderCard("AAA Config", aaaConfigData, loadingAaaConfig, aaaConfigError, (data) => (
-                <ListGroup>
-                  {data.map((config: any, index: number) => (
-                    <ListGroup.Item key={index}>{config.line}</ListGroup.Item>
-                  ))}
-                </ListGroup>
-              ))}
-            </Col>
-          </Row>
+          {device.is_reachable ? (
+            <Row className="mt-3">
+              <Col md={12}>
+                {renderCard("ACLs", aclsData, loadingAcls, aclsError, (data) => (
+                  <ListGroup>
+                    {data.map((acl: any, index: number) => (
+                      <ListGroup.Item key={index}>
+                        <strong>{acl.line}</strong>{acl.rules?.join("; ") ?? ""}
+                      </ListGroup.Item>
+                    ))}
+                  </ListGroup>
+                ))}
+              </Col>
+              <Col md={12}>
+                {renderCard("AAA Config", aaaConfigData, loadingAaaConfig, aaaConfigError, (data) => (
+                  <ListGroup>
+                    {data.map((config: any, index: number) => (
+                      <ListGroup.Item key={index}>{config.line}</ListGroup.Item>
+                    ))}
+                  </ListGroup>
+                ))}
+              </Col>
+            </Row>
+          ) : (
+            <Alert variant="info" className="mt-3">
+              Device is offline. Feature details are not available.
+            </Alert>
+          )}
         </Tab>
 
         <Tab eventKey="logging" title="Logging">
-          <Row className="mt-3">
-            <Col md={12}>
-              {renderCard("Logging Config", loggingConfigData, loadingLoggingConfig, loggingConfigError, (data) => (
-                <ListGroup>
-                  {data.map((config: any, index: number) => (
-                    <ListGroup.Item key={index}>{config.line}</ListGroup.Item>
-                  ))}
-                </ListGroup>
-              ))}
-            </Col>
-          </Row>
+          {device.is_reachable ? (
+            <Row className="mt-3">
+              <Col md={12}>
+                {renderCard("Logging Config", loggingConfigData, loadingLoggingConfig, loggingConfigError, (data) => (
+                  <ListGroup>
+                    {data.map((config: any, index: number) => (
+                      <ListGroup.Item key={index}>{config.line}</ListGroup.Item>
+                    ))}
+                  </ListGroup>
+                ))}
+              </Col>
+            </Row>
+          ) : (
+            <Alert variant="info" className="mt-3">
+              Device is offline. Feature details are not available.
+            </Alert>
+          )}
         </Tab>
 
         <Tab eventKey="snmp" title="SNMP">
-          <Row className="mt-3">
-            <Col md={12}>
-              {renderCard("SNMP Config", snmpConfigData, loadingSnmpConfig, snmpConfigError, (data) => (
-                <ListGroup>
-                  {data.map((config: any, index: number) => (
-                    <ListGroup.Item key={index}>{config.line}</ListGroup.Item>
-                  ))}
-                </ListGroup>
-              ))}
-            </Col>
-          </Row>
+          {device.is_reachable ? (
+            <Row className="mt-3">
+              <Col md={12}>
+                {renderCard("SNMP Config", snmpConfigData, loadingSnmpConfig, snmpConfigError, (data) => (
+                  <ListGroup>
+                    {data.map((config: any, index: number) => (
+                      <ListGroup.Item key={index}>{config.line}</ListGroup.Item>
+                    ))}
+                  </ListGroup>
+                ))}
+              </Col>
+            </Row>
+          ) : (
+            <Alert variant="info" className="mt-3">
+              Device is offline. Feature details are not available.
+            </Alert>
+          )}
         </Tab>
 
         <Tab eventKey="ntp" title="NTP">
-          <Row className="mt-3">
-            <Col md={12}>
-              {renderCard("NTP Config", ntpConfigData, loadingNtpConfig, ntpConfigError, (data) => (
-                <ListGroup>
-                  {data.map((config: any, index: number) => (
-                    <ListGroup.Item key={index}>{config.line}</ListGroup.Item>
-                  ))}
-                </ListGroup>
-              ))}
-            </Col>
-          </Row>
+          {device.is_reachable ? (
+            <Row className="mt-3">
+              <Col md={12}>
+                {renderCard("NTP Config", ntpConfigData, loadingNtpConfig, ntpConfigError, (data) => (
+                  <ListGroup>
+                    {data.map((config: any, index: number) => (
+                      <ListGroup.Item key={index}>{config.line}</ListGroup.Item>
+                    ))}
+                  </ListGroup>
+                ))}
+              </Col>
+            </Row>
+          ) : (
+            <Alert variant="info" className="mt-3">
+              Device is offline. Feature details are not available.
+            </Alert>
+          )}
         </Tab>
       </Tabs>
     </Container>

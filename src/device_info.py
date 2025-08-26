@@ -15,3 +15,9 @@ class DeviceConnectionInfo:
     port: int = 22
     name: Optional[str] = None
     secret: Optional[str] = None
+
+    def get_key(self) -> str:
+        """
+        Returns a unique key for the device based on its IP address, port, and device type.
+        """
+        return f"{self.ip_address}:{self.port}:{self.device_type}"

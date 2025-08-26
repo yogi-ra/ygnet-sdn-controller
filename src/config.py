@@ -1,7 +1,7 @@
 from pydantic_settings import BaseSettings
 import os
 from dotenv import load_dotenv
-from urllib.parse import quote_plus  # New import
+from urllib.parse import quote_plus
 
 load_dotenv()
 
@@ -12,7 +12,6 @@ class Settings(BaseSettings):
 
     @property
     def DATABASE_URL(self) -> str:
-        # URL-encode the password before inserting it into the URL
         encoded_password = quote_plus(self.DB_PASSWORD)
         return self.DATABASE_BASE_URL.replace(
             "DB_PASSWORD_PLACEHOLDER", encoded_password
@@ -25,6 +24,7 @@ class Settings(BaseSettings):
     REDIS_PORT: int = int(os.getenv("REDIS_PORT", 6379))
     NETMIKO_TIMEOUT: int = int(os.getenv("NETMIKO_TIMEOUT", 60))
     NETMIKO_READ_TIMEOUT: int = int(os.getenv("NETMIKO_READ_TIMEOUT", 60))
+    MAX_WORKER_THREADS: int = int(os.getenv("MAX_WORKER_THREADS", 10)) # Added this line
 
 
 settings = Settings()
