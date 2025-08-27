@@ -9,6 +9,7 @@ from .features.logging.cisco_ios import CiscoIosLogging
 from .features.ntp.cisco_ios import CiscoIosNtp
 from .features.aaa.cisco_ios import CiscoIosAaa
 from .features.lldp.cisco_ios import CiscoIosLldp
+from .features.arp.cisco_ios import CiscoIosArp
 
 
 class CiscoIosDevice(BaseDevice):
@@ -33,6 +34,7 @@ class CiscoIosDevice(BaseDevice):
         self.ntp = CiscoIosNtp(self)
         self.aaa = CiscoIosAaa(self)
         self.lldp = CiscoIosLldp(self)
+        self.arp = CiscoIosArp(self)
 
 
 class CiscoIosRouter(CiscoIosDevice):

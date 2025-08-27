@@ -177,6 +177,8 @@ async def get_feature(
                 "local_users": ("system", "get_local_users"),  # Corrected
                 "clock": ("system", "get_clock"),  # Corrected
                 "lldp": ("lldp", "get_lldp_neighbors"),
+                "arp_interface": ("arp", "get_arp_interface"),
+                "ip_arp": ("arp", "get_ip_arp"),
             }
 
             if feature_name not in feature_method_map:

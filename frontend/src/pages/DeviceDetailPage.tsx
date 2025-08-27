@@ -91,6 +91,10 @@ const DeviceDetailPage = () => {
   const [loadingLldp, setLoadingLldp] = useState(false);
   const [lldpError, setLldpError] = useState<string | null>(null);
 
+  const [arpData, setArpData] = useState<string | null>(null);
+  const [loadingArp, setLoadingArp] = useState(false);
+  const [arpError, setArpError] = useState<string | null>(null);
+
   // --- useEffects for Lazy Loading ---
 
   // Interfaces Tab
@@ -335,6 +339,28 @@ const DeviceDetailPage = () => {
     }
   }, [key, id, fetchFeature, lldpData, loadingLldp, device?.is_reachable]);
 
+  // ARP Tab
+  useEffect(() => {
+    if (!device?.is_reachable) {
+      setArpData(null);
+      return; // Do not fetch if device is offline
+    }
+    if (key === "arp" && id && !arpData && !loadingArp) {
+      setLoadingArp(true);
+      setArpError(null);
+      fetchFeature("ip_arp", "ip_arp")
+        .then((data) => {
+          setArpData(data);
+        })
+        .catch((err) => {
+          setArpError(err.message || "Failed to load ARP Table.");
+        })
+        .finally(() => {
+          setLoadingArp(false);
+        });
+    }
+  }, [key, id, fetchFeature, arpData, loadingArp, device?.is_reachable]);
+
   // Clock for General Tab
   useEffect(() => {
     if (!device?.is_reachable) {
@@ -422,6 +448,7 @@ const DeviceDetailPage = () => {
       "local_users",
       "clock",
       "lldp",
+      "ip_arp",
     ];
 
     try {
@@ -460,6 +487,7 @@ const DeviceDetailPage = () => {
       setNtpConfigData(null);
       setClockData(null);
       setLldpData(null);
+      setArpData(null);
     } catch (err: any) {
       setCacheClearError(err.message || "An unknown error occurred while clearing cache.");
     } finally {
@@ -1025,6 +1053,38 @@ const DeviceDetailPage = () => {
                           <td>{lldp.neighbor_interface}</td>
                           <td>{lldp.local_interface}</td>
                           <td>{lldp.capabilities}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                ))}
+              </Col>
+            </Row>
+          ) : (
+            <Alert variant="info" className="mt-3">
+              Device is offline. Feature details are not available.
+            </Alert>
+          )}
+        </Tab>
+        <Tab eventKey="arp" title="ARP Table">
+          {device.is_reachable ? (
+            <Row className="mt-3">
+              <Col md={12}>
+                {renderCard("ARP Table", arpData, loadingArp, arpError, (data) => (
+                  <Table striped bordered hover size="sm">
+                    <thead>
+                      <tr>
+                        <th>Interface</th>
+                        <th>MAC Address</th>
+                        <th>IP Address</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.map((arp: any, index: number) => (
+                        <tr key={index}>
+                          <td>{arp.interface}</td>
+                          <td>{arp.mac_address}</td>
+                          <td>{arp.ip_address}</td>
                         </tr>
                       ))}
                     </tbody>
