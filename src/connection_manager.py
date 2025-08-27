@@ -74,6 +74,9 @@ class ConnectionManager:
         def _execute_command():
             connection = self._connect_device(device_info, netmiko_device_type) # Ensure connection is active or re-established
             try:
+                # Ensure we are in privileged EXEC mode before sending the command
+                if not connection.check_enable_mode():
+                    connection.enable()
                 print(f"Executing command '{command}' on {device_info.ip_address}...") # Corrected to ip_address
                 output = connection.send_command(command, **kwargs)
                 print(f"Command '{command}' executed on {device_info.ip_address}.") # Corrected to ip_address
