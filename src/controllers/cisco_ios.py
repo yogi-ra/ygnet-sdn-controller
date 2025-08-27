@@ -1,4 +1,3 @@
-from src.controllers.features.cdp.cisco_ios import CiscoIosCdp
 from .base import BaseDevice
 from .features.system.cisco_ios import CiscoIosSystem
 from .features.interfaces.cisco_ios import CiscoIosInterfaces
@@ -9,6 +8,7 @@ from .features.snmp.cisco_ios import CiscoIosSnmp
 from .features.logging.cisco_ios import CiscoIosLogging
 from .features.ntp.cisco_ios import CiscoIosNtp
 from .features.aaa.cisco_ios import CiscoIosAaa
+from .features.lldp.cisco_ios import CiscoIosLldp
 
 
 class CiscoIosDevice(BaseDevice):
@@ -32,7 +32,7 @@ class CiscoIosDevice(BaseDevice):
         self.logging = CiscoIosLogging(self)
         self.ntp = CiscoIosNtp(self)
         self.aaa = CiscoIosAaa(self)
-        self.cdp = CiscoIosCdp(self)
+        self.lldp = CiscoIosLldp(self)
 
 
 class CiscoIosRouter(CiscoIosDevice):

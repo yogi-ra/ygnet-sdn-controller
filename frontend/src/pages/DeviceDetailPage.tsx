@@ -87,9 +87,9 @@ const DeviceDetailPage = () => {
   const [loadingClock, setLoadingClock] = useState(false);
   const [clockError, setClockError] = useState<string | null>(null);
 
-  const [cdpData, setCdpData] = useState<string | null>(null);
-  const [loadingcdp, setLoadingCdp] = useState(false);
-  const [cdpError, setCdpError] = useState<string | null>(null);
+  const [lldpData, setLldpData] = useState<string | null>(null);
+  const [loadingLldp, setLoadingLldp] = useState(false);
+  const [lldpError, setLldpError] = useState<string | null>(null);
 
   // --- useEffects for Lazy Loading ---
 
@@ -313,27 +313,27 @@ const DeviceDetailPage = () => {
     }
   }, [key, id, fetchFeature, ntpConfigData, loadingNtpConfig, device?.is_reachable]);
 
-  // CDP Tab
+  // LLDP Tab
   useEffect(() => {
     if (!device?.is_reachable) {
-      setCdpData(null);
+      setLldpData(null);
       return; // Do not fetch if device is offline
     }
-    if (key === "cdp" && id && !cdpData && !loadingcdp) {
-      setLoadingCdp(true);
-      setCdpError(null);
-      fetchFeature("cdp", "")
+    if (key === "lldp" && id && !lldpData && !loadingLldp) {
+      setLoadingLldp(true);
+      setLldpError(null);
+      fetchFeature("lldp", "")
         .then((data) => {
-          setCdpData(data);
+          setLldpData(data);
         })
         .catch((err) => {
-          setCdpError(err.message || "Failed to load CDP Neighbors.");
+          setLldpError(err.message || "Failed to load LLDP Neighbors.");
         })
         .finally(() => {
-          setLoadingCdp(false);
+          setLoadingLldp(false);
         });
     }
-  }, [key, id, fetchFeature, cdpData, loadingcdp, device?.is_reachable]);
+  }, [key, id, fetchFeature, lldpData, loadingLldp, device?.is_reachable]);
 
   // Clock for General Tab
   useEffect(() => {
@@ -421,7 +421,7 @@ const DeviceDetailPage = () => {
       "active_users",
       "local_users",
       "clock",
-      "cdp",
+      "lldp",
     ];
 
     try {
@@ -459,7 +459,7 @@ const DeviceDetailPage = () => {
       setSnmpConfigData(null);
       setNtpConfigData(null);
       setClockData(null);
-      setCdpData(null);
+      setLldpData(null);
     } catch (err: any) {
       setCacheClearError(err.message || "An unknown error occurred while clearing cache.");
     } finally {
@@ -1004,11 +1004,11 @@ const DeviceDetailPage = () => {
             </Alert>
           )}
         </Tab>
-        <Tab eventKey="cdp" title="CDP Neighbors">
+        <Tab eventKey="lldp" title="LLDP Neighbors">
           {device.is_reachable ? (
             <Row className="mt-3">
               <Col md={12}>
-                {renderCard("CDP Neighbors", cdpData, loadingcdp, cdpError, (data) => (
+                {renderCard("LLDP Neighbors", lldpData, loadingLldp, lldpError, (data) => (
                   <Table striped bordered hover size="sm">
                     <thead>
                       <tr>
@@ -1016,17 +1016,15 @@ const DeviceDetailPage = () => {
                         <th>Neighbor Interface</th>
                         <th>Local Interface</th>
                         <th>Capabilities</th>
-                        <th>Platform</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {data.map((cdp: any, index: number) => (
+                      {data.map((lldp: any, index: number) => (
                         <tr key={index}>
-                          <td>{cdp.neighbor_name}</td>
-                          <td>{cdp.neighbor_interface}</td>
-                          <td>{cdp.local_interface}</td>
-                          <td>{cdp.capabilities}</td>
-                          <td>{cdp.platform}</td>
+                          <td>{lldp.neighbor_name}</td>
+                          <td>{lldp.neighbor_interface}</td>
+                          <td>{lldp.local_interface}</td>
+                          <td>{lldp.capabilities}</td>
                         </tr>
                       ))}
                     </tbody>

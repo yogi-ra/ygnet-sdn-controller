@@ -176,7 +176,7 @@ async def get_feature(
                 "active_users": ("system", "get_active_users"),  # Corrected
                 "local_users": ("system", "get_local_users"),  # Corrected
                 "clock": ("system", "get_clock"),  # Corrected
-                "cdp": ("cdp", "get_cdp_neighbors"),
+                "lldp": ("lldp", "get_lldp_neighbors"),
             }
 
             if feature_name not in feature_method_map:
