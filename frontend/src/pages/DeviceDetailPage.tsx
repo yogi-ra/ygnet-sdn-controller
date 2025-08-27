@@ -87,6 +87,10 @@ const DeviceDetailPage = () => {
   const [loadingClock, setLoadingClock] = useState(false);
   const [clockError, setClockError] = useState<string | null>(null);
 
+  const [cdpData, setCdpData] = useState<string | null>(null);
+  const [loadingcdp, setLoadingCdp] = useState(false);
+  const [cdpError, setCdpError] = useState<string | null>(null);
+
   // --- useEffects for Lazy Loading ---
 
   // Interfaces Tab
@@ -309,6 +313,28 @@ const DeviceDetailPage = () => {
     }
   }, [key, id, fetchFeature, ntpConfigData, loadingNtpConfig, device?.is_reachable]);
 
+  // CDP Tab
+  useEffect(() => {
+    if (!device?.is_reachable) {
+      setCdpData(null);
+      return; // Do not fetch if device is offline
+    }
+    if (key === "cdp" && id && !cdpData && !loadingcdp) {
+      setLoadingCdp(true);
+      setCdpError(null);
+      fetchFeature("cdp", "")
+        .then((data) => {
+          setCdpData(data);
+        })
+        .catch((err) => {
+          setCdpError(err.message || "Failed to load CDP Neighbors.");
+        })
+        .finally(() => {
+          setLoadingCdp(false);
+        });
+    }
+  }, [key, id, fetchFeature, cdpData, loadingcdp, device?.is_reachable]);
+
   // Clock for General Tab
   useEffect(() => {
     if (!device?.is_reachable) {
@@ -395,6 +421,7 @@ const DeviceDetailPage = () => {
       "active_users",
       "local_users",
       "clock",
+      "cdp",
     ];
 
     try {
@@ -432,6 +459,7 @@ const DeviceDetailPage = () => {
       setSnmpConfigData(null);
       setNtpConfigData(null);
       setClockData(null);
+      setCdpData(null);
     } catch (err: any) {
       setCacheClearError(err.message || "An unknown error occurred while clearing cache.");
     } finally {
@@ -948,6 +976,61 @@ const DeviceDetailPage = () => {
                       <ListGroup.Item key={index}>{config.line}</ListGroup.Item>
                     ))}
                   </ListGroup>
+                ))}
+              </Col>
+            </Row>
+          ) : (
+            <Alert variant="info" className="mt-3">
+              Device is offline. Feature details are not available.
+            </Alert>
+          )}
+        </Tab>
+        <Tab eventKey="ntp" title="NTP">
+          {device.is_reachable ? (
+            <Row className="mt-3">
+              <Col md={12}>
+                {renderCard("NTP Config", ntpConfigData, loadingNtpConfig, ntpConfigError, (data) => (
+                  <ListGroup>
+                    {data.map((config: any, index: number) => (
+                      <ListGroup.Item key={index}>{config.line}</ListGroup.Item>
+                    ))}
+                  </ListGroup>
+                ))}
+              </Col>
+            </Row>
+          ) : (
+            <Alert variant="info" className="mt-3">
+              Device is offline. Feature details are not available.
+            </Alert>
+          )}
+        </Tab>
+        <Tab eventKey="cdp" title="CDP Neighbors">
+          {device.is_reachable ? (
+            <Row className="mt-3">
+              <Col md={12}>
+                {renderCard("CDP Neighbors", cdpData, loadingcdp, cdpError, (data) => (
+                  <Table striped bordered hover size="sm">
+                    <thead>
+                      <tr>
+                        <th>Neighbor Name</th>
+                        <th>Neighbor Interface</th>
+                        <th>Local Interface</th>
+                        <th>Capabilities</th>
+                        <th>Platform</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.map((cdp: any, index: number) => (
+                        <tr key={index}>
+                          <td>{cdp.neighbor_name}</td>
+                          <td>{cdp.neighbor_interface}</td>
+                          <td>{cdp.local_interface}</td>
+                          <td>{cdp.capabilities}</td>
+                          <td>{cdp.platform}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
                 ))}
               </Col>
             </Row>

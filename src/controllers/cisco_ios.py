@@ -1,3 +1,4 @@
+from src.controllers.features.cdp.cisco_ios import CiscoIosCdp
 from .base import BaseDevice
 from .features.system.cisco_ios import CiscoIosSystem
 from .features.interfaces.cisco_ios import CiscoIosInterfaces
@@ -31,6 +32,7 @@ class CiscoIosDevice(BaseDevice):
         self.logging = CiscoIosLogging(self)
         self.ntp = CiscoIosNtp(self)
         self.aaa = CiscoIosAaa(self)
+        self.cdp = CiscoIosCdp(self)
 
 
 class CiscoIosRouter(CiscoIosDevice):
@@ -45,5 +47,3 @@ class CiscoIosSwitch(CiscoIosDevice):
 
     def __init__(self, device_info):
         super().__init__(device_info)
-
-    

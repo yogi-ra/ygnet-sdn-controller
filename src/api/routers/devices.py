@@ -173,9 +173,10 @@ async def get_feature(
                 "logging": ("logging", "get_logging_config"),
                 "ntp": ("ntp", "get_ntp_config"),
                 "aaa": ("aaa", "get_aaa_config"),
-                "active_users": ("system", "get_active_users"), # Corrected
-                "local_users": ("system", "get_local_users"),   # Corrected
-                "clock": ("system", "get_clock"),               # Corrected
+                "active_users": ("system", "get_active_users"),  # Corrected
+                "local_users": ("system", "get_local_users"),  # Corrected
+                "clock": ("system", "get_clock"),  # Corrected
+                "cdp": ("cdp", "get_cdp_neighbors"),
             }
 
             if feature_name not in feature_method_map:
@@ -190,7 +191,8 @@ async def get_feature(
             feature_obj = getattr(handler, sub_object_name, None)
             if feature_obj is None:
                 raise HTTPException(
-                    status_code=404, detail=f"Feature '{feature_name}' not available for this device type."
+                    status_code=404,
+                    detail=f"Feature '{feature_name}' not available for this device type.",
                 )
 
             # Get the method for the feature
@@ -198,14 +200,18 @@ async def get_feature(
 
             if feature_method is None or not callable(feature_method):
                 raise HTTPException(
-                    status_code=404, detail=f"Method '{method_name}' not found or not callable for feature '{feature_name}'."
+                    status_code=404,
+                    detail=f"Method '{method_name}' not found or not callable for feature '{feature_name}'.",
                 )
 
             data = feature_method()
             redis_client.set(cache_key, json.dumps(data), ex=300)
             return data
     except NotImplementedError as e:
-        raise HTTPException(status_code=404, detail=f"Feature method not implemented for this device type: {e}")
+        raise HTTPException(
+            status_code=404,
+            detail=f"Feature method not implemented for this device type: {e}",
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
