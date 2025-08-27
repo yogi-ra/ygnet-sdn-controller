@@ -73,7 +73,8 @@ const DeviceForm = ({ initialData, onSubmit, isEditMode = false }: DeviceFormPro
           <option value="">Select a device type</option>
           <option value="cisco_ios_router">Cisco IOS Router</option>
           <option value="cisco_ios_switch">Cisco IOS Switch</option>
-          <option value="juniper_junos">Juniper Junos</option>
+          <option value="aruba_procurve">Aruba Procurve</option>
+          <option value="juniper_junos">Juniper Junos</option> {/* Added Aruba option */}
         </Form.Select>
       </Form.Group>
 

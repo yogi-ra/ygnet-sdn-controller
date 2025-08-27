@@ -1,5 +1,5 @@
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "./useAuth";
@@ -100,6 +100,8 @@ export const useDeviceDetails = (deviceId: string | undefined) => {
     [deviceId, token, logout, navigate]
   );
 
+  const queryClient = useQueryClient();
+
   const { data: device, isLoading: loading, error: primaryError } = useQuery<DeviceDetail, Error>({
     queryKey: ["device", deviceId],
     queryFn: async () => {
@@ -134,6 +136,27 @@ export const useDeviceDetails = (deviceId: string | undefined) => {
       },
     }
   );
+
+  useEffect(() => {
+    if (device && device.device_type === "aruba_procurve" && !device.version) {
+      const fetchArubaVersion = async () => {
+        try {
+          const versionData = await fetchFeature("system", "version_info");
+          if (versionData) {
+            queryClient.setQueryData(["device", deviceId], (oldData: DeviceDetail | undefined) => {
+              if (oldData) {
+                return { ...oldData, version: versionData };
+              }
+              return oldData;
+            });
+          }
+        } catch (err) {
+          console.error("Failed to fetch Aruba version:", err);
+        }
+      };
+      fetchArubaVersion();
+    }
+  }, [device, deviceId, fetchFeature, queryClient]);
 
   return {
     device: device || null,

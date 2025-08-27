@@ -7,6 +7,7 @@ class DeviceType(str, Enum):
     CISCO_IOS_ROUTER = "cisco_ios_router"
     CISCO_IOS_SWITCH = "cisco_ios_switch"
     JUNIPER_JUNOS = "juniper_junos"
+    ARUBA_PROCURVE = "aruba_procurve"
 
 
 # --- Device Schemas ---
