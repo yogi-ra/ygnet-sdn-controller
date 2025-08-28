@@ -7,7 +7,7 @@ export const useDevices = () => {
   const queryClient = useQueryClient();
 
   const {
-    data: devices,
+    data: devices = [],
     isLoading,
     isError,
     error,

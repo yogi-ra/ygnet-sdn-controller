@@ -5,7 +5,7 @@ import { useConfig } from "../context/ConfigContext";
 
 const DeviceListPage = () => {
   const navigate = useNavigate();
-  const { devices, isLoading, isError, error, deleteDevice, deleteError } = useDevices();
+  const { devices, isLoading, isError, error, deleteDevice } = useDevices();
   const { supportedFeatures } = useConfig();
 
   const handleAddDevice = () => {
@@ -29,7 +29,6 @@ const DeviceListPage = () => {
   return (
     <Container fluid className="mt-4">
       <h1 className="mb-4">Devices</h1>
-      {deleteError && <Alert variant="danger">{deleteError}</Alert>}
       <Button variant="primary" onClick={handleAddDevice} className="mb-3">
         Add New Device
       </Button>
@@ -37,7 +36,7 @@ const DeviceListPage = () => {
         <Alert variant="info">
           Loading devices...
         </Alert>
-      ) : devices.length === 0 ? (
+      ) : !devices || devices.length === 0 ? (
         <Alert variant="info">
           No devices found. Click "Add New Device" to add one.
         </Alert>
@@ -56,7 +55,7 @@ const DeviceListPage = () => {
               </tr>
             </thead>
             <tbody>
-              {devices.map((device) => (
+              {Array.isArray(devices) && devices.map((device) => (
                 <tr key={device.id}>
                   <td>{device.name}</td>
                   <td>{device.device_type}</td>
@@ -76,6 +75,9 @@ const DeviceListPage = () => {
                       size="sm"
                       className="me-2"
                       onClick={() => navigate(`/devices/${device.id}`)}
+                      disabled={device.is_reachable === false}
+                      style={device.is_reachable === false ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+                      title={device.is_reachable === false ? "Device is offline" : "View device details"}
                     >
                       View
                     </Button>

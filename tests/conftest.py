@@ -1,3 +1,6 @@
+import sys
+sys.path.insert(0, '/home/yogi/random/networking/sdn/ygnet-sdn-controller/src')
+
 import pytest
 from unittest.mock import MagicMock
 from concurrent.futures import Future # Import Future

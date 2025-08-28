@@ -1,3 +1,4 @@
+import asyncio
 from sqlalchemy.orm import Session
 from redis import Redis
 
@@ -48,61 +49,75 @@ async def check_device_for_changes():
             db.close()
 
 
+async def check_single_device_reachability(device_id, db):
+    """
+    Check reachability for a single device asynchronously.
+    """
+    is_reachable = False
+    db_device = crud.get_device(db, device_id=device_id)
+    if not db_device:
+        print(f"Device with ID {device_id} not found in DB, skipping reachability check.")
+        return
+
+    try:
+        handler = get_handler_from_device_id(db_device.id, db)
+        with handler:
+            # If connection is successful, it's reachable
+            is_reachable = True
+    except Exception as e:
+        print(f"Device {db_device.name} (ID: {db_device.id}) is not reachable: {e}")
+        is_reachable = False
+    
+    return db_device, is_reachable
+
+
 async def update_device_reachability_status():
     """
     Background task to periodically check device reachability and update the database.
+    Performs checks asynchronously to avoid blocking.
     """
     db: Session = None
-    redis_client: Redis = None  # Initialize redis_client to None
     try:
         db = SessionLocal()
         devices = crud.get_devices(db)
-
-        for device_schema in devices:  # Rename to device_schema to avoid confusion
-            is_reachable = False
-            db_device = crud.get_device(
-                db, device_id=device_schema.id
-            )  # Fetch the actual model instance
-            if not db_device:
-                print(
-                    f"Device with ID {device_schema.id} not found in DB, skipping reachability check."
-                )
+        
+        # Create tasks for all device reachability checks
+        tasks = [
+            check_single_device_reachability(device_schema.id, db) 
+            for device_schema in devices
+        ]
+        
+        # Run all checks concurrently with a timeout
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        redis_client = get_redis_client()
+        
+        # Process results
+        for result in results:
+            if isinstance(result, Exception):
+                print(f"Error during device reachability check: {result}")
                 continue
-
-            try:
-                handler = get_handler_from_device_id(
-                    db_device.id, db
-                )  # Use db_device.id
-                with handler:
-                    # If connection is successful, it's reachable
-                    is_reachable = True
-            except Exception as e:
-                import traceback  # Import traceback
-
+                
+            if result is None:
+                continue
+                
+            db_device, is_reachable = result
+            
+            # Update the device's reachability status in the database
+            if db_device.is_reachable != is_reachable:  # Only update if status changed
+                db_device.is_reachable = is_reachable
+                db.commit()
+                db.refresh(db_device)
                 print(
-                    f"Device {db_device.name} (ID: {db_device.id}) is not reachable: {e}"
+                    f"Updated reachability for device {db_device.name} (ID: {db_device.id}) to {is_reachable}"
                 )
-                print(traceback.format_exc())  # Print full traceback
-                is_reachable = False
-            finally:
-                # Update the device's reachability status in the database
-                if (
-                    db_device.is_reachable != is_reachable
-                ):  # Only update if status changed
-                    db_device.is_reachable = is_reachable
-                    db.commit()
-                    db.refresh(db_device)
-                    print(
-                        f"Updated reachability for device {db_device.name} (ID: {db_device.id}) to {is_reachable}"
-                    )
-                    redis_client = get_redis_client()
-                    
-                    # Invalidate all caches related to this device
-                    for key in redis_client.scan_iter(f"device:{db_device.id}:*"):
-                        redis_client.delete(key)
-                    print(
-                        f"Invalidated cache for device {db_device.name} (ID: {db_device.id}) due to reachability status change."
-                    )
+                
+                # Invalidate all caches related to this device
+                for key in redis_client.scan_iter(f"device:{db_device.id}:*"):
+                    redis_client.delete(key)
+                print(
+                    f"Invalidated cache for device {db_device.name} (ID: {db_device.id}) due to reachability status change."
+                )
     finally:
         if db:
             db.close()

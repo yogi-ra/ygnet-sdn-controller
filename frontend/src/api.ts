@@ -32,6 +32,9 @@ export const fetchSupportedFeatures = async (token: string | null): Promise<Reco
   const response = await fetch("/api/devices/supported-features", { headers });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      throw new UnauthorizedError("Unauthorized");
+    }
     throw new Error(`Failed to fetch supported features: ${response.statusText}`);
   }
 
@@ -43,10 +46,17 @@ export const fetchDevices = async (token: string | null): Promise<Device[]> => {
   const response = await fetch("/api/devices/", { headers });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      throw new UnauthorizedError("Unauthorized");
+    }
+    if (response.status === 401) {
+      throw new UnauthorizedError("Unauthorized");
+    }
     throw new Error(`Failed to fetch devices: ${response.statusText}`);
   }
 
-  return response.json();
+  const data = await response.json();
+  return Array.isArray(data) ? data : [];
 };
 
 export const deleteDevice = async (
@@ -60,6 +70,9 @@ export const deleteDevice = async (
   });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      throw new UnauthorizedError("Unauthorized");
+    }
     throw new Error(`Failed to delete device: ${response.statusText}`);
   }
 };
@@ -69,6 +82,9 @@ export const fetchDeviceFeatures = async (deviceId: string, token: string | null
   const response = await fetch(`/api/devices/${deviceId}/features`, { headers });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      throw new UnauthorizedError("Unauthorized");
+    }
     throw new Error(`Failed to fetch device features: ${response.statusText}`);
   }
 
@@ -80,6 +96,9 @@ export const fetchFeature = async (deviceId: string, featureName: string, token:
   const response = await fetch(`/api/devices/${deviceId}/features/${featureName}`, { headers });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      throw new UnauthorizedError("Unauthorized");
+    }
     throw new Error(`Failed to fetch feature: ${response.statusText}`);
   }
 

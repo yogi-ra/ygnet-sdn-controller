@@ -10,6 +10,14 @@ export const useAuthQueryClient = () => {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
+        retry: (failureCount, error) => {
+          if (error instanceof UnauthorizedError) {
+            logout();
+            navigate("/login");
+            return false;
+          }
+          return failureCount < 3;
+        },
         onError: (error) => {
           if (error instanceof UnauthorizedError) {
             logout();

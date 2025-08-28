@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Any, Dict
 import json
 import inspect
+import asyncio
 
 from ...crud import crud, schemas
 from ...database import get_db
@@ -100,10 +101,8 @@ async def get_device_features(
                 value=db_device.device_type,
                 order=3
             ))
-            try:
-                is_reachable = handler.check_reachability()
-            except Exception:
-                is_reachable = False
+            # Check reachability asynchronously
+            is_reachable = await check_device_reachability(device_id, db)
             header_fields.append(HeaderFieldSchema(
                 name="is_reachable",
                 label="Status",
@@ -159,21 +158,31 @@ def create_device(device: schemas.DeviceCreate, db: Session = Depends(get_db)):
     response_model=List[schemas.Device],
     dependencies=[Depends(require_read_privileges)],
 )
-def read_devices(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+async def read_devices(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     """
     Retrieve all network devices from the database, including their reachability status.
+    Performs reachability checks asynchronously to avoid blocking.
     """
     db_devices = crud.get_devices(db, skip=skip, limit=limit)
     devices_with_status = []
+    
+    # Create tasks for all device reachability checks
+    tasks = []
     for db_device in db_devices:
         device_dict = schemas.Device.from_orm(db_device).dict()
-        try:
-            handler = get_handler_from_device_id(db_device.id, db)
-            device_dict["is_reachable"] = handler.check_reachability()
-        except Exception as e:
-            device_dict["is_reachable"] = False
-            print(f"Error checking reachability for device {db_device.id}: {e}")
         devices_with_status.append(device_dict)
+        tasks.append(check_device_reachability(db_device.id, db))
+    
+    # Run all checks concurrently
+    if tasks:
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                devices_with_status[i]["is_reachable"] = False
+                print(f"Error checking reachability for device {db_devices[i].id}: {result}")
+            else:
+                devices_with_status[i]["is_reachable"] = result
+    
     return devices_with_status
 
 
@@ -183,7 +192,7 @@ def read_devices(skip: int = 0, limit: int = 100, db: Session = Depends(get_db))
     dependencies=[Depends(require_read_privileges)],
 )
 @cache_response(cache_key_prefix="device:details", ttl=300)
-def read_device(request: Request, device_id: int, db: Session = Depends(get_db)):
+async def read_device(request: Request, device_id: int, db: Session = Depends(get_db)):
     """
     Retrieve a single network device by its ID with detailed information, utilizing Redis cache.
     """
@@ -203,10 +212,14 @@ def read_device(request: Request, device_id: int, db: Session = Depends(get_db))
     except Exception as e:
         print(f"Error fetching operational data for device {device_id}: {e}")
 
+    # Check reachability asynchronously
+    is_reachable = await check_device_reachability(device_id, db)
+
     device_detail = schemas.DeviceDetail(
         **db_device.__dict__,
         version=version_info if version_info else None,
         interfaces=interfaces_brief if interfaces_brief else [],
+        is_reachable=is_reachable
     )
 
     return device_detail
@@ -449,17 +462,33 @@ def clear_cache(
     response_model=bool,
     dependencies=[Depends(require_read_privileges)],
 )
-def check_device_reachability(
+async def check_device_reachability(
     device_id: int,
     db: Session = Depends(get_db),
 ):
     """
     Checks if a device is reachable by attempting to establish a Netmiko connection.
+    This function is made async to prevent blocking other requests.
     """
     try:
         handler = get_handler_from_device_id(device_id, db)
-        with handler:
-            return True
+        # Use asyncio.wait_for to add a timeout to the connection attempt
+        import asyncio
+        from concurrent.futures import ThreadPoolExecutor
+        
+        def connect_handler():
+            with handler:
+                return True
+                
+        loop = asyncio.get_event_loop()
+        with ThreadPoolExecutor() as executor:
+            result = await asyncio.wait_for(
+                loop.run_in_executor(executor, connect_handler),
+                timeout=10.0  # 10 second timeout
+            )
+        return result
+    except asyncio.TimeoutError:
+        return False
     except Exception:
         return False
 
