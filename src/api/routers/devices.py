@@ -32,13 +32,7 @@ def get_supported_features():
     Returns a dictionary of supported device types and their features.
     """
     supported_features = {}
-    dummy_device_info = DeviceConnectionInfo(
-        ip_address="dummy",
-        port=22,
-        device_type="dummy",
-        username="dummy",
-        password="dummy",
-    )
+    
     for device_type, handler_class in DEVICE_HANDLER_MAP.items():
         try:
             features_raw = handler_class.get_supported_features()
@@ -52,7 +46,6 @@ def get_supported_features():
         except Exception as e:
             print(f"Error instantiating handler or getting supported features for device type {device_type}: {e}. features_raw: {features_raw}")
             supported_features[device_type] = []
-    print(f"DEBUG: Final supported_features: {supported_features}")
     return supported_features
 
 
@@ -134,8 +127,8 @@ async def get_device_features(
             except Exception:
                 last_updated = "N/A"
             header_fields.append(HeaderFieldSchema(
-                name="last_updated",
-                label="Last Updated",
+                name="clock",
+                label="Clock",
                 type=HeaderFieldType.TEXT,
                 value=last_updated,
                 order=6
@@ -144,9 +137,6 @@ async def get_device_features(
             # Sort header fields by order
             header_fields.sort(key=lambda x: x.order or 999)
 
-            print(f"DEBUG: Features returned for device {device_id}: {features}")
-            print(f"DEBUG: Header fields returned for device {device_id}: {header_fields}")
-            
             return {"features": features, "header_fields": header_fields}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

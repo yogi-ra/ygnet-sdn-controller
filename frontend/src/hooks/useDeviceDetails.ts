@@ -36,13 +36,38 @@ export const useDeviceDetails = (deviceId: string | undefined) => {
       return response.json();
     },
     enabled: !!deviceId,
-    refetchInterval: 5000,
+    // Removed refetchInterval for static header fields
     onError: (err) => {
       console.error("Error fetching device features:", err);
       if (err.message.includes("Authentication failed") || err.message.includes("Session expired")) {
         logout();
         navigate("/login");
       }
+    },
+  });
+
+  // Separate query for device reachability
+  const { data: isReachable = false } = useQuery<boolean, Error>({
+    queryKey: ["deviceReachability", deviceId],
+    queryFn: async () => {
+      if (!token) {
+        // No need to logout/navigate here, as main query handles it
+        throw new Error("No authentication token found.");
+      }
+      const response = await fetch(`/api/devices/${deviceId}/check-reachability`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!response.ok) {
+        throw new Error(`Failed to fetch reachability: ${response.statusText}`);
+      }
+      return response.json();
+    },
+    enabled: !!deviceId,
+    refetchInterval: 5000, // Poll reachability every 5 seconds
+    onError: (err) => {
+      console.error("Error fetching device reachability:", err);
     },
   });
 
@@ -54,5 +79,6 @@ export const useDeviceDetails = (deviceId: string | undefined) => {
     headerFields,
     loading,
     errors: { primary: primaryError?.message || null },
+    isReachable, // Include isReachable in the returned object
   };
 };

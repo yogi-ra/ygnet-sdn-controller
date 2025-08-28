@@ -23,7 +23,7 @@ const DeviceDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { token, logout } = useAuth();
-  const { features, headerFields, loading, errors } = useDeviceDetails(id);
+  const { features, headerFields, loading, errors, isReachable } = useDeviceDetails(id);
 
   const [command, setCommand] = useState("");
   const [isConfigCommand, setIsConfigCommand] = useState(false);
@@ -31,29 +31,6 @@ const DeviceDetailPage = () => {
   const [deviceLevel, setDeviceLevel] = useState<string | null>(null);
   const [executingCommand, setExecutingCommand] = useState(false);
   const [commandError, setCommandError] = useState<string | null>(null);
-
-  // Remove redundant feature state and fetching logic
-  // const [features, setFeatures] = useState<FeatureSchema[]>([]);
-  // const [featuresLoading, setFeaturesLoading] = useState(true);
-  // const [featuresError, setFeaturesError] = useState<string | null>(null);
-
-  // const getFeatures = useCallback(async () => {
-  //   if (!id || !token) return;
-  //   setFeaturesLoading(true);
-  //   setFeaturesError(null);
-  //   try {
-  //     const data = await fetchDeviceFeatures(id, token);
-  //     setFeatures(data.features);
-  //   } catch (err: any) {
-  //     setFeaturesError(err.message);
-  //   } finally {
-  //     setFeaturesLoading(false);
-  //   }
-  // }, [id, token, setFeaturesLoading, setFeaturesError, setFeatures]);
-
-  // useEffect(() => {
-  //   getFeatures();
-  // }, [getFeatures]);
 
   const [clearingCache, setClearingCache] = useState(false);
   const [cacheClearSuccess, setCacheClearSuccess] = useState<string | null>(null);
@@ -67,7 +44,6 @@ const DeviceDetailPage = () => {
 
   const deviceName = getHeaderFieldValue("device_name") || getHeaderFieldValue("hostname") || "N/A";
   const ipAddress = getHeaderFieldValue("ip_address") || "N/A";
-  const isReachable = getHeaderFieldValue("is_reachable") === true;
   const deviceType = getHeaderFieldValue("device_type") || "N/A";
 
   const groupedFeatures = useMemo(() => {
@@ -215,15 +191,6 @@ const DeviceDetailPage = () => {
     );
   }
 
-  // No longer checking for !device, as we now rely on features and headerFields
-  // if (!device) {
-  //   return (
-  //     <Container fluid className="mt-4">
-  //       <Alert variant="warning">Device not found.</Alert>
-  //     </Container>
-  //   );
-  // }
-
   return (
     <Container fluid className="mt-4">
       <Row className="mb-4">
@@ -239,12 +206,13 @@ const DeviceDetailPage = () => {
               <Card.Subtitle className="mb-2 text-muted">
                 {deviceType}
               </Card.Subtitle>
-              <Card.Text>
-                <strong>Uptime:</strong> {getHeaderFieldValue("uptime") || "N/A"}
-              </Card.Text>
-              <Card.Text>
-                <strong>Last Updated:</strong> {getHeaderFieldValue("last_updated") || "N/A"}
-              </Card.Text>
+              {headerFields.filter(field => 
+                !["hostname", "ip_address", "device_type", "is_reachable"].includes(field.name)
+              ).map(field => (
+                <Card.Text key={field.name}>
+                  <strong>{field.label}:</strong> {field.value || "N/A"}
+                </Card.Text>
+              ))}
               <Button variant="secondary" onClick={() => navigate(-1)}>
                 Back to Devices
               </Button>
