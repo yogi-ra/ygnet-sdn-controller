@@ -1,6 +1,6 @@
 from src.controllers.features.system.base import BaseSystem
 
-class UbiquitiUniFiSystem(BaseSystem):
+class UbiquitiEdgeSwitchSystem(BaseSystem):
     def __init__(self, device_handler):
         super().__init__(device_handler)
 
