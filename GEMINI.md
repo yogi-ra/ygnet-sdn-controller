@@ -314,6 +314,7 @@ This section documents the changes that have been implemented to make the fronte
 *   **Modularized Backend Feature Logic (`get_supported_features`):** The `get_supported_features` method is implemented in device controller classes (e.g., `CiscoIosDevice` in `src/controllers/cisco_ios.py` and `ArubaProcurve` in `src/controllers/aruba_procurve.py`) to return their supported features as `FeatureSchema` objects. **`CiscoIosSystem` (`src/controllers/features/system/cisco_ios.py`) was updated to correctly retrieve hostname, uptime, and clock information.**
 *   **`BaseFeature` Class and Updated Feature Base Classes:** `src/controllers/features/base.py` defines `BaseFeature`, and all existing feature base classes inherit from it, enabling introspection for feature discovery. **`BaseSystem` (`src/controllers/features/system/base.py`) was updated to include abstract methods for `get_uptime` and `get_clock` (returning string).**
 *   **`GET /api/devices/supported-features` Endpoint:** This endpoint in `src/api/routers/devices.py` returns a dictionary of supported device types and their features, using introspection for dynamic discovery.
+*   **Ubiquiti UniFi Controller and System Feature:** Added `src/controllers/ubiquiti_unifi.py` for Ubiquiti UniFi devices and `src/controllers/features/system/ubiquiti_unifi.py` for its system features. The `UbiquitiUniFi` controller is integrated into `src/controllers/__init__.py`.
 
 ### Frontend
 
