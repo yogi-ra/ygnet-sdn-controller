@@ -1,7 +1,10 @@
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Union
 
-class BaseInterfaces(ABC):
+from ..base import BaseFeature
+
+
+class BaseInterfaces(BaseFeature, ABC):
     """Abstract base class for interface features."""
 
     def __init__(self, device_handler):

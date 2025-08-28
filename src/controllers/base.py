@@ -9,6 +9,7 @@ from src.connection_manager import ConnectionManager
 from src.device_info import DeviceConnectionInfo
 from src.config import settings
 from ..parsing_utils import parse_cli_output
+from src.feature_schemas import FeatureSchema  # Added this import
 from ..exceptions import (
     DeviceConnectionError,
     DeviceTimeoutError,
@@ -18,7 +19,7 @@ from ..exceptions import (
 
 logger = logging.getLogger(__name__)
 
-connection_manager = ConnectionManager() # Get the singleton instance
+connection_manager = ConnectionManager()  # Get the singleton instance
 
 
 class BaseDevice(ABC):
@@ -51,34 +52,36 @@ class BaseDevice(ABC):
         Establishes an SSH connection to the device using the connection manager.
         """
         try:
-            future = connection_manager.get_connection(self.device_info, self.netmiko_device_type)
+            future = connection_manager.get_connection(
+                self.device_info, self.netmiko_device_type
+            )
             self.connection = future.result(
                 timeout=settings.NETMIKO_TIMEOUT
             )  # Corrected timeout setting
             self.logger.info(
-                f"Successfully connected to {self.device_info.ip_address}"
-            )  # Corrected to ip_address
+                f"Successfully connected to {self.device_info.ip_address}"  # Corrected to ip_address
+            )
         except TimeoutError:
             self.logger.error(
-                f"Connection to {self.device_info.ip_address} timed out."
-            )  # Corrected to ip_address
+                f"Connection to {self.device_info.ip_address} timed out."  # Corrected to ip_address
+            )
             raise DeviceTimeoutError(
-                f"Connection to {self.device_info.ip_address} timed out."
-            )  # Corrected to ip_address
+                f"Connection to {self.device_info.ip_address} timed out."  # Corrected to ip_address
+            )
         except NetmikoAuthenticationException:  # Catch NetmikoAuthenticationException
             self.logger.error(
-                f"Authentication failed for {self.device_info.ip_address}."
-            )  # Corrected to ip_address
+                f"Authentication failed for {self.device_info.ip_address}."  # Corrected to ip_address
+            )
             raise DeviceAuthenticationError(
-                f"Authentication failed for {self.device_info.ip_address}."
-            )  # Corrected to ip_address
+                f"Authentication failed for {self.device_info.ip_address}."  # Corrected to ip_address
+            )
         except Exception as e:
             self.logger.error(
-                f"Failed to connect to {self.device_info.ip_address}: {e}"
-            )  # Corrected to ip_address
+                f"Failed to connect to {self.device_info.ip_address}: {e}"  # Corrected to ip_address
+            )
             raise DeviceConnectionError(
-                f"Failed to connect to {self.device_info.ip_address}: {e}"
-            )  # Corrected to ip_address
+                f"Failed to connect to {self.device_info.ip_address}: {e}"  # Corrected to ip_address
+            )
 
     def disconnect(self):
         """
@@ -115,18 +118,18 @@ class BaseDevice(ABC):
             return output
         except TimeoutError:
             self.logger.error(
-                f"Command '{command}' on {self.device_info.ip_address} timed out."
-            )  # Corrected to ip_address
+                f"Command '{command}' on {self.device_info.ip_address} timed out."  # Corrected to ip_address
+            )
             raise DeviceTimeoutError(
-                f"Command '{command}' on {self.device_info.ip_address} timed out."
-            )  # Corrected to ip_address
+                f"Command '{command}' on {self.device_info.ip_address} timed out."  # Corrected to ip_address
+            )
         except Exception as e:
             self.logger.error(
-                f"Failed to send command '{command}' to {self.device_info.ip_address}: {e}"
-            )  # Corrected to ip_address
+                f"Failed to send command '{command}' to {self.device_info.ip_address}: {e}"  # Corrected to ip_address
+            )
             raise DeviceError(
-                f"Failed to send command '{command}' to {self.device_info.ip_address}: {e}"
-            )  # Corrected to ip_address
+                f"Failed to send command '{command}' to {self.device_info.ip_address}: {e}"  # Corrected to ip_address
+            )
 
     def send_multiline_commands(self, command_patterns: List[List[str]]) -> str:
         """
@@ -146,34 +149,46 @@ class BaseDevice(ABC):
             return output
         except TimeoutError:
             self.logger.error(
-                f"Multiline command on {self.device_info.ip_address} timed out."
-            )  # Corrected to ip_address
+                f"Multiline command on {self.device_info.ip_address} timed out."  # Corrected to ip_address
+            )
             raise DeviceTimeoutError(
-                f"Multiline command on {self.device_info.ip_address} timed out."
-            )  # Corrected to ip_address
+                f"Multiline command on {self.device_info.ip_address} timed out."  # Corrected to ip_address
+            )
         except Exception as e:
             self.logger.error(
-                f"Failed to send multiline commands to {self.device_info.ip_address}: {e}"
-            )  # Corrected to ip_address
+                f"Failed to send multiline commands to {self.device_info.ip_address}: {e}"  # Corrected to ip_address
+            )
             raise DeviceError(
-                f"Failed to send multiline commands to {self.device_info.ip_address}: {e}"
-            )  # Corrected to ip_address
+                f"Failed to send multiline commands to {self.device_info.ip_address}: {e}"  # Corrected to ip_address
+            )
 
     def parse_cli_output(
-        self, command: str, raw_output: str
+        self,
+        command: str,
+        raw_output: str,
     ) -> Union[List[Dict[str, Any]], Dict[str, Any]]:
         """
         Parses CLI output using the utility function.
         """
         return parse_cli_output(
-            command, raw_output, self.device_info.device_type, self.netmiko_device_type
+            command,
+            raw_output,
+            self.device_info.device_type,
+            self.netmiko_device_type,
         )
+
+    @classmethod
+    @abstractmethod
+    def get_supported_features(cls) -> List[FeatureSchema]:
+        pass
 
     def check_reachability(self) -> bool:
         try:
             # Attempt to get a connection. If successful, the device is reachable.
             # The connection manager handles caching, so this won't create a new connection every time.
-            future = connection_manager.get_connection(self.device_info, self.netmiko_device_type)
+            future = connection_manager.get_connection(
+                self.device_info, self.netmiko_device_type
+            )
             # We don't need to store the connection, just check if it can be established
             future.result(timeout=settings.NETMIKO_TIMEOUT)  # Corrected timeout setting
             return True
@@ -183,11 +198,11 @@ class BaseDevice(ABC):
             NetmikoAuthenticationException,
         ) as e:  # Catch NetmikoAuthenticationException
             self.logger.debug(
-                f"Device {self.device_info.ip_address} is not reachable: {e}"
-            )  # Corrected to ip_address
+                f"Device {self.device_info.ip_address} is not reachable: {e}"  # Corrected to ip_address
+            )
             return False
         except Exception as e:
             self.logger.error(
-                f"An unexpected error occurred while checking reachability for {self.device_info.ip_address}: {e}"
-            )  # Corrected to ip_address
+                f"An unexpected error occurred while checking reachability for {self.device_info.ip_address}: {e}"  # Corrected to ip_address
+            )
             return False

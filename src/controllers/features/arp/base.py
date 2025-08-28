@@ -1,7 +1,10 @@
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Union
 
-class BaseArp(ABC):
+from ..base import BaseFeature
+
+
+class BaseArp(BaseFeature, ABC):
     """Abstract base class for LLDP features."""
 
     def __init__(self, device_handler):

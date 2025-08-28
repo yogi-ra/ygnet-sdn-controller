@@ -1,7 +1,10 @@
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Union
 
-class BaseNtp(ABC):
+from ..base import BaseFeature
+
+
+class BaseNtp(BaseFeature, ABC):
     """Abstract base class for NTP features."""
 
     def __init__(self, device_handler):

@@ -12,3 +12,12 @@ class CiscoIosNtp(BaseNtp):
         except Exception as e:
             self.device_handler.logger.error(f"Error getting NTP config: {e}")
             return ""
+
+    def set_ntp_server(self, ip_address: str) -> str:
+        try:
+            commands = [f"ntp server {ip_address}"]
+            output = self.device_handler.send_config_set(commands)
+            return f"NTP server {ip_address} configured: {output}"
+        except Exception as e:
+            self.device_handler.logger.error(f"Error setting NTP server: {e}")
+            raise

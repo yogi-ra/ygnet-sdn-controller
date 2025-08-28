@@ -1,8 +1,10 @@
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any
 
+from ..base import BaseFeature
 
-class BaseCDP(ABC):
+
+class BaseCDP(BaseFeature, ABC):
     """Abstract base class for cdp features."""
 
     def __init__(self, device_handler):

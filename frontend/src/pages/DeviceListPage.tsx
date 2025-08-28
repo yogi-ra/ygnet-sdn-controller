@@ -1,116 +1,28 @@
 import { Container, Table, Button, Alert } from "react-bootstrap";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../hooks/useAuth";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useDevices } from "../hooks/useDevices";
+import { useConfig } from "../context/ConfigContext";
 
-interface Device {
-  id: string;
-  name: string;
-  device_type: string;
-  ip_address: string;
-  port: number;
-  username: string;
-  is_reachable?: boolean; // Add is_reachable to the interface
-}
-
-import { useState } from "react";
 const DeviceListPage = () => {
-  const { token, logout } = useAuth();
   const navigate = useNavigate();
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-
-  const fetchDevices = async (): Promise<Device[]> => {
-    if (!token) {
-      logout();
-      navigate("/login");
-      throw new Error("No authentication token found. Please log in.");
-    }
-
-    const response = await fetch("/api/devices/", {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    if (response.status === 401) {
-      logout();
-      navigate("/login");
-      throw new Error("Session expired or unauthorized. Please log in again.");
-    }
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch devices: ${response.statusText}`);
-    }
-
-    return response.json();
-  };
-
-  const {
-    data: devices,
-    isLoading,
-    isError,
-    error,
-  } = useQuery<Device[], Error>({
-    queryKey: ["devices"],
-    queryFn: fetchDevices,
-    refetchInterval: 5000, // Refetch every 5 seconds
-    onError: (err) => {
-      console.error("Error fetching devices:", err);
-      if (err.message.includes("Authentication failed") || err.message.includes("Session expired")) {
-        logout();
-        navigate("/login");
-      }
-    },
-  });
+  const { devices, isLoading, isError, error, deleteDevice, deleteError } = useDevices();
+  const { supportedFeatures } = useConfig();
 
   const handleAddDevice = () => {
     navigate("/devices/add");
   };
 
-  const queryClient = useQueryClient();
-
-  const deleteDeviceMutation = useMutation({
-    mutationFn: async (deviceId: string) => {
-      if (!token) {
-        logout();
-        navigate("/login");
-        throw new Error("No authentication token found. Please log in.");
-      }
-
-      const response = await fetch(`/api/devices/${deviceId}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (response.status === 401) {
-        logout();
-        navigate("/login");
-        throw new Error("Session expired or unauthorized. Please log in again.");
-      }
-
-      if (!response.ok) {
-        throw new Error(`Failed to delete device: ${response.statusText}`);
-      }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["devices"] });
-      alert("Device deleted successfully!");
-    },
-    onError: (err: any) => {
-      console.error("Error deleting device:", err);
-      setDeleteError(err.message || "Failed to delete device. Please try again.");
-      if (err.message.includes("Authentication failed") || err.message.includes("Session expired")) {
-        logout();
-        navigate("/login");
-      }
-    },
-  });
-
   const handleDeleteDevice = (deviceId: string) => {
     if (window.confirm("Are you sure you want to delete this device?")) {
-      deleteDeviceMutation.mutate(deviceId);
+      deleteDevice(deviceId, {
+        onSuccess: () => {
+          alert("Device deleted successfully!");
+        },
+        onError: (err: any) => {
+          console.error("Error deleting device:", err);
+          alert("Failed to delete device. Please try again.");
+        },
+      });
     }
   };
 
@@ -139,7 +51,7 @@ const DeviceListPage = () => {
                 <th>IP Address</th>
                 <th>Port</th>
                 <th>Username</th>
-                <th>Status</th> {/* New Status Header */}
+                <th>Status</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -151,7 +63,7 @@ const DeviceListPage = () => {
                   <td>{device.ip_address}</td>
                   <td>{device.port}</td>
                   <td>{device.username}</td>
-                  <td> {/* New Status Data */}
+                  <td>
                     {device.is_reachable === true ? (
                       <span style={{ color: 'green', fontWeight: 'bold' }}>Online</span>
                     ) : (
@@ -182,6 +94,7 @@ const DeviceListPage = () => {
                     >
                       Delete
                     </Button>
+                    
                   </td>
                 </tr>
               ))}

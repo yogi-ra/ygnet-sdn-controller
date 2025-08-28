@@ -1,7 +1,10 @@
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Union
 
-class BaseRouting(ABC):
+from ..base import BaseFeature
+
+
+class BaseRouting(BaseFeature, ABC):
     """Abstract base class for routing features."""
 
     def __init__(self, device_handler):

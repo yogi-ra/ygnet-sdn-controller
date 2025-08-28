@@ -2,7 +2,10 @@ from abc import ABC, abstractmethod
 from typing import List, Dict, Any
 from datetime import datetime
 
-class BaseSystem(ABC):
+from ..base import BaseFeature
+
+
+class BaseSystem(BaseFeature, ABC):
     """Abstract base class for system features."""
 
     def __init__(self, device_handler):
@@ -25,5 +28,9 @@ class BaseSystem(ABC):
         pass
 
     @abstractmethod
-    def get_clock(self) -> datetime:
+    def get_clock(self) -> str:
+        pass
+
+    @abstractmethod
+    def get_uptime(self) -> str:
         pass

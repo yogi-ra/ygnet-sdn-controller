@@ -1,0 +1,30 @@
+feat: Revert dynamic feature definition refactor and re-confirm existing fixes
+
+This commit reverts the initial attempt to refactor the Ygnet SDN controller's
+backend to support dynamic, database-driven feature definitions. The previous
+changes introduced a new SQLAlchemy model (`FeatureDefinition`), associated
+Pydantic schemas, CRUD operations, and a dedicated FastAPI router for managing
+these definitions.
+
+The decision to revert is based on the user's request to establish a stable
+checkpoint before proceeding with such a significant architectural change.
+
+**Reverted Changes:**
+- **Backend Models:** Removed `src/models/feature_definition.py` and its import from `src/models.py`.
+- **Backend Schemas:** Removed `FeatureDefinition` related Pydantic schemas (`FeatureDefinitionBase`, `FeatureDefinitionCreate`, `FeatureDefinitionUpdate`, `FeatureDefinitionResponse`) from `src/schemas.py`.
+- **Backend CRUD:** Removed all CRUD operations related to `FeatureDefinition` from `src/crud.py`.
+- **Backend API Router:** Deleted the new router file `src/api/routers/feature_definitions.py` and removed its inclusion from `src/main.py`.
+- **TTP Template:** Deleted the newly created `src/parsing-templates/ttp/cisco_ios_show_vlan_brief.txt` as it was part of the ongoing parsing investigation, which is now paused.
+
+**Re-confirmed and Ensured Existing Fixes:**
+During the revert process, it was identified that several critical frontend fixes,
+implemented in previous interactions to resolve display and runtime errors,
+were inadvertently affected or needed re-confirmation. This commit ensures
+these fixes are correctly in place:
+- **`frontend/src/types/featureTypes.ts`**: Re-applied the `DeviceFeaturesResponse` interface, which correctly types the backend's response for device features and header fields.
+- **`frontend/src/hooks/useDeviceDetails.ts`**: Re-applied the logic to correctly destructure `features` and `header_fields` from the `useQuery` response, resolving the "N/A" and "Offline" header display issues and `features.forEach is not a function` errors.
+- **`frontend/src/pages/DeviceDetailPage.tsx`**: Confirmed the correct `useCallback` import and the `Array.isArray` check within the `useMemo` hook, addressing previous `ReferenceError` and `TypeError` issues.
+- **`frontend/src/components/features/DisplayTableFeature.tsx`**: Confirmed the array joining logic (`Array.isArray(row[header]) ? row[header].join(', ') : row[header]`) to correctly display array values (like VLAN interfaces) with delimiters in table cells.
+
+This commit establishes a clean and functional baseline, allowing for a more
+structured approach to future refactoring efforts.

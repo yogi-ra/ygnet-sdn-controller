@@ -1,11 +1,17 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
-from typing import List, Any
+from typing import List, Any, Dict
 import json
+import inspect
 
 from ...crud import crud, schemas
 from ...database import get_db
 from ...cache import get_redis_client
+from ...controllers import DEVICE_HANDLER_MAP
+from ...controllers.features.base import BaseFeature
+from ...device_info import DeviceConnectionInfo
+from ...feature_schemas import FeatureSchema, HeaderFieldSchema, HeaderFieldType # Added this import
+
 
 from ..dependencies import (
     require_read_privileges,
@@ -18,6 +24,132 @@ router = APIRouter(
     prefix="/devices",
     tags=["Devices"],
 )
+
+
+@router.get("/supported-features", response_model=Dict[str, List[str]], dependencies=[Depends(require_read_privileges)])
+def get_supported_features():
+    """
+    Returns a dictionary of supported device types and their features.
+    """
+    supported_features = {}
+    dummy_device_info = DeviceConnectionInfo(
+        ip_address="dummy",
+        port=22,
+        device_type="dummy",
+        username="dummy",
+        password="dummy",
+    )
+    for device_type, handler_class in DEVICE_HANDLER_MAP.items():
+        try:
+            features_raw = handler_class.get_supported_features()
+            if not isinstance(features_raw, list):
+                raise TypeError(f"get_supported_features for {device_type} did not return a list: {features_raw}")
+            features = [
+                feature.name
+                for feature in features_raw
+            ]
+            supported_features[device_type] = features
+        except Exception as e:
+            print(f"Error instantiating handler or getting supported features for device type {device_type}: {e}. features_raw: {features_raw}")
+            supported_features[device_type] = []
+    print(f"DEBUG: Final supported_features: {supported_features}")
+    return supported_features
+
+
+@router.get(
+    "/{device_id}/features",
+    response_model=Dict[str, Any], # Changed response_model to Dict[str, Any]
+    dependencies=[Depends(require_read_privileges)],
+)
+async def get_device_features(
+    device_id: int,
+    db: Session = Depends(get_db),
+):
+    """
+    Returns a list of FeatureSchema objects and header fields for a specific device.
+    """
+    db_device = crud.get_device(db, device_id=device_id)
+    if db_device is None:
+        raise HTTPException(status_code=404, detail="Device not found")
+
+    handler = get_handler_from_device_id(device_id, db)
+    
+    features = []
+    header_fields = []
+
+    try:
+        with handler:
+            features = handler.get_supported_features()
+            
+            # Populate header fields
+            try:
+                hostname = handler.system.get_hostname()
+            except Exception:
+                hostname = "N/A"
+            header_fields.append(HeaderFieldSchema(
+                name="hostname",
+                label="Hostname",
+                type=HeaderFieldType.TEXT,
+                value=hostname,
+                order=1
+            ))
+            header_fields.append(HeaderFieldSchema(
+                name="ip_address",
+                label="IP Address",
+                type=HeaderFieldType.TEXT,
+                value=db_device.ip_address,
+                order=2
+            ))
+            header_fields.append(HeaderFieldSchema(
+                name="device_type",
+                label="Device Type",
+                type=HeaderFieldType.TEXT,
+                value=db_device.device_type,
+                order=3
+            ))
+            try:
+                is_reachable = handler.check_reachability()
+            except Exception:
+                is_reachable = False
+            header_fields.append(HeaderFieldSchema(
+                name="is_reachable",
+                label="Status",
+                type=HeaderFieldType.STATUS,
+                value=is_reachable,
+                order=4
+            ))
+            try:
+                uptime = handler.system.get_uptime()
+            except Exception:
+                uptime = "N/A"
+            header_fields.append(HeaderFieldSchema(
+                name="uptime",
+                label="Uptime",
+                type=HeaderFieldType.TEXT,
+                value=uptime,
+                order=5
+            ))
+            try:
+                last_updated = handler.system.get_clock()
+            except Exception:
+                last_updated = "N/A"
+            header_fields.append(HeaderFieldSchema(
+                name="last_updated",
+                label="Last Updated",
+                type=HeaderFieldType.TEXT,
+                value=last_updated,
+                order=6
+            ))
+
+            # Sort header fields by order
+            header_fields.sort(key=lambda x: x.order or 999)
+
+            print(f"DEBUG: Features returned for device {device_id}: {features}")
+            print(f"DEBUG: Header fields returned for device {device_id}: {header_fields}")
+            
+            return {"features": features, "header_fields": header_fields}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post(
@@ -75,7 +207,8 @@ def read_device(request: Request, device_id: int, db: Session = Depends(get_db))
 
     try:
         with handler:
-            version_info = handler.system.get_version_info()
+            raw_version_info = handler.system.get_version_info()
+            version_info = raw_version_info[0] if raw_version_info else None
             interfaces_brief = handler.interfaces.get_interfaces_brief()
     except Exception as e:
         print(f"Error fetching operational data for device {device_id}: {e}")
@@ -162,32 +295,31 @@ async def get_feature(
     handler = get_handler_from_device_id(device_id, db)
     try:
         with handler:
-            # Map feature_name to a tuple (sub_object_name, method_name)
-            feature_method_map = {
-                "system": ("system", "get_version_info"),
-                "interfaces": ("interfaces", "get_interfaces_brief"),
-                "vlans": ("vlans", "get_vlan_brief"),
-                "routing": ("routing", "get_routing_table"),
-                "acls": ("acls", "get_acls"),
-                "snmp": ("snmp", "get_snmp_config"),
-                "logging": ("logging", "get_logging_config"),
-                "ntp": ("ntp", "get_ntp_config"),
-                "aaa": ("aaa", "get_aaa_config"),
-                "active_users": ("system", "get_active_users"),  # Corrected
-                "local_users": ("system", "get_local_users"),  # Corrected
-                "clock": ("system", "get_clock"),  # Corrected
-                "lldp": ("lldp", "get_lldp_neighbors"),
-                "arp_interface": ("arp", "get_arp_interface"),
-                "ip_arp": ("arp", "get_ip_arp"),
-            }
+            supported_features = handler.get_supported_features()
+            feature_schema = next(
+                (f for f in supported_features if f.name == feature_name),
+                None,
+            )
 
-            if feature_name not in feature_method_map:
+            if not feature_schema:
                 raise HTTPException(
-                    status_code=404, detail=f"Feature '{feature_name}' not supported."
+                    status_code=404, detail=f"Feature '{feature_name}' not found for this device."
                 )
 
-            # Get the sub-object and method name
-            sub_object_name, method_name = feature_method_map[feature_name]
+            if not feature_schema.backend_method:
+                raise HTTPException(
+                    status_code=400, detail=f"Feature '{feature_name}' does not have a backend method defined."
+                )
+
+            # Dynamically call the backend method
+            # backend_method is in the format "sub_object.method_name"
+            parts = feature_schema.backend_method.split('.')
+            if len(parts) != 2:
+                raise HTTPException(
+                    status_code=500, detail=f"Invalid backend_method format: {feature_schema.backend_method}"
+                )
+            
+            sub_object_name, method_name = parts
 
             # Get the feature object (e.g., handler.system, handler.aaa)
             feature_obj = getattr(handler, sub_object_name, None)
@@ -219,6 +351,80 @@ async def get_feature(
 
 
 @router.post(
+    "/{device_id}/action",
+    status_code=200,
+    dependencies=[Depends(require_write_privileges)],
+)
+async def perform_feature_action(
+    device_id: int,
+    action_request: schemas.FeatureActionRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Performs an action on a specific device feature.
+    """
+    db_device = crud.get_device(db, device_id=device_id)
+    if db_device is None:
+        raise HTTPException(status_code=404, detail="Device not found")
+
+    handler = get_handler_from_device_id(device_id, db)
+
+    # Find the FeatureSchema for the requested feature_name
+    supported_features = handler.get_supported_features()
+    feature_schema = next(
+        (f for f in supported_features if f.name == action_request.feature_name),
+        None,
+    )
+
+    if not feature_schema:
+        raise HTTPException(
+            status_code=404, detail=f"Feature '{action_request.feature_name}' not found for this device."
+        )
+
+    if not feature_schema.backend_method:
+        raise HTTPException(
+            status_code=400, detail=f"Feature '{action_request.feature_name}' does not have a backend method defined."
+        )
+
+    try:
+        with handler:
+            # Dynamically call the backend method
+            # backend_method is in the format "sub_object.method_name"
+            parts = feature_schema.backend_method.split('.')
+            if len(parts) != 2:
+                raise HTTPException(
+                    status_code=500, detail=f"Invalid backend_method format: {feature_schema.backend_method}"
+                )
+            
+            sub_object_name, method_name = parts
+            
+            feature_obj = getattr(handler, sub_object_name, None)
+            if feature_obj is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Sub-object '{sub_object_name}' not found on device handler.",
+                )
+            
+            method_to_call = getattr(feature_obj, method_name, None)
+            if method_to_call is None or not callable(method_to_call):
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Method '{method_name}' not found or not callable on sub-object '{sub_object_name}'.",
+                )
+            
+            # Execute the method with the provided value
+            result = method_to_call(action_request.value)
+            return {"message": "Action performed successfully", "result": result}
+
+    except NotImplementedError as e:
+        raise HTTPException(
+            status_code=400, detail=f"Feature action not implemented for this device type: {e}"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post(
     "/{device_id}/cache/clear",
     status_code=204,
     dependencies=[Depends(require_write_privileges)],
@@ -244,12 +450,6 @@ def clear_cache(
     if redis_client.exists(detail_key):
         redis_client.delete(detail_key)
         cleared_keys.append(detail_key)
-
-    if not cleared_keys:
-        raise HTTPException(
-            status_code=404,
-            detail="No matching cache keys found for the given prefixes.",
-        )
 
     return
 

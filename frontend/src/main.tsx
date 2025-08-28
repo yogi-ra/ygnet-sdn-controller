@@ -3,14 +3,24 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ConfigProvider } from './context/ConfigContext.tsx';
+import { AuthProvider } from './context/AuthContext.tsx';
 
-const queryClient = new QueryClient();
-
-createRoot(document.getElementById('root')!).render(
+const root = createRoot(document.getElementById('root')!); // Define root outside render
+root.render(
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
+    <AppProviders>
       <App />
-    </QueryClientProvider>
+    </AppProviders>
   </StrictMode>,
-)
+);
+
+function AppProviders({ children }: { children: React.ReactNode }) {
+  return (
+    <AuthProvider>
+      <ConfigProvider>
+        {children}
+      </ConfigProvider>
+    </AuthProvider>
+  );
+}

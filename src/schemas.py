@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict, Field
-from typing import Optional, List, Union
+from typing import Optional, List, Union, Any
 from enum import Enum
 
 
@@ -121,6 +121,11 @@ class MultilineCommandRequest(BaseModel):
 
 class MultilineCommandOutput(BaseModel):
     output: str
+
+
+class FeatureActionRequest(BaseModel):
+    feature_name: str = Field(..., description="The name of the feature to act upon.")
+    value: Any = Field(None, description="The value associated with the action (e.g., for toggles, input fields).")
 
 
 # --- Cache Schemas ---

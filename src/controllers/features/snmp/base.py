@@ -1,7 +1,10 @@
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Union
 
-class BaseSnmp(ABC):
+from ..base import BaseFeature
+
+
+class BaseSnmp(BaseFeature, ABC):
     """Abstract base class for SNMP features."""
 
     def __init__(self, device_handler):

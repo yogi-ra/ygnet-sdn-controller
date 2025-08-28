@@ -1,7 +1,10 @@
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any
 
-class BaseVlans(ABC):
+from ..base import BaseFeature
+
+
+class BaseVlans(BaseFeature, ABC):
     """Abstract base class for VLAN features."""
 
     def __init__(self, device_handler):

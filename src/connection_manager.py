@@ -4,6 +4,14 @@ from netmiko import ConnectHandler, NetmikoTimeoutException, NetmikoAuthenticati
 from src.config import settings
 from src.device_info import DeviceConnectionInfo # Corrected import
 
+# Mapping from our internal device types to Netmiko device types
+NETMIKO_DEVICE_TYPE_MAP = {
+    "cisco_ios_router": "cisco_ios",
+    "cisco_ios_switch": "cisco_ios",
+    "aruba_procurve": "hp_procurve", # Assuming hp_procurve is the Netmiko type for Aruba Procurve
+    # Add other mappings as needed
+}
+
 class ConnectionManager:
     _instance = None
     _lock = threading.Lock()
@@ -29,8 +37,10 @@ class ConnectionManager:
             if device_key not in self._connections:
                 try:
                     print(f"Attempting to connect to {device_info.ip_address}...") # Corrected to ip_address
+                    # Use the mapped Netmiko device type
+                    netmiko_type = NETMIKO_DEVICE_TYPE_MAP.get(device_info.device_type, device_info.device_type)
                     connection = ConnectHandler(
-                        device_type=netmiko_device_type,
+                        device_type=netmiko_type, # Use the mapped type here
                         host=device_info.ip_address, # Corrected to ip_address
                         username=device_info.username,
                         password=device_info.password,

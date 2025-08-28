@@ -1,7 +1,10 @@
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Union
 
-class BaseAcls(ABC):
+from ..base import BaseFeature
+
+
+class BaseAcls(BaseFeature, ABC):
     """Abstract base class for ACL features."""
 
     def __init__(self, device_handler):
