@@ -18,7 +18,7 @@ export const useDevices = () => {
   });
 
   const deleteDeviceMutation = useMutation({
-    mutationFn: (deviceId: string) => deleteDevice(deviceId, token),
+    mutationFn: (deviceId: number) => deleteDevice(deviceId.toString(), token), // Convert number to string for API call
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["devices"] });
     },

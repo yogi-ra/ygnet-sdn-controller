@@ -2,11 +2,12 @@ import { Container, Table, Button, Alert } from "react-bootstrap";
 import { useNavigate } from "react-router-dom";
 import { useDevices } from "../hooks/useDevices";
 import { useConfig } from "../context/ConfigContext";
+import { findDeviceTypeDisplayName } from "../utils/deviceTypes";
 
 const DeviceListPage = () => {
   const navigate = useNavigate();
   const { devices, isLoading, isError, error, deleteDevice } = useDevices();
-  const { supportedFeatures } = useConfig();
+  const { supportedFeatures, deviceTypes } = useConfig();
 
   const handleAddDevice = () => {
     navigate("/devices/add");
@@ -58,7 +59,7 @@ const DeviceListPage = () => {
               {Array.isArray(devices) && devices.map((device) => (
                 <tr key={device.id}>
                   <td>{device.name}</td>
-                  <td>{device.device_type}</td>
+                  <td>{findDeviceTypeDisplayName(deviceTypes || [], device.device_type)}</td>
                   <td>{device.ip_address}</td>
                   <td>{device.port}</td>
                   <td>{device.username}</td>
@@ -85,7 +86,7 @@ const DeviceListPage = () => {
                       variant="warning"
                       size="sm"
                       className="me-2"
-                      onClick={() => navigate(`/devices/edit/${device.id}`)}
+                      onClick={() => navigate(`/devices/edit/${device.id}`, { state: { device: { ...device, id: Number(device.id) } } })}
                     >
                       Edit
                     </Button>

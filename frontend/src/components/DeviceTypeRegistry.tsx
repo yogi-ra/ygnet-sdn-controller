@@ -37,6 +37,27 @@ export const DeviceTypeRegistryProvider: React.FC<{ children: ReactNode }> = ({ 
       theme: 'cisco',
       featureGroups: ['System', 'Interfaces', 'VLANs', 'Security', 'Discovery', 'Network'],
     },
+    'ubiquiti_edgerouter': {
+      name: 'ubiquiti_edgerouter',
+      displayName: 'Ubiquiti EdgeRouter',
+      icon: 'router',
+      theme: 'ubiquiti',
+      featureGroups: ['System', 'Interfaces', 'Routing', 'Security', 'Discovery', 'Network'],
+    },
+    'ubiquiti_edgeswitch': {
+      name: 'ubiquiti_edgeswitch',
+      displayName: 'Ubiquiti EdgeSwitch',
+      icon: 'switch',
+      theme: 'ubiquiti',
+      featureGroups: ['System', 'Interfaces', 'VLANs', 'Security', 'Discovery', 'Network'],
+    },
+    'ubiquiti_unifiswitch': {
+      name: 'ubiquiti_unifiswitch',
+      displayName: 'Ubiquiti UniFi Switch',
+      icon: 'switch',
+      theme: 'ubiquiti',
+      featureGroups: ['System', 'Interfaces', 'VLANs', 'Security', 'Discovery', 'Network'],
+    },
   };
 
   // State for device types

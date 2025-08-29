@@ -1,5 +1,11 @@
 import sys
-sys.path.insert(0, '/home/yogi/random/networking/sdn/ygnet-sdn-controller/src')
+import os
+from dotenv import load_dotenv
+
+# Load test environment variables
+load_dotenv(os.path.join(os.path.dirname(__file__), ".env.test"))
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
 import pytest
 from unittest.mock import MagicMock
@@ -22,8 +28,11 @@ def mock_connection_manager_instance(mocker):
     # Mock the get_connection method on the instance
     mock_instance.get_connection.side_effect = lambda *args, **kwargs: create_future_with_result(MagicMock())
 
-    # Mock the send_command method on the instance
-    mock_instance.send_command.side_effect = lambda *args, **kwargs: create_future_with_result("mocked command output")
+    # Mock the send_command method on the instance to properly handle device_info and command parameters
+    def mock_send_command(device_info, command, netmiko_device_type=None, **kwargs):
+        return create_future_with_result(f"mocked output for {command}")
+    
+    mock_instance.send_command.side_effect = mock_send_command
 
     return {"get_connection": mock_instance.get_connection, "send_command": mock_instance.send_command}
 

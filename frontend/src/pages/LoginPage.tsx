@@ -2,20 +2,33 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Form, Button, Container, Row, Col, Alert } from 'react-bootstrap';
 import { useAuth } from '../hooks/useAuth';
+import { isTokenExpired } from '../utils/authUtils';
 
 const LoginPage = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const { login, token } = useAuth();
+  const { login, token, isLoading } = useAuth();
 
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (token) {
-      navigate('/dashboard');
+    if (token && !isTokenExpired(token)) {
+      // Check if there's a saved redirect URL
+      const redirectUrl = localStorage.getItem('redirectAfterLogin');
+      if (redirectUrl) {
+        localStorage.removeItem('redirectAfterLogin');
+        navigate(redirectUrl);
+      } else {
+        navigate('/dashboard');
+      }
     }
   }, [token, navigate]);
+
+  // Show loading state while authentication is being checked
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,7 +49,15 @@ const LoginPage = () => {
 
       const data = await response.json();
       login(data.access_token);
-      navigate('/dashboard');
+      
+      // Check if there's a saved redirect URL
+      const redirectUrl = localStorage.getItem('redirectAfterLogin');
+      if (redirectUrl) {
+        localStorage.removeItem('redirectAfterLogin');
+        navigate(redirectUrl);
+      } else {
+        navigate('/dashboard');
+      }
     } catch (err) {
       setError('Invalid username or password');
     }

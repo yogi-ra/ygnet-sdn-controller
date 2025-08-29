@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { Form, Button, Row, Col } from "react-bootstrap";
+import { Form, Button, Row, Col, Spinner } from "react-bootstrap";
+import { useConfig } from "../context/ConfigContext";
 
 interface DeviceFormData {
   name: string;
@@ -18,6 +19,7 @@ interface DeviceFormProps {
 }
 
 const DeviceForm = ({ initialData, onSubmit, isEditMode = false }: DeviceFormProps) => {
+  const { deviceTypes } = useConfig();
   const [name, setName] = useState(initialData?.name || "");
   const [deviceType, setDeviceType] = useState(initialData?.device_type || "");
   const [ipAddress, setIpAddress] = useState(initialData?.ip_address || "");
@@ -50,6 +52,18 @@ const DeviceForm = ({ initialData, onSubmit, isEditMode = false }: DeviceFormPro
     });
   };
 
+  // Show loading state while device types are being fetched
+  if (deviceTypes === null) {
+    return (
+      <div className="d-flex justify-content-center align-items-center" style={{ height: '200px' }}>
+        <Spinner animation="border" role="status">
+          <span className="visually-hidden">Loading device types...</span>
+        </Spinner>
+        <span className="ms-2">Loading device types...</span>
+      </div>
+    );
+  }
+
   return (
     <Form onSubmit={handleSubmit}>
       <Form.Group className="mb-3" controlId="deviceName">
@@ -71,12 +85,18 @@ const DeviceForm = ({ initialData, onSubmit, isEditMode = false }: DeviceFormPro
           required
         >
           <option value="">Select a device type</option>
-          <option value="cisco_ios_router">Cisco IOS Router</option>
-          <option value="cisco_ios_switch">Cisco IOS Switch</option>
-          <option value="aruba_procurve">Aruba Procurve</option>
-          <option value="ubiquiti_edgerouter">Ubiquiti Edge Router</option>
-          <option value="ubiquiti_edgeswitch">Ubiquiti Unifi Switch</option>
-          <option value="juniper_junos">Juniper Junos</option> {/* Added Aruba option */}
+          {Array.isArray(deviceTypes) && deviceTypes.length > 0 ? (
+            deviceTypes.map((type) => (
+              <option key={type.key} value={type.key}>
+                {type.display_name}
+              </option>
+            ))
+          ) : (
+            // Show a message if no device types are available
+            <option value="" disabled>
+              No device types available
+            </option>
+          )}
         </Form.Select>
       </Form.Group>
 

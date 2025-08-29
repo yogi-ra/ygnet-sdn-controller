@@ -1,12 +1,13 @@
-
 import { QueryClient } from "@tanstack/react-query";
+import * as FeatureTypes from "./types/featureTypes.ts";
+import type { DeviceTypeInfo } from "./types/deviceTypes.ts";
 
 export const queryClient = new QueryClient();
 
 export class UnauthorizedError extends Error {}
 
 export interface Device {
-  id: string;
+  id: number; // Changed from string to number to match backend schema
   name: string;
   device_type: string;
   ip_address: string;
@@ -14,8 +15,6 @@ export interface Device {
   username: string;
   is_reachable?: boolean;
 }
-
-import * as FeatureTypes from "./types/featureTypes.ts";
 
 const getAuthHeaders = (token: string | null) => {
   const headers: HeadersInit = {
@@ -36,6 +35,23 @@ export const fetchSupportedFeatures = async (token: string | null): Promise<Reco
       throw new UnauthorizedError("Unauthorized");
     }
     throw new Error(`Failed to fetch supported features: ${response.statusText}`);
+  }
+
+  return response.json();
+};
+
+// DeviceTypeInfo is imported from ./types/deviceTypes.ts
+export type { DeviceTypeInfo };
+
+export const fetchDeviceTypes = async (token: string | null): Promise<DeviceTypeInfo[]> => {
+  const headers = getAuthHeaders(token);
+  const response = await fetch("/api/devices/device-types", { headers });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new UnauthorizedError("Unauthorized");
+    }
+    throw new Error(`Failed to fetch device types: ${response.statusText}`);
   }
 
   return response.json();

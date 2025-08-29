@@ -19,7 +19,7 @@ def connection_manager_instance():
     yield manager
     manager._connections = {}
 
-def test_creates_separate_connections_for_different_device_types(connection_manager_instance):
+def test_creates_separate_connections_for_different_device_types(mocker, connection_manager_instance):
     """Verify that the ConnectionManager creates different connections for different device_types with the same IP."""
     router_info = DeviceConnectionInfo(
         name="device.example.com",
@@ -28,25 +28,37 @@ def test_creates_separate_connections_for_different_device_types(connection_mana
         username="user",
         password="pass"
     )
-    switch_info = DeviceConnectionInfo(
+    juniper_info = DeviceConnectionInfo(
         name="device.example.com",
         ip_address="10.1.1.1",
-        device_type="cisco_ios_switch",
+        device_type="juniper_junos",
         username="user",
         password="pass"
     )
+
+    # Mock the ConnectHandler to avoid real connections
+    mock_connect_handler = mocker.patch("src.connection_manager.ConnectHandler")
+    mock_connection = MagicMock()
+    mock_connect_handler.return_value = mock_connection
 
     # Get connection for the router
     conn1_future = connection_manager_instance.get_connection(router_info, router_info.device_type)
     conn1 = conn1_future.result() # Get the actual connection from the Future
 
-    # Get connection for the switch
-    conn2_future = connection_manager_instance.get_connection(switch_info, switch_info.device_type)
+    # Get connection for the Juniper device
+    conn2_future = connection_manager_instance.get_connection(juniper_info, juniper_info.device_type)
     conn2 = conn2_future.result() # Get the actual connection from the Future
 
-    assert conn1 is not conn2
+    assert conn1 is mock_connection
+    assert conn2 is mock_connection
+    # Verify that ConnectHandler was called twice with different device types
+    assert mock_connect_handler.call_count == 2
+    call_args_list = mock_connect_handler.call_args_list
+    # The first call should be for cisco_ios and the second for juniper_junos
+    assert call_args_list[0][1]["device_type"] == "cisco_ios"
+    assert call_args_list[1][1]["device_type"] == "juniper_junos"
 
-def test_get_connection_passes_timeout(connection_manager_instance):
+def test_get_connection_passes_timeout(mocker, connection_manager_instance):
     """Verify that the ConnectionManager passes the correct timeout to ConnectHandler."""
     device_info = DeviceConnectionInfo(
         name="device.example.com",
@@ -56,4 +68,15 @@ def test_get_connection_passes_timeout(connection_manager_instance):
         password="pass"
     )
 
+    # Mock the ConnectHandler to avoid real connections
+    mock_connect_handler = mocker.patch("src.connection_manager.ConnectHandler")
+    mock_connection = MagicMock()
+    mock_connect_handler.return_value = mock_connection
+
     connection_manager_instance.get_connection(device_info, device_info.device_type).result() # Call result() on the Future
+    
+    # Verify that ConnectHandler was called with the correct timeout
+    mock_connect_handler.assert_called_once()
+    call_kwargs = mock_connect_handler.call_args[1]
+    assert "timeout" in call_kwargs
+    assert call_kwargs["timeout"] == settings.NETMIKO_TIMEOUT

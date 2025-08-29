@@ -15,7 +15,7 @@ def get_handler_from_device_id(device_id: int, db: Session):
         raise HTTPException(status_code=404, detail="Device not found")
 
     try:
-        decrypted_password = decrypt_data(db_device.encrypted_password)
+        decrypted_password = decrypt_data(db_device.password)
         if decrypted_password is None:
             raise HTTPException(status_code=500, detail="Failed to decrypt device password. Check encryption key.")
         decrypted_secret = decrypt_data(db_device.secret) if db_device.secret else None

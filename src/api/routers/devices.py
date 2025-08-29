@@ -27,6 +27,30 @@ router = APIRouter(
 )
 
 
+# Map device type keys to display names
+DEVICE_TYPE_DISPLAY_NAMES = {
+    "cisco_ios_router": "Cisco IOS Router",
+    "cisco_ios_switch": "Cisco IOS Switch",
+    "aruba_procurve": "Aruba Procurve",
+    "ubiquiti_edgerouter": "Ubiquiti Edge Router",
+    "ubiquiti_edgeswitch": "Ubiquiti Edge Switch",
+    "ubiquiti_unifiswitch": "Ubiquiti UniFi Switch",
+}
+
+@router.get("/device-types", dependencies=[Depends(require_read_privileges)])
+def get_device_types():
+    """
+    Returns a list of supported device types with their display names.
+    """
+    device_types = []
+    for key in DEVICE_HANDLER_MAP.keys():
+        device_types.append({
+            "key": key,
+            "display_name": DEVICE_TYPE_DISPLAY_NAMES.get(key, key)
+        })
+    return device_types
+
+
 @router.get("/supported-features", response_model=Dict[str, List[str]], dependencies=[Depends(require_read_privileges)])
 def get_supported_features():
     """

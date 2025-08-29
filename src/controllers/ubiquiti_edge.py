@@ -165,4 +165,46 @@ class UbiquitiEdgeSwitch(UbiquitiEdge):
     def __init__(self, device_info):
         super().__init__(device_info)
 
+    def connect(self) -> None:
+        """
+        Establishes an SSH connection to the device and enters CLI mode.
+        For Ubiquiti devices, we need to use 'telnet localhost' to enter CLI mode.
+        """
+        # First establish the standard connection
+        super().connect()
+        
+        # Then enter CLI mode for Ubiquiti EdgeSwitch devices
+        try:
+            if self.connection:
+                # Send the 'telnet localhost' command to enter CLI mode
+                self.connection.write_channel("telnet localhost\n")
+                # Wait for the prompt to change
+                output = self.connection.read_until_pattern("#", read_timeout=10)
+                self.logger.info(f"Entered CLI mode via telnet. Output: {output}")
+        except Exception as e:
+            self.logger.error(f"Failed to enter CLI mode: {e}")
+            raise
+
+    def send_command(self, command: str, **kwargs) -> str:
+        """
+        Sends a single command to the device, ensuring we're in CLI mode.
+        """
+        # Make sure we're connected and in CLI mode
+        if not self.connection:
+            self.connect()
+            
+        # Send the command
+        return super().send_command(command, **kwargs)
+
+    def send_multiline_commands(self, command_patterns: List[List[str]]) -> str:
+        """
+        Sends multiple commands to the device, handling additional prompts based on patterns.
+        """
+        # Make sure we're connected and in CLI mode
+        if not self.connection:
+            self.connect()
+            
+        # Send the multiline commands
+        return super().send_multiline_commands(command_patterns)
+
 

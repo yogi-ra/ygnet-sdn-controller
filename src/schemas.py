@@ -10,6 +10,7 @@ class DeviceType(str, Enum):
     ARUBA_PROCURVE = "aruba_procurve"
     UBIQUITI_EDGEROUTER = "ubiquiti_edgerouter"
     UBIQUITI_EDGESWITCH = "ubiquiti_edgeswitch"
+    UBIQUITI_UNIFISWITCH = "ubiquiti_unifiswitch"
 
 
 # --- Device Schemas ---

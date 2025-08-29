@@ -10,7 +10,7 @@ class CRUD:
     def create_user(self, db: Session, user: schemas.UserCreate):
         hashed_password = security.get_password_hash(user.password)
         db_user = models.User(
-            username=user.username, hashed_password=hashed_password, role=user.role
+            username=user.username, password=hashed_password, role=user.role
         )
         db.add(db_user)
         db.commit()
@@ -47,7 +47,7 @@ class CRUD:
             port=device.port,
             device_type=device.device_type,
             username=device.username,
-            encrypted_password=encrypted_password,
+            password=encrypted_password,
             secret=encrypted_secret,
             is_reachable=False,  # Initialize as unreachable
         )
@@ -68,11 +68,12 @@ class CRUD:
             update_data = device_update.model_dump(exclude_unset=True)
 
             if "password" in update_data:
-                update_data["encrypted_password"] = security.encrypt_data(
+                update_data["password"] = security.encrypt_data(
                     update_data.pop("password")
                 )
             if "secret" in update_data:
-                update_data["secret"] = security.encrypt_data(update_data.pop("secret"))
+                secret_value = update_data.pop("secret")
+                update_data["secret"] = security.encrypt_data(secret_value) if secret_value else None
 
             for key, value in update_data.items():
                 setattr(db_device, key, value)

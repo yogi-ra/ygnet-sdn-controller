@@ -3,8 +3,11 @@ import os
 from dotenv import load_dotenv
 from urllib.parse import quote_plus
 
+# Load environment variables
 load_dotenv()
 
+# Check if we're running tests
+is_testing = os.environ.get("TESTING") == "True"
 
 class Settings(BaseSettings):
     DATABASE_BASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./sdn_project.db")

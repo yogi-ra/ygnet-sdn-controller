@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Container, Card, Row, Col, Alert, Spinner } from "react-bootstrap";
 import { useAuth } from "../hooks/useAuth";
 import DeviceForm from "../components/DeviceForm";
 
 interface Device {
-  id: string;
+  id: number; // Changed from string to number to match backend schema
   name: string;
   device_type: string;
   ip_address: string;
@@ -15,52 +15,26 @@ interface Device {
 
 const EditDevicePage = () => {
   const { id } = useParams<{ id: string }>();
+  const location = useLocation();
   const navigate = useNavigate();
   const { token, logout } = useAuth();
   const [device, setDevice] = useState<Device | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false); // No longer need to fetch from server
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchDeviceDetails = async () => {
-      if (!token) {
-        setError("No authentication token found. Please log in.");
-        logout();
-        navigate("/login");
-        return;
-      }
-
-      try {
-        const response = await fetch(`/api/devices/${id}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        if (response.status === 401) {
-          setError("Session expired or unauthorized. Please log in again.");
-          logout();
-          navigate("/login");
-          return;
-        }
-
-        if (!response.ok) {
-          throw new Error(`Failed to fetch device details: ${response.statusText}`);
-        }
-
-        const data: Device = await response.json();
-        setDevice(data);
-      } catch (err: any) {
-        console.error("Error fetching device details:", err);
-        setError(err.message || "Failed to load device details.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchDeviceDetails();
-  }, [id, token, navigate, logout]);
+    // Get device data from location state (passed from DeviceListPage)
+    const locationState = location.state as { device?: Device };
+    
+    if (locationState?.device && locationState.device.id.toString() === id) {
+      // Use device data passed from DeviceListPage
+      setDevice(locationState.device);
+    } else {
+      // Fallback: If no device data in location state, show error
+      setError("Device data not available. Please go back and try again.");
+    }
+  }, [id, location.state]);
 
   const handleUpdateDevice = async (formData: any) => {
     setError(null);

@@ -9,6 +9,7 @@ NETMIKO_DEVICE_TYPE_MAP = {
     "cisco_ios_router": "cisco_ios",
     "cisco_ios_switch": "cisco_ios",
     "aruba_procurve": "hp_procurve", # Assuming hp_procurve is the Netmiko type for Aruba Procurve
+    "ubiquiti_unifiswitch": "ubiquiti_unifiswitch_ssh",
     # Add other mappings as needed
 }
 

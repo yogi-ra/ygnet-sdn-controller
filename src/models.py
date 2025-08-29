@@ -7,7 +7,7 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True, nullable=False)
-    hashed_password = Column(String, nullable=False)
+    password = Column(String, nullable=False)
     role = Column(String, default="user", nullable=False)  # e.g., "admin", "user"
 
 
@@ -20,6 +20,6 @@ class NetworkDevice(Base):
     port = Column(Integer, default=22, nullable=False)
     device_type = Column(String, nullable=False)  # Our internal granular type
     username = Column(String, nullable=False)
-    encrypted_password = Column(String, nullable=False)  # Password is encrypted
+    password = Column(String, nullable=False)  # Password is encrypted
     secret = Column(String, nullable=True)  # Enable secret, also encrypted
     is_reachable = Column(Boolean, default=False) # New field for reachability status

@@ -20,7 +20,7 @@ def login_for_access_token(data: LoginRequest, db: Session = Depends(get_db)):
     Logs in a user and returns an access token.
     """
     user = crud.get_user_by_username(db, username=data.username)
-    if not user or not security.verify_password(data.password, user.hashed_password):
+    if not user or not security.verify_password(data.password, user.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",

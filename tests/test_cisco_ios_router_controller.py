@@ -61,7 +61,6 @@ def test_check_reachability_raises_timeout_error(sample_cisco_router_info, mock_
 # These tests are for methods in CiscoIosDevice, but use the router info fixture
 def test_cisco_get_version_info(mocker, sample_cisco_router_info, mock_connection_manager_instance):
     """Test the get_version_info method for Cisco IOS devices."""
-    mock_parse_cli_output = mocker.patch("src.controllers.base.BaseDevice.parse_cli_output")
     raw_version_output = "raw output of show version"
     expected_data = [
         {
@@ -70,39 +69,39 @@ def test_cisco_get_version_info(mocker, sample_cisco_router_info, mock_connectio
             "hostname": "Router1",
         }
     ]
-    mock_connection_manager_instance["send_command"].side_effect = lambda device_info, command, **kwargs: create_future_with_result(raw_version_output)
-    mock_parse_cli_output.return_value = expected_data
+    mock_connection_manager_instance["send_command"].side_effect = lambda device_info, command, netmiko_device_type=None, **kwargs: create_future_with_result(raw_version_output)
 
     handler = get_device_handler(sample_cisco_router_info)
+    # Mock the parse_cli_output method on the specific handler instance
+    handler.parse_cli_output = mocker.MagicMock(return_value=expected_data)
+
     with handler:
         version_info = handler.system.get_version_info()
 
     mock_connection_manager_instance["send_command"].assert_called_once_with(sample_cisco_router_info, "show version", handler.netmiko_device_type)
-    mock_parse_cli_output.assert_called_once_with(
-        "show version", raw_version_output, handler.device_info.device_type, handler.netmiko_device_type
-    )
-    assert version_info == expected_data[0]
+    handler.parse_cli_output.assert_called_once_with("show version", raw_version_output)
+    assert version_info == expected_data
 
 
 def test_cisco_get_interfaces_brief(mocker, sample_cisco_router_info, mock_connection_manager_instance):
     """Test the get_interfaces_brief method."""
-    mock_parse_cli_output = mocker.patch("src.controllers.base.BaseDevice.parse_cli_output")
     raw_interfaces_brief_output = "raw output of show ip interface brief"
     expected_data = [
         {"interface": "GigabitEthernet0/0", "ip_address": "192.168.1.1", "status": "up", "proto": "up"},
         {"interface": "Loopback0", "ip_address": "10.0.0.1", "status": "up", "proto": "up"},
     ]
-    mock_connection_manager_instance["send_command"].side_effect = lambda device_info, command, **kwargs: create_future_with_result(raw_interfaces_brief_output)
-    mock_parse_cli_output.return_value = expected_data
+    mock_connection_manager_instance["send_command"].side_effect = lambda device_info, command, netmiko_device_type=None, **kwargs: create_future_with_result(raw_interfaces_brief_output)
 
     handler = get_device_handler(sample_cisco_router_info)
+    # Mock the parse_cli_output method on the specific handler instance
+    handler.parse_cli_output = mocker.MagicMock(return_value=expected_data)
+
     with handler:
         interfaces = handler.interfaces.get_interfaces_brief()
 
     mock_connection_manager_instance["send_command"].assert_called_once_with(sample_cisco_router_info, "show ip interface brief", handler.netmiko_device_type)
-    mock_parse_cli_output.assert_called_once_with(
-        "show ip interface brief", raw_interfaces_brief_output, handler.device_info.device_type, handler.netmiko_device_type
-    )
+    handler.parse_cli_output.assert_called_once_with("show ip interface brief", raw_interfaces_brief_output)
+    assert interfaces == expected_data
 
 
 def test_cisco_get_hostname(mocker, sample_cisco_router_info):
@@ -111,7 +110,7 @@ def test_cisco_get_hostname(mocker, sample_cisco_router_info):
     """
     # This test relies on the mock of get_version_info
     mock_get_version_info = mocker.patch.object(CiscoIosSystem, "get_version_info")
-    mock_get_version_info.return_value = {"hostname": "MyRouter"}
+    mock_get_version_info.return_value = [{"hostname": "MyRouter"}]
 
     handler = get_device_handler(sample_cisco_router_info)
     hostname = handler.system.get_hostname()
@@ -124,42 +123,39 @@ def test_cisco_get_active_users(mocker, sample_cisco_router_info, mock_connectio
     """
     Test the get_active_users method for Cisco IOS devices.
     """
-    mock_parse_cli_output = mocker.patch("src.controllers.base.BaseDevice.parse_cli_output")
     raw_active_users_output = "raw output of show users"
     expected_data = [
         {"user": "admin", "line": "vty0", "idle": "00:00:00", "location": "192.168.1.100"},
         {"user": "guest", "line": "vty1", "idle": "00:01:00", "location": "192.168.1.101"},
     ]
-    mock_connection_manager_instance["send_command"].side_effect = lambda device_info, command, **kwargs: create_future_with_result(raw_active_users_output)
-    mock_parse_cli_output.return_value = expected_data
+    mock_connection_manager_instance["send_command"].side_effect = lambda device_info, command, netmiko_device_type=None, **kwargs: create_future_with_result(raw_active_users_output)
 
     handler = get_device_handler(sample_cisco_router_info)
+    # Mock the parse_cli_output method on the specific handler instance
+    handler.parse_cli_output = mocker.MagicMock(return_value=expected_data)
+
     with handler:
         active_users = handler.system.get_active_users()
 
     mock_connection_manager_instance["send_command"].assert_called_once_with(sample_cisco_router_info, "show users", handler.netmiko_device_type)
-    mock_parse_cli_output.assert_called_once_with(
-        "show users", raw_active_users_output, handler.device_info.device_type, handler.netmiko_device_type
-    )
+    handler.parse_cli_output.assert_called_once_with("show users", raw_active_users_output)
     assert active_users == expected_data
 
 def test_cisco_get_clock(sample_cisco_router_info, mocker, mock_connection_manager_instance):
     """
     Test the get_clock method.
     """
-    mock_parse_cli_output = mocker.patch("src.controllers.base.BaseDevice.parse_cli_output")
     real_device_clock_output = "*13:26:03.945 UTC Thu Aug 21 2025"
     expected_data = "13:26:03.945 UTC Thu Aug 21 2025"
-    mock_connection_manager_instance["send_command"].side_effect = lambda device_info, command, **kwargs: create_future_with_result(real_device_clock_output)
+    mock_connection_manager_instance["send_command"].side_effect = lambda device_info, command, netmiko_device_type=None, **kwargs: create_future_with_result(real_device_clock_output)
 
     handler = get_device_handler(sample_cisco_router_info)
+
     with handler:
         clock = handler.system.get_clock()
 
     mock_connection_manager_instance["send_command"].assert_called_once_with(sample_cisco_router_info, "show clock", handler.netmiko_device_type)
-    mock_parse_cli_output.assert_called_once_with(
-        "show clock", real_device_clock_output, handler.device_info.device_type, handler.netmiko_device_type
-    )
+    # get_clock doesn't use parse_cli_output, so we don't assert its call
     assert clock == expected_data
 
 
@@ -168,23 +164,22 @@ def test_cisco_router_get_routing_table(mocker, sample_cisco_router_info, mock_c
     """
     Test the get_routing_table method for Cisco IOS Router devices.
     """
-    mock_parse_cli_output = mocker.patch("src.controllers.base.BaseDevice.parse_cli_output")
     raw_routing_table_output = "raw output of show ip route"
     expected_data = [
         {"protocol": "C", "network": "192.168.1.0/24", "nexthop_ip": "0.0.0.0", "nexthop_if": "GigabitEthernet0/0"},
         {"protocol": "S", "network": "0.0.0.0/0", "nexthop_ip": "10.0.0.1", "nexthop_if": "GigabitEthernet0/1"},
     ]
-    mock_connection_manager_instance["send_command"].side_effect = lambda device_info, command, **kwargs: create_future_with_result(raw_routing_table_output)
-    mock_parse_cli_output.return_value = expected_data
+    mock_connection_manager_instance["send_command"].side_effect = lambda device_info, command, netmiko_device_type=None, **kwargs: create_future_with_result(raw_routing_table_output)
 
     handler = get_device_handler(sample_cisco_router_info)
+    # Mock the parse_cli_output method on the specific handler instance
+    handler.parse_cli_output = mocker.MagicMock(return_value=expected_data)
+
     with handler:
         routing_table = handler.routing.get_routing_table()
 
     mock_connection_manager_instance["send_command"].assert_called_once_with(sample_cisco_router_info, "show ip route", handler.netmiko_device_type)
-    mock_parse_cli_output.assert_called_once_with(
-        "show ip route", raw_routing_table_output, handler.device_info.device_type, handler.netmiko_device_type
-    )
+    handler.parse_cli_output.assert_called_once_with("show ip route", raw_routing_table_output)
     assert routing_table == expected_data
 
 
@@ -192,22 +187,21 @@ def test_cisco_router_get_bgp_summary(mocker, sample_cisco_router_info, mock_con
     """
     Test the get_bgp_summary method for Cisco IOS Router devices.
     """
-    mock_parse_cli_output = mocker.patch("src.controllers.base.BaseDevice.parse_cli_output")
     raw_bgp_summary_output = "raw output of show ip bgp summary"
     expected_data = [
         {"neighbor": "10.0.0.2", "remote_as": "65002", "state_pfxrcd": "Idle"},
     ]
-    mock_connection_manager_instance["send_command"].side_effect = lambda device_info, command, **kwargs: create_future_with_result(raw_bgp_summary_output)
-    mock_parse_cli_output.return_value = expected_data
+    mock_connection_manager_instance["send_command"].side_effect = lambda device_info, command, netmiko_device_type=None, **kwargs: create_future_with_result(raw_bgp_summary_output)
 
     handler = get_device_handler(sample_cisco_router_info)
+    # Mock the parse_cli_output method on the specific handler instance
+    handler.parse_cli_output = mocker.MagicMock(return_value=expected_data)
+
     with handler:
         bgp_summary = handler.routing.get_bgp_summary()
 
     mock_connection_manager_instance["send_command"].assert_called_once_with(sample_cisco_router_info, "show ip bgp summary", handler.netmiko_device_type)
-    mock_parse_cli_output.assert_called_once_with(
-        "show ip bgp summary", raw_bgp_summary_output, handler.device_info.device_type, handler.netmiko_device_type
-    )
+    handler.parse_cli_output.assert_called_once_with("show ip bgp summary", raw_bgp_summary_output)
     assert bgp_summary == expected_data
 
 
@@ -215,13 +209,13 @@ def test_cisco_get_local_users(sample_cisco_router_info, mocker, mock_connection
     """
     Test the get_local_users method for Cisco IOS devices.
     """
-    mock_parse_cli_output = mocker.patch("src.controllers.base.BaseDevice.parse_cli_output")
+    # mock_parse_cli_output = mocker.patch("src.parsing_utils.parse_cli_output")
     raw_output = (
         "username admin privilege 15 secret 5 $1$abc$xyz\n"
         "username guest password 0 guestpass\n"
         "username network_ops privilege 1 secret 5 $1$def$uvw"
     )
-    mock_connection_manager_instance["send_command"].side_effect = lambda device_info, command, **kwargs: create_future_with_result(raw_output)
+    mock_connection_manager_instance["send_command"].side_effect = lambda device_info, command, netmiko_device_type=None, **kwargs: create_future_with_result(raw_output)
 
     handler = get_device_handler(sample_cisco_router_info)
     with handler:

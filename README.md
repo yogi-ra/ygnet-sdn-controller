@@ -31,6 +31,16 @@ It provides a RESTful interface to manage and interact with network devices from
 - **`src/tasks.py`**: Scheduler for unknown device update.
 - **`src/config.py`**: Application settings and environment.
 
+## Supported Device Types
+
+- **Cisco IOS Router** (`cisco_ios_router`): For Cisco routers running IOS.
+- **Cisco IOS Switch** (`cisco_ios_switch`): For Cisco switches running IOS.
+- **Juniper Junos** (`juniper_junos`): For Juniper devices running Junos.
+- **Aruba ProCurve** (`aruba_procurve`): For Aruba ProCurve switches.
+- **Ubiquiti EdgeRouter** (`ubiquiti_edgerouter`): For Ubiquiti EdgeRouter devices.
+- **Ubiquiti EdgeSwitch** (`ubiquiti_edgeswitch`): For Ubiquiti EdgeSwitch devices.
+- **Ubiquiti UniFi Switch** (`ubiquiti_unifiswitch`): For Ubiquiti UniFi switches (e.g., USW-Lite-8-POE).
+
 ## Building and Running
 
 ### Prerequisites

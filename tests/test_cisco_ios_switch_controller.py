@@ -30,7 +30,6 @@ def test_cisco_switch_get_vlan_brief(
     mocker, sample_cisco_switch_info, mock_connection_manager_instance
 ):
     """Test the get_vlan_brief method for Cisco IOS Switch devices."""
-    mock_parse_cli_output = mocker.patch("src.controllers.base.BaseDevice.parse_cli_output")
     expected_data = [
         {
             "vlan_id": "1",
@@ -42,10 +41,12 @@ def test_cisco_switch_get_vlan_brief(
     ]
     # mock_connection_manager.return_value.send_command.return_value = "raw output of show vlan brief" # Removed
     raw_vlan_brief_output = "raw output of show vlan brief"
-    mock_connection_manager_instance["send_command"].side_effect = lambda device_info, command, **kwargs: create_future_with_result(raw_vlan_brief_output) # Added
-    mock_parse_cli_output.return_value = expected_data
+    mock_connection_manager_instance["send_command"].side_effect = lambda device_info, command, netmiko_device_type=None, **kwargs: create_future_with_result(raw_vlan_brief_output)
 
     handler = get_device_handler(sample_cisco_switch_info)
+    # Mock the parse_cli_output method on the specific handler instance
+    handler.parse_cli_output = mocker.MagicMock(return_value=expected_data)
+
     with handler:
         vlan_brief = handler.vlans.get_vlan_brief()
 
@@ -54,12 +55,7 @@ def test_cisco_switch_get_vlan_brief(
     )
     # mock_connection_manager.return_value.send_command.assert_called_once_with("show vlan brief") # Removed
     mock_connection_manager_instance["send_command"].assert_called_once_with(sample_cisco_switch_info, "show vlan brief", handler.netmiko_device_type) # Added
-    mock_parse_cli_output.assert_called_once_with(
-        "show vlan brief",
-        raw_vlan_brief_output,
-        handler.device_info.device_type,
-        handler.netmiko_device_type,
-    )
+    handler.parse_cli_output.assert_called_once_with("show vlan brief", raw_vlan_brief_output)
     assert vlan_brief == expected_data
 
 
@@ -67,7 +63,6 @@ def test_cisco_switch_get_vlan_details(
     mocker, sample_cisco_switch_info, mock_connection_manager_instance
 ):
     """Test the get_vlan_details method for Cisco IOS Switch devices."""
-    mock_parse_cli_output = mocker.patch("src.controllers.base.BaseDevice.parse_cli_output")
     expected_data = [
         {
             "vlan_id": "1",
@@ -79,10 +74,12 @@ def test_cisco_switch_get_vlan_details(
     ]
     # mock_connection_manager.return_value.send_command.return_value = "raw output of show vlan" # Removed
     raw_vlan_details_output = "raw output of show vlan"
-    mock_connection_manager_instance["send_command"].side_effect = lambda device_info, command, **kwargs: create_future_with_result(raw_vlan_details_output) # Added
-    mock_parse_cli_output.return_value = expected_data
+    mock_connection_manager_instance["send_command"].side_effect = lambda device_info, command, netmiko_device_type=None, **kwargs: create_future_with_result(raw_vlan_details_output)
 
     handler = get_device_handler(sample_cisco_switch_info)
+    # Mock the parse_cli_output method on the specific handler instance
+    handler.parse_cli_output = mocker.MagicMock(return_value=expected_data)
+
     with handler:
         vlan_details = handler.vlans.get_vlan_details()
 
@@ -91,12 +88,7 @@ def test_cisco_switch_get_vlan_details(
     )
     # mock_connection_manager.return_value.send_command.assert_called_once_with("show vlan") # Removed
     mock_connection_manager_instance["send_command"].assert_called_once_with(sample_cisco_switch_info, "show vlan", handler.netmiko_device_type) # Added
-    mock_parse_cli_output.assert_called_once_with(
-        "show vlan",
-        raw_vlan_details_output,
-        handler.device_info.device_type,
-        handler.netmiko_device_type,
-    )
+    handler.parse_cli_output.assert_called_once_with("show vlan", raw_vlan_details_output)
     assert vlan_details == expected_data
 
 
@@ -105,7 +97,6 @@ def test_cisco_switch_get_vtp_status(
 ):
     """Test the get_vtp_status method for Cisco IOS Switch devices."""
 
-    mock_parse_cli_output = mocker.patch("src.controllers.base.BaseDevice.parse_cli_output")
     expected_data = [
         {
             "vtp_version": "2",
@@ -117,10 +108,12 @@ def test_cisco_switch_get_vtp_status(
     ]
     # mock_send_command.return_value = "raw output of show vtp status" # Removed
     raw_vtp_status_output = "raw output of show vtp status"
-    mock_connection_manager_instance["send_command"].side_effect = lambda device_info, command, **kwargs: create_future_with_result(raw_vtp_status_output) # Added
-    mock_parse_cli_output.return_value = expected_data
+    mock_connection_manager_instance["send_command"].side_effect = lambda device_info, command, netmiko_device_type=None, **kwargs: create_future_with_result(raw_vtp_status_output)
 
     handler = get_device_handler(sample_cisco_switch_info)
+    # Mock the parse_cli_output method on the specific handler instance
+    handler.parse_cli_output = mocker.MagicMock(return_value=expected_data)
+
     with handler:
         vtp_status = handler.vlans.get_vtp_status()
 
@@ -128,12 +121,7 @@ def test_cisco_switch_get_vtp_status(
         sample_cisco_switch_info, handler.netmiko_device_type
     )
     mock_connection_manager_instance["send_command"].assert_called_once_with(sample_cisco_switch_info, "show vtp status", handler.netmiko_device_type) # Changed from mock_send_command
-    mock_parse_cli_output.assert_called_once_with(
-        "show vtp status",
-        raw_vtp_status_output,
-        handler.device_info.device_type,
-        handler.netmiko_device_type,
-    )
+    handler.parse_cli_output.assert_called_once_with("show vtp status", raw_vtp_status_output)
     assert vtp_status == expected_data
 
 
@@ -142,7 +130,6 @@ def test_cisco_switch_get_spanning_tree_summary(
 ):
     """Test the get_spanning_tree_summary method for Cisco IOS Switch devices."""
 
-    mock_parse_cli_output = mocker.patch("src.controllers.base.BaseDevice.parse_cli_output")
     expected_data = [
         {
             "vlan": "1",
@@ -154,10 +141,12 @@ def test_cisco_switch_get_spanning_tree_summary(
     ]
     # mock_send_command.return_value = "raw output of show spanning-tree summary" # Removed
     raw_spanning_tree_summary_output = "raw output of show spanning-tree summary"
-    mock_connection_manager_instance["send_command"].side_effect = lambda device_info, command, **kwargs: create_future_with_result(raw_spanning_tree_summary_output) # Added
-    mock_parse_cli_output.return_value = expected_data
+    mock_connection_manager_instance["send_command"].side_effect = lambda device_info, command, netmiko_device_type=None, **kwargs: create_future_with_result(raw_spanning_tree_summary_output)
 
     handler = get_device_handler(sample_cisco_switch_info)
+    # Mock the parse_cli_output method on the specific handler instance
+    handler.parse_cli_output = mocker.MagicMock(return_value=expected_data)
+
     with handler:
         spanning_tree_summary = handler.vlans.get_spanning_tree_summary()
 
@@ -165,12 +154,7 @@ def test_cisco_switch_get_spanning_tree_summary(
         sample_cisco_switch_info, handler.netmiko_device_type
     )
     mock_connection_manager_instance["send_command"].assert_called_once_with(sample_cisco_switch_info, "show spanning-tree summary", handler.netmiko_device_type) # Changed from mock_send_command
-    mock_parse_cli_output.assert_called_once_with(
-        "show spanning-tree summary",
-        raw_spanning_tree_summary_output,
-        handler.device_info.device_type,
-        handler.netmiko_device_type,
-    )
+    handler.parse_cli_output.assert_called_once_with("show spanning-tree summary", raw_spanning_tree_summary_output)
     assert spanning_tree_summary == expected_data
 
 
@@ -179,7 +163,6 @@ def test_cisco_switch_get_interfaces_trunk(
 ):
     """Test the get_interfaces_trunk method for Cisco IOS Switch devices."""
 
-    mock_parse_cli_output = mocker.patch("src.controllers.base.BaseDevice.parse_cli_output")
     expected_data = [
         {
             "port": "Fa0/1",
@@ -191,10 +174,12 @@ def test_cisco_switch_get_interfaces_trunk(
     ]
     # mock_send_command.return_value = "raw output of show interfaces trunk" # Removed
     raw_interfaces_trunk_output = "raw output of show interfaces trunk"
-    mock_connection_manager_instance["send_command"].side_effect = lambda device_info, command, **kwargs: create_future_with_result(raw_interfaces_trunk_output) # Added
-    mock_parse_cli_output.return_value = expected_data
+    mock_connection_manager_instance["send_command"].side_effect = lambda device_info, command, netmiko_device_type=None, **kwargs: create_future_with_result(raw_interfaces_trunk_output)
 
     handler = get_device_handler(sample_cisco_switch_info)
+    # Mock the parse_cli_output method on the specific handler instance
+    handler.parse_cli_output = mocker.MagicMock(return_value=expected_data)
+
     with handler:
         interfaces_trunk = handler.interfaces.get_interfaces_trunk()
 
@@ -202,12 +187,7 @@ def test_cisco_switch_get_interfaces_trunk(
         sample_cisco_switch_info, handler.netmiko_device_type
     )
     mock_connection_manager_instance["send_command"].assert_called_once_with(sample_cisco_switch_info, "show interfaces trunk", handler.netmiko_device_type) # Changed from mock_send_command
-    mock_parse_cli_output.assert_called_once_with(
-        "show interfaces trunk",
-        raw_interfaces_trunk_output,
-        handler.device_info.device_type,
-        handler.netmiko_device_type,
-    )
+    handler.parse_cli_output.assert_called_once_with("show interfaces trunk", raw_interfaces_trunk_output)
     assert interfaces_trunk == expected_data
 
 
@@ -216,7 +196,6 @@ def test_cisco_switch_get_interfaces_status(
 ):
     """Test the get_interfaces_status method for Cisco IOS Switch devices."""
 
-    mock_parse_cli_output = mocker.patch("src.controllers.base.BaseDevice.parse_cli_output")
     expected_data = [
         {
             "port": "Fa0/1",
@@ -239,10 +218,12 @@ def test_cisco_switch_get_interfaces_status(
     ]
     # mock_send_command.return_value = "raw output of show interfaces status" # Removed
     raw_interfaces_status_output = "raw output of show interfaces status"
-    mock_connection_manager_instance["send_command"].side_effect = lambda device_info, command, **kwargs: create_future_with_result(raw_interfaces_status_output) # Added
-    mock_parse_cli_output.return_value = expected_data
+    mock_connection_manager_instance["send_command"].side_effect = lambda device_info, command, netmiko_device_type=None, **kwargs: create_future_with_result(raw_interfaces_status_output)
 
     handler = get_device_handler(sample_cisco_switch_info)
+    # Mock the parse_cli_output method on the specific handler instance
+    handler.parse_cli_output = mocker.MagicMock(return_value=expected_data)
+
     with handler:
         interfaces_status = handler.interfaces.get_interfaces_status()
 
@@ -250,12 +231,7 @@ def test_cisco_switch_get_interfaces_status(
         sample_cisco_switch_info, handler.netmiko_device_type
     )
     mock_connection_manager_instance["send_command"].assert_called_once_with(sample_cisco_switch_info, "show interfaces status", handler.netmiko_device_type) # Changed from mock_send_command
-    mock_parse_cli_output.assert_called_once_with(
-        "show interfaces status",
-        raw_interfaces_status_output,
-        handler.device_info.device_type,
-        handler.netmiko_device_type,
-    )
+    handler.parse_cli_output.assert_called_once_with("show interfaces status", raw_interfaces_status_output)
     assert interfaces_status == expected_data
 
 
@@ -264,7 +240,6 @@ def test_cisco_switch_get_mac_address_table(
 ):
     """Test the get_mac_address_table method for Cisco IOS Switch devices."""
 
-    mock_parse_cli_output = mocker.patch("src.controllers.base.BaseDevice.parse_cli_output")
     expected_data = [
         {
             "vlan": "1",
@@ -281,10 +256,12 @@ def test_cisco_switch_get_mac_address_table(
     ]
     # mock_send_command.return_value = "raw output of show mac address-table" # Removed
     raw_mac_address_table_output = "raw output of show mac address-table"
-    mock_connection_manager_instance["send_command"].side_effect = lambda device_info, command, **kwargs: create_future_with_result(raw_mac_address_table_output) # Added
-    mock_parse_cli_output.return_value = expected_data
+    mock_connection_manager_instance["send_command"].side_effect = lambda device_info, command, netmiko_device_type=None, **kwargs: create_future_with_result(raw_mac_address_table_output)
 
     handler = get_device_handler(sample_cisco_switch_info)
+    # Mock the parse_cli_output method on the specific handler instance
+    handler.parse_cli_output = mocker.MagicMock(return_value=expected_data)
+
     with handler:
         mac_table = handler.vlans.get_mac_address_table()
 
@@ -292,10 +269,5 @@ def test_cisco_switch_get_mac_address_table(
         sample_cisco_switch_info, handler.netmiko_device_type
     )
     mock_connection_manager_instance["send_command"].assert_called_once_with(sample_cisco_switch_info, "show mac address-table", handler.netmiko_device_type) # Changed from mock_send_command
-    mock_parse_cli_output.assert_called_once_with(
-        "show mac address-table",
-        raw_mac_address_table_output,
-        handler.device_info.device_type,
-        handler.netmiko_device_type,
-    )
+    handler.parse_cli_output.assert_called_once_with("show mac address-table", raw_mac_address_table_output)
     assert mac_table == expected_data

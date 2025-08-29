@@ -16,9 +16,17 @@ import FeatureOutputPage from './pages/FeatureOutputPage';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { useAuthQueryClient } from './hooks/useAuthQueryClient';
 import AuthQueryClientProviderWrapper from './components/AuthQueryClientProviderWrapper';
+import useTokenValidation from './hooks/useTokenValidation';
 
 const MainLayout = () => {
-  const { token, logout } = useAuth();
+  const { token, logout, isLoading } = useAuth();
+  // Use the token validation hook
+  useTokenValidation();
+
+  // Show loading state while authentication is being checked
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
 
   return (
     <>
@@ -41,7 +49,7 @@ const MainLayout = () => {
       </Navbar>
       <Container fluid className="p-3">
         <Routes>
-          <Route path="/" element={<Navigate to="/login" replace />} />
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/login" element={<LoginPage />} />
           <Route
             path="/dashboard"
