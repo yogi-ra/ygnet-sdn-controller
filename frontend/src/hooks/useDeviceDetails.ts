@@ -1,8 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "./useAuth";
-import type { FeatureSchema, HeaderFieldSchema, DeviceFeaturesResponse } from "../types/featureTypes.ts";
-import { HeaderFieldType } from "../types/featureTypes.ts";
+import type { ViewFeatureSchema, ActionFeatureSchema, HeaderFieldSchema, DeviceFeaturesResponse } from "../types/featureTypes.ts";
 
 export const useDeviceDetails = (deviceId: string | undefined) => {
   const { token, logout } = useAuth();
@@ -36,7 +35,6 @@ export const useDeviceDetails = (deviceId: string | undefined) => {
       return response.json();
     },
     enabled: !!deviceId,
-    // Removed refetchInterval for static header fields
     onError: (err) => {
       console.error("Error fetching device features:", err);
       if (err.message.includes("Authentication failed") || err.message.includes("Session expired")) {
@@ -51,7 +49,6 @@ export const useDeviceDetails = (deviceId: string | undefined) => {
     queryKey: ["deviceReachability", deviceId],
     queryFn: async () => {
       if (!token) {
-        // No need to logout/navigate here, as main query handles it
         throw new Error("No authentication token found.");
       }
       const response = await fetch(`/api/devices/${deviceId}/check-reachability`, {
@@ -71,14 +68,16 @@ export const useDeviceDetails = (deviceId: string | undefined) => {
     },
   });
 
-  const features: FeatureSchema[] = data?.features || [];
+  const viewFeatures: ViewFeatureSchema[] = data?.view_features || [];
+  const actionFeatures: ActionFeatureSchema[] = data?.action_features || [];
   const headerFields: HeaderFieldSchema[] = data?.header_fields || [];
 
   return {
-    features,
+    viewFeatures,
+    actionFeatures,
     headerFields,
     loading,
     errors: { primary: primaryError?.message || null },
-    isReachable, // Include isReachable in the returned object
+    isReachable,
   };
 };

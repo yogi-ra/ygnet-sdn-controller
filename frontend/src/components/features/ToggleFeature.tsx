@@ -1,66 +1,52 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Form, Spinner, Alert } from 'react-bootstrap';
-import { type FeatureSchema, type FeatureActionRequest } from '../../types/featureTypes';
+import { type FeatureSchema } from '../../types/featureTypes';
 import { useAuth } from '../../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
+import { performFeatureAction } from '../../api';
 
 interface ToggleFeatureProps {
     feature: FeatureSchema;
     deviceId: string;
+    featureState: { [key: string]: any };
+    setFeatureState: React.Dispatch<React.SetStateAction<{ [key: string]: any }>>;
 }
 
-const ToggleFeature: React.FC<ToggleFeatureProps> = ({ feature, deviceId }) => {
+const ToggleFeature: React.FC<ToggleFeatureProps> = ({ feature, deviceId, featureState, setFeatureState }) => {
     const { token, logout } = useAuth();
     const navigate = useNavigate();
-    const [isChecked, setIsChecked] = useState<boolean>(feature.default_value || false);
+    const queryClient = useQueryClient();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
 
-    // Effect to update the toggle state if the default_value changes (e.g., live data update)
-    useEffect(() => {
-        if (feature.default_value !== undefined) {
-            setIsChecked(feature.default_value);
-        }
-    }, [feature.default_value]);
+    const isChecked = featureState[feature.name] || false;
 
     const handleToggleChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const newValue = event.target.checked;
-        setIsChecked(newValue); // Optimistic update
+        setFeatureState(prevState => ({ ...prevState, [feature.name]: newValue })); // Optimistic update
         setLoading(true);
         setError(null);
         setSuccess(null);
 
-        const actionRequest: FeatureActionRequest = {
+        const actionRequest: any = {
             feature_name: feature.name,
             value: newValue,
         };
 
         try {
-            const response = await fetch(`/api/devices/${deviceId}/action`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`,
-                },
-                body: JSON.stringify(actionRequest),
-            });
-
-            if (response.status === 401) {
-                logout();
-                navigate('/login');
-                return;
-            }
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.detail || 'Failed to perform action');
-            }
+            // Perform the action using our API function
+            await performFeatureAction(deviceId, actionRequest, token);
+            
             setSuccess('Action performed successfully!');
+            
+            // Invalidate and refetch the feature data immediately
+            await queryClient.invalidateQueries({ queryKey: ['device-feature', deviceId, feature.name] });
+            await queryClient.refetchQueries({ queryKey: ['device-feature', deviceId, feature.name] });
         } catch (err: any) {
             setError(err.message || 'An unknown error occurred.');
-            setIsChecked(!newValue); // Revert on error
+            setFeatureState(prevState => ({ ...prevState, [feature.name]: !newValue })); // Revert on error
         } finally {
             setLoading(false);
         }

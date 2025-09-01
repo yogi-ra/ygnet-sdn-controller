@@ -8,7 +8,30 @@ class CiscoIosInterfaces(BaseInterfaces):
         try:
             command = "show ip interface brief"
             raw_output = self.device_handler.send_command(command)
-            return self.device_handler.parse_cli_output(command, raw_output)
+            parsed_output = self.device_handler.parse_cli_output(command, raw_output)
+            
+            # Add 'enabled' field based on 'Status' - True if administratively up, False if administratively down
+            # Also add status information for frontend display
+            for interface in parsed_output:
+                status = interface.get("status", "").lower()
+                # Set to False only if explicitly administratively down
+                if "administratively down" in status:
+                    interface["enabled"] = False
+                else:
+                    # For all other states (up, down, etc.), consider it enabled from admin perspective
+                    interface["enabled"] = True
+                
+                # Add descriptive status for display
+                if "administratively down" in status:
+                    interface["status_description"] = "Administratively Down"
+                elif "up" in status and "down" in status:
+                    interface["status_description"] = "Operationally Down (Admin Up)"
+                elif "up" in status:
+                    interface["status_description"] = "Up"
+                else:
+                    interface["status_description"] = status.title()
+            
+            return parsed_output
         except Exception as e:
             self.device_handler.logger.error(f"Error getting interfaces brief: {e}")
             return []
@@ -82,3 +105,42 @@ class CiscoIosInterfaces(BaseInterfaces):
         except Exception as e:
             self.device_handler.logger.error(f"Error getting interface port security for {interface_name}: {e}")
             return []
+
+    def set_interface_state(self, interface_name: str, enabled: bool) -> str:
+        """
+        Enables or disables a specific interface.
+        """
+        state = "no shutdown" if enabled else "shutdown"
+        commands = [
+            f"interface {interface_name}",
+            state
+        ]
+        try:
+            output = self.device_handler.send_config_set(commands)
+            return output
+        except Exception as e:
+            self.device_handler.logger.error(f"Error setting interface state for {interface_name}: {e}")
+            return str(e)
+
+    def configure_interface(self, interface_name: str, config_commands: List[str]) -> str:
+        """
+        Configures an interface with the provided commands.
+        
+        Args:
+            interface_name: Name of the interface to configure
+            config_commands: List of configuration commands to apply
+            
+        Returns:
+            Output from the configuration commands
+        """
+        commands = [
+            f"interface {interface_name}",
+            *config_commands,
+            "exit"
+        ]
+        try:
+            output = self.device_handler.send_config_set(commands)
+            return output
+        except Exception as e:
+            self.device_handler.logger.error(f"Error configuring interface {interface_name}: {e}")
+            return str(e)

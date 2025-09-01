@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Table, Spinner, Alert } from 'react-bootstrap';
-import { type FeatureSchema, FeatureType } from '../../types/featureTypes';
+import { type FeatureSchema } from '../../types/featureTypes';
 import { useFeatureData } from '../../hooks/useFeatureData';
+import TableRowAction from './TableRowAction';
 
 interface DisplayTableFeatureProps {
     feature: FeatureSchema;
@@ -9,11 +10,14 @@ interface DisplayTableFeatureProps {
 }
 
 const DisplayTableFeature: React.FC<DisplayTableFeatureProps> = ({ feature, deviceId }) => {
-    const { data, isLoading: loading, isError, error } = useFeatureData(deviceId, feature.name);
-    
+    const { data, isLoading: loading, isError, error, refetch } = useFeatureData(deviceId, feature.name);
+
+    // Refetch data when the component mounts or when deviceId/featureName changes
+    useEffect(() => {
+        refetch();
+    }, [deviceId, feature.name, refetch]);
 
     if (loading) {
-        console.log(`Loading data for ${feature.name}...`); // Add this line
         return (
             <div className="text-center">
                 <Spinner animation="border" size="sm" /> Loading {feature.label.toLowerCase()}...
@@ -22,7 +26,7 @@ const DisplayTableFeature: React.FC<DisplayTableFeatureProps> = ({ feature, devi
     }
 
     if (error) {
-        return <Alert variant="danger">Error: {error}</Alert>;
+        return <Alert variant="danger">Error: {error.message || error}</Alert>;
     }
 
     // Ensure data is an array for mapping
@@ -37,6 +41,8 @@ const DisplayTableFeature: React.FC<DisplayTableFeatureProps> = ({ feature, devi
         return <Alert variant="info">No {feature.label.toLowerCase()} information available.</Alert>;
     }
 
+    const hasActions = feature.actions && feature.actions.length > 0;
+
     return (
         <div className="table-responsive" style={{ maxHeight: "300px", overflowY: "auto" }}>
             <Table striped bordered hover size="sm">
@@ -45,16 +51,32 @@ const DisplayTableFeature: React.FC<DisplayTableFeatureProps> = ({ feature, devi
                         {headers.map((header) => (
                             <th key={header}>{header.replace(/_/g, ' ').toUpperCase()}</th>
                         ))}
+                        {hasActions && <th>ACTIONS</th>}
                     </tr>
                 </thead>
                 <tbody>
-                    {tableData.map((row, rowIndex) => ( // Use tableData here
+                    {tableData.map((row, rowIndex) => (
                         <tr key={rowIndex}>
                             {headers.map((header, colIndex) => (
                                 <td key={`${rowIndex}-${colIndex}`}>
                                     {Array.isArray(row[header]) ? row[header].join(', ') : row[header]}
                                 </td>
                             ))}
+                            {hasActions && (
+                                <td>
+                                    {feature.actions.map(action => (
+                                        <TableRowAction
+                                            key={action.feature_name}
+                                            action={action}
+                                            deviceId={deviceId}
+                                            rowIdentifier={feature.row_identifier}
+                                            rowIdentifierValue={row[feature.row_identifier]}
+                                            initialState={row.enabled}
+                                            featureName={feature.name}
+                                        />
+                                    ))}
+                                </td>
+                            )}
                         </tr>
                     ))}
                 </tbody>

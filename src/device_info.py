@@ -15,6 +15,7 @@ class DeviceConnectionInfo:
     port: int = 22
     name: Optional[str] = None
     secret: Optional[str] = None
+    id: Optional[int] = None  # Add device ID
 
     def get_key(self) -> str:
         """

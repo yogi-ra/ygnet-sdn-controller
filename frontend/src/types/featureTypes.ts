@@ -1,11 +1,17 @@
-export enum FeatureType {
-    TOGGLE = "toggle",
-    INPUT_TEXT = "input_text",
+export enum ViewFeatureType {
     DISPLAY_TABLE = "display_table",
     DISPLAY_TEXT = "display_text",
+}
+
+export enum ActionFeatureType {
+    TOGGLE = "toggle",
+    INPUT_TEXT = "input_text",
     SELECT_OPTION = "select_option",
     BUTTON = "button",
+    TEXT_AREA = "text_area",
 }
+
+export type FeatureType = ViewFeatureType | ActionFeatureType;
 
 export enum HeaderFieldType {
     TEXT = "text",
@@ -24,22 +30,44 @@ export interface FeatureDependency {
     value: string | boolean | number;
 }
 
-export interface FeatureSchema {
+export interface TableAction {
+    feature_name: string;
+    backend_method: string;
+}
+
+export interface ViewFeatureSchema {
     name: string;
     label: string;
     description?: string;
-    type: FeatureType;
-    read_only: boolean;
+    type: ViewFeatureType;
+    backend_method: string;
+    group?: string;
+    order?: number;
+    actions?: TableAction[];
+    row_identifier?: string;
+}
+
+export interface ActionFeatureSchema {
+    name: string;
+    label: string;
+    description?: string;
+    type: ActionFeatureType;
+    backend_method: string;
     default_value?: any;
     options?: FeatureOption[];
     placeholder?: string;
     dependencies?: FeatureDependency[];
-    backend_method?: string;
-    backend_command?: string;
+    validationRules?: {
+        pattern?: string;
+        minLength?: number;
+        maxLength?: number;
+        errorMessage?: string;
+    };
     group?: string;
     order?: number;
-    display_location?: "header";
 }
+
+export type FeatureSchema = ViewFeatureSchema | ActionFeatureSchema;
 
 export interface HeaderFieldSchema {
     name: string;
@@ -57,7 +85,8 @@ export interface FeatureActionRequest {
 }
 
 export interface DeviceFeaturesResponse {
-    features: FeatureSchema[];
+    view_features: ViewFeatureSchema[];
+    action_features: ActionFeatureSchema[];
     header_fields: HeaderFieldSchema[];
+    groups: string[];
 }
-// This is a no-op change to trigger a rebuild.

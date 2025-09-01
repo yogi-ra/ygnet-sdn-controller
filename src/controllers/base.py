@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Union
+from typing import List, Dict, Any, Union, Tuple
 from abc import ABC, abstractmethod
 import logging
 from concurrent.futures import TimeoutError
@@ -9,7 +9,7 @@ from src.connection_manager import ConnectionManager
 from src.device_info import DeviceConnectionInfo
 from src.config import settings
 from ..parsing_utils import parse_cli_output
-from src.feature_schemas import FeatureSchema  # Added this import
+from src.feature_schemas import ViewFeatureSchema, ActionFeatureSchema
 from ..exceptions import (
     DeviceConnectionError,
     DeviceTimeoutError,
@@ -107,22 +107,15 @@ class BaseDevice(ABC):
         """
         Sends a single command to the device.
         """
+        if not self.connection:
+            self.connect()
         try:
-            future = connection_manager.send_command(
-                self.device_info, command, self.netmiko_device_type, **kwargs
-            )
-            output = future.result(
-                timeout=settings.NETMIKO_TIMEOUT
-            )  # Corrected timeout setting
-            logger.debug(f"Raw output from Netmiko for command '{command}':\n{output}")
+            # Ensure we are in privileged EXEC mode before sending the command
+            if not self.connection.check_enable_mode():
+                self.connection.enable()
+            output = self.connection.send_command(command, **kwargs)
+            self.logger.debug(f"Raw output from Netmiko for command '{command}':\n{output}")
             return output
-        except TimeoutError:
-            self.logger.error(
-                f"Command '{command}' on {self.device_info.ip_address} timed out."  # Corrected to ip_address
-            )
-            raise DeviceTimeoutError(
-                f"Command '{command}' on {self.device_info.ip_address} timed out."  # Corrected to ip_address
-            )
         except Exception as e:
             self.logger.error(
                 f"Failed to send command '{command}' to {self.device_info.ip_address}: {e}"  # Corrected to ip_address
@@ -131,29 +124,40 @@ class BaseDevice(ABC):
                 f"Failed to send command '{command}' to {self.device_info.ip_address}: {e}"  # Corrected to ip_address
             )
 
+    def send_config_set(self, commands: List[str], **kwargs) -> str:
+        """
+        Sends a list of configuration commands to the device.
+        """
+        if not self.connection:
+            self.connect()
+        try:
+            # Ensure we are in privileged EXEC mode before sending the command
+            if not self.connection.check_enable_mode():
+                self.connection.enable()
+            output = self.connection.send_config_set(commands, **kwargs)
+            self.logger.debug(f"Raw output from Netmiko for config commands '{commands}':\n{output}")
+            return output
+        except Exception as e:
+            self.logger.error(
+                f"Failed to send config commands '{commands}' to {self.device_info.ip_address}: {e}"  # Corrected to ip_address
+            )
+            raise DeviceError(
+                f"Failed to send config commands '{commands}' to {self.device_info.ip_address}: {e}"  # Corrected to ip_address
+            )
+
     def send_multiline_commands(self, command_patterns: List[List[str]]) -> str:
         """
         Sends multiple commands to the device, handling additional prompts based on patterns.
         """
         if not self.connection:
-            # Re-establish connection if it's somehow lost, though connect() should handle this
             self.connect()
 
         try:
-            # Netmiko's send_multiline is not directly exposed via connection_manager's send_command
-            # as it's a more complex interaction. We ensure connection is active and use it directly.
             output = self.connection.send_multiline(command_patterns)
-            logger.debug(
+            self.logger.debug(
                 f"Raw output from Netmiko for multiline commands: {command_patterns}\n{output}"
             )
             return output
-        except TimeoutError:
-            self.logger.error(
-                f"Multiline command on {self.device_info.ip_address} timed out."  # Corrected to ip_address
-            )
-            raise DeviceTimeoutError(
-                f"Multiline command on {self.device_info.ip_address} timed out."  # Corrected to ip_address
-            )
         except Exception as e:
             self.logger.error(
                 f"Failed to send multiline commands to {self.device_info.ip_address}: {e}"  # Corrected to ip_address
@@ -179,7 +183,7 @@ class BaseDevice(ABC):
 
     @classmethod
     @abstractmethod
-    def get_supported_features(cls) -> List[FeatureSchema]:
+    def get_supported_features(cls) -> Tuple[List[ViewFeatureSchema], List[ActionFeatureSchema]]:
         pass
 
     def check_reachability(self) -> bool:
@@ -206,3 +210,37 @@ class BaseDevice(ABC):
                 f"An unexpected error occurred while checking reachability for {self.device_info.ip_address}: {e}"  # Corrected to ip_address
             )
             return False
+
+    def invalidate_feature_cache(self, feature_name: str) -> None:
+        """
+        Invalidates the cache for a specific feature by calling the API endpoint.
+        This method should be called after configuration changes to ensure fresh data.
+        """
+        try:
+            import requests
+            import os
+            
+            # Get API base URL from environment or use default
+            api_base_url = os.getenv("API_BASE_URL", "http://localhost:8000")
+            
+            # Construct the cache clear endpoint URL
+            cache_clear_url = f"{api_base_url}/api/devices/{self.device_info.id}/cache/clear"
+            
+            # Prepare the request data
+            cache_clear_data = {
+                "prefixes": [f"device:{self.device_info.id}:features:{feature_name}"]
+            }
+            
+            # Make the request to clear the cache
+            response = requests.post(
+                cache_clear_url,
+                json=cache_clear_data,
+                headers={"Content-Type": "application/json"}
+            )
+            
+            if response.status_code == 204:
+                self.logger.info(f"Successfully invalidated cache for feature: {feature_name}")
+            else:
+                self.logger.warning(f"Failed to invalidate cache for feature: {feature_name}. Status code: {response.status_code}")
+        except Exception as e:
+            self.logger.error(f"Error invalidating cache for feature {feature_name}: {e}")

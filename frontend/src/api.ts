@@ -7,7 +7,7 @@ export const queryClient = new QueryClient();
 export class UnauthorizedError extends Error {}
 
 export interface Device {
-  id: number; // Changed from string to number to match backend schema
+  id: number;
   name: string;
   device_type: string;
   ip_address: string;
@@ -40,7 +40,6 @@ export const fetchSupportedFeatures = async (token: string | null): Promise<Reco
   return response.json();
 };
 
-// DeviceTypeInfo is imported from ./types/deviceTypes.ts
 export type { DeviceTypeInfo };
 
 export const fetchDeviceTypes = async (token: string | null): Promise<DeviceTypeInfo[]> => {
@@ -62,9 +61,6 @@ export const fetchDevices = async (token: string | null): Promise<Device[]> => {
   const response = await fetch("/api/devices/", { headers });
 
   if (!response.ok) {
-    if (response.status === 401) {
-      throw new UnauthorizedError("Unauthorized");
-    }
     if (response.status === 401) {
       throw new UnauthorizedError("Unauthorized");
     }
@@ -116,6 +112,37 @@ export const fetchFeature = async (deviceId: string, featureName: string, token:
       throw new UnauthorizedError("Unauthorized");
     }
     throw new Error(`Failed to fetch feature: ${response.statusText}`);
+  }
+
+  return response.json();
+};
+
+export const performFeatureAction = async (
+  deviceId: string,
+  actionRequest: any,
+  token: string | null
+): Promise<any> => {
+  const headers = getAuthHeaders(token);
+  const response = await fetch(`/api/devices/${deviceId}/action`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(actionRequest),
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new UnauthorizedError("Unauthorized");
+    }
+    const errorText = await response.text();
+    let errorMessage = `Failed to perform action: ${response.statusText}`;
+    try {
+      const errorData = JSON.parse(errorText);
+      errorMessage = errorData.detail || errorMessage;
+    } catch (e) {
+      // If parsing fails, use the raw text
+      errorMessage = errorText || errorMessage;
+    }
+    throw new Error(errorMessage);
   }
 
   return response.json();

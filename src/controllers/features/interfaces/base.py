@@ -37,3 +37,17 @@ class BaseInterfaces(BaseFeature, ABC):
     @abstractmethod
     def get_interface_port_security(self, interface_name: str) -> List[Dict[str, Any]]:
         pass
+
+    @abstractmethod
+    def configure_interface(self, interface_name: str, config_commands: List[str]) -> Union[str, bool]:
+        """
+        Configures an interface with the provided commands.
+        
+        Args:
+            interface_name: Name of the interface to configure
+            config_commands: List of configuration commands to apply
+            
+        Returns:
+            Output from configuration commands or boolean indicating success
+        """
+        pass

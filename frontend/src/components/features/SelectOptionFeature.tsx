@@ -1,28 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Form, Button, Spinner, Alert } from 'react-bootstrap';
-import { type FeatureSchema, type FeatureActionRequest } from '../../types/featureTypes';
+import { type FeatureSchema } from '../../types/featureTypes';
 import { useAuth } from '../../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
+import { performFeatureAction } from '../../api';
 
 interface SelectOptionFeatureProps {
     feature: FeatureSchema;
     deviceId: string;
+    featureState: { [key: string]: any };
+    setFeatureState: React.Dispatch<React.SetStateAction<{ [key: string]: any }>>;
 }
 
-const SelectOptionFeature: React.FC<SelectOptionFeatureProps> = ({ feature, deviceId }) => {
+const SelectOptionFeature: React.FC<SelectOptionFeatureProps> = ({ feature, deviceId, featureState, setFeatureState }) => {
     const { token, logout } = useAuth();
     const navigate = useNavigate();
-    const [selectedValue, setSelectedValue] = useState<string>(feature.default_value || '');
+    const queryClient = useQueryClient();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
-
-    // Effect to update the selected value if the default_value changes (e.g., live data update)
-    useEffect(() => {
-        if (feature.default_value !== undefined) {
-            setSelectedValue(feature.default_value);
-        }
-    }, [feature.default_value]);
+    const [localValue, setLocalValue] = useState<string>(featureState[feature.name] || feature.default_value || '');
 
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
@@ -30,33 +28,21 @@ const SelectOptionFeature: React.FC<SelectOptionFeatureProps> = ({ feature, devi
         setError(null);
         setSuccess(null);
 
-        const actionRequest: FeatureActionRequest = {
+        const actionRequest = {
             feature_name: feature.name,
-            value: selectedValue,
+            value: localValue,
         };
 
         try {
-            const response = await fetch(`/api/devices/${deviceId}/action`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`,
-                },
-                body: JSON.stringify(actionRequest),
-            });
-
-            if (response.status === 401) {
-                logout();
-                navigate('/login');
-                return;
-            }
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.detail || 'Failed to perform action');
-            }
+            // Perform the action using our API function
+            await performFeatureAction(deviceId, actionRequest, token);
+            
             setSuccess('Action performed successfully!');
+            setFeatureState(prevState => ({ ...prevState, [feature.name]: localValue }));
+            
+            // Invalidate and refetch the feature data immediately
+            await queryClient.invalidateQueries({ queryKey: ['device-feature', deviceId, feature.name] });
+            await queryClient.refetchQueries({ queryKey: ['device-feature', deviceId, feature.name] });
         } catch (err: any) {
             setError(err.message || 'An unknown error occurred.');
         } finally {
@@ -65,31 +51,37 @@ const SelectOptionFeature: React.FC<SelectOptionFeatureProps> = ({ feature, devi
     };
 
     return (
-        <Form onSubmit={handleSubmit}>
-            <Form.Group className="mb-3">
-                <Form.Label>{feature.label}</Form.Label>
-                <Form.Select
-                    value={selectedValue}
-                    onChange={(e) => setSelectedValue(e.target.value)}
+        <div>
+            <Form onSubmit={handleSubmit}>
+                <Form.Group controlId={`select-${feature.name}`}>
+                    <Form.Label>{feature.label}</Form.Label>
+                    <Form.Control
+                        as="select"
+                        value={localValue}
+                        onChange={(e) => setLocalValue(e.target.value)}
+                        disabled={loading || feature.read_only}
+                    >
+                        {feature.options?.map((option) => (
+                            <option key={option.value} value={option.value}>
+                                {option.label}
+                            </option>
+                        ))}
+                    </Form.Control>
+                </Form.Group>
+                <Button 
+                    variant="primary" 
+                    type="submit" 
+                    className="mt-2"
                     disabled={loading || feature.read_only}
                 >
-                    {feature.options?.map((option) => (
-                        <option key={option.value} value={option.value}>
-                            {option.label}
-                        </option>
-                    ))}
-                </Form.Select>
-            </Form.Group>
-            {!feature.read_only && (
-                <Button variant="primary" type="submit" disabled={loading}>
-                    {loading ? <Spinner animation="border" size="sm" /> : 'Set'}
+                    Apply
+                    {loading && <Spinner animation="border" size="sm" className="ms-2" />}
                 </Button>
-            )}
-            {loading && <Spinner animation="border" size="sm" className="ms-2" />}
+            </Form>
             {error && <Alert variant="danger" className="mt-2">{error}</Alert>}
             {success && <Alert variant="success" className="mt-2">{success}</Alert>}
             {feature.read_only && <Alert variant="info" className="mt-2">Read-only feature.</Alert>}
-        </Form>
+        </div>
     );
 };
 

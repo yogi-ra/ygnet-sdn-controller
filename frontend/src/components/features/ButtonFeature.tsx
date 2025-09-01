@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { Button, Spinner, Alert } from 'react-bootstrap';
-import { type FeatureSchema, type FeatureActionRequest } from '../../types/featureTypes';
+import { type FeatureSchema } from '../../types/featureTypes';
 import { useAuth } from '../../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
+import { performFeatureAction } from '../../api';
 
 interface ButtonFeatureProps {
     feature: FeatureSchema;
@@ -12,6 +14,7 @@ interface ButtonFeatureProps {
 const ButtonFeature: React.FC<ButtonFeatureProps> = ({ feature, deviceId }) => {
     const { token, logout } = useAuth();
     const navigate = useNavigate();
+    const queryClient = useQueryClient();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
@@ -21,33 +24,20 @@ const ButtonFeature: React.FC<ButtonFeatureProps> = ({ feature, deviceId }) => {
         setError(null);
         setSuccess(null);
 
-        const actionRequest: FeatureActionRequest = {
+        const actionRequest = {
             feature_name: feature.name,
-            value: null, // Buttons typically don't have a value
+            backend_method: feature.backend_method,
         };
 
         try {
-            const response = await fetch(`/api/devices/${deviceId}/action`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`,
-                },
-                body: JSON.stringify(actionRequest),
-            });
-
-            if (response.status === 401) {
-                logout();
-                navigate('/login');
-                return;
-            }
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.detail || 'Failed to perform action');
-            }
+            // Perform the action using our API function
+            await performFeatureAction(deviceId, actionRequest, token);
+            
             setSuccess('Action performed successfully!');
+            
+            // Invalidate and refetch the feature data immediately
+            await queryClient.invalidateQueries({ queryKey: ['device-feature', deviceId, feature.name] });
+            await queryClient.refetchQueries({ queryKey: ['device-feature', deviceId, feature.name] });
         } catch (err: any) {
             setError(err.message || 'An unknown error occurred.');
         } finally {
@@ -57,17 +47,16 @@ const ButtonFeature: React.FC<ButtonFeatureProps> = ({ feature, deviceId }) => {
 
     return (
         <div>
-            <Button
-                variant="primary"
-                onClick={handleClick}
-                disabled={loading || feature.read_only}
+            <Button 
+                variant="primary" 
+                onClick={handleClick} 
+                disabled={loading}
             >
-                {loading ? <Spinner animation="border" size="sm" /> : feature.label}
+                {feature.label}
+                {loading && <Spinner animation="border" size="sm" className="ms-2" />}
             </Button>
-            {loading && <Spinner animation="border" size="sm" className="ms-2" />}
             {error && <Alert variant="danger" className="mt-2">{error}</Alert>}
             {success && <Alert variant="success" className="mt-2">{success}</Alert>}
-            {feature.read_only && <Alert variant="info" className="mt-2">Read-only feature.</Alert>}
         </div>
     );
 };

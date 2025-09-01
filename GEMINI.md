@@ -325,6 +325,50 @@ This section documents the changes that have been implemented to make the fronte
 *   **`ConfigContext`:** `frontend/src/context/ConfigContext.tsx` fetches and stores supported features from the backend for dynamic UI rendering.
 *   **`DeviceListPage` Refactor:** `frontend/src/pages/DeviceListPage.tsx` uses the `useConfig` hook to display supported features and navigate to the `DeviceFeaturesPage`.
 *   **`FeatureOutputPage`:** `frontend/src/pages/FeatureOutputPage.tsx` displays the output of a specific feature.
-*   **`api.ts` Update:** `frontend/src/api.ts` includes the `FeatureSchema` interface and functions for fetching supported features, device-specific features, and individual feature outputs. **Updated `fetchDeviceFeatures` to expect and return the combined `features` and `header_fields` response.**
+*   **`api.ts` Update:** `frontend/src/api.ts` includes the `FeatureSchema` interface and. **Updated `fetchDeviceFeatures` to expect and return the combined `features` and `header_fields` response.**
 *   **`featureTypes.ts` Update:** **`frontend/src/types/featureTypes.ts` was updated to include `HeaderFieldSchema` and `HeaderFieldType` interfaces, and `display_location` in `FeatureSchema`.**
 *   **Dynamic Device Header and General Information Tab:** **`frontend/src/pages/DeviceDetailPage.tsx` now dynamically renders device header information based on `HeaderFieldSchema` and includes a new "General Information" tab that displays these fields in a prettified format.**
+
+## 9. Enhancing Frontend with Backend-Driven Validation
+
+To make the UI even more robust and user-friendly, we will implement a system for backend-driven validation of user input. This will allow the backend to specify validation rules for each feature, and the frontend will use these rules to provide real-time feedback to the user.
+
+### Plan:
+
+1.  **Extend `FeatureSchema`:** Add a new optional field `validation_rules` to the `FeatureSchema` in `src/feature_schemas.py`. This field will be a dictionary containing validation parameters, such as `pattern`, `min_length`, and `max_length`.
+2.  **Update Device Controller:** In `src/controllers/cisco_ios.py`, we will add validation rules to an existing feature. For example, for the `ntp_server_ip` feature, we will add a regex pattern to validate the IP address format.
+3.  **Update Frontend Types:** The `FeatureSchema` interface in `frontend/src/types/featureTypes.ts` will be updated to include the new `validationRules` property.
+4.  **Implement Frontend Validation Logic:** The `TextInputFeature.tsx` component will be modified to:
+    *   Check for the presence of `validationRules` in the feature schema.
+    *   Perform validation on user input based on these rules.
+    *   Display appropriate validation feedback to the user (e.g., error messages, highlighting the input field).
+
+This approach will further decouple the frontend from the backend, making the UI more dynamic and adaptable to changes in backend requirements.
+
+## 10. Refactoring to View and Action Features
+
+To provide a clearer distinction between viewing data and performing actions, we are refactoring the feature system to use two distinct schemas: `ViewFeatureSchema` for read-only data and `ActionFeatureSchema` for interactive/editable features.
+
+### New Architecture:
+
+*   **`ViewFeatureSchema`**: This schema will define features that display information. It will include fields for `name`, `label`, `description`, `type` (e.g., `DISPLAY_TABLE`, `DISPLAY_TEXT`), and `backend_method` to fetch the data.
+*   **`ActionFeatureSchema`**: This schema will define features that allow user interaction, such as configuration changes. It will include fields for `name`, `label`, `description`, `type` (e.g., `TOGGLE`, `INPUT_TEXT`, `BUTTON`), `backend_method` to call for the action, and UI-specific properties like `placeholder` and `validation_rules`.
+*   **Backend API (`GET /api/devices/{device_id}/features`)**: The endpoint will be updated to return two separate lists: `view_features` and `action_features`.
+*   **Frontend UI**:
+    *   The existing tabs (e.g., "System", "Network") will now exclusively display read-only information from the `view_features` list.
+    *   A new top-level "Configuration" tab will be introduced to house all the interactive features from the `action_features` list.
+
+### Plan:
+
+1.  **Update `GEMINI.md`**: Document the new architecture with `ViewFeatureSchema` and `ActionFeatureSchema`.
+2.  **Refactor `src/feature_schemas.py`**: Split the `FeatureSchema` into `ViewFeatureSchema` and `ActionFeatureSchema`.
+3.  **Update `src/controllers/cisco_ios.py`**: Modify the `get_supported_features` method to return two lists: `view_features` and `action_features`.
+4.  **Update `src/api/routers/devices.py`**: Adjust the `GET /api/devices/{device_id}/features` endpoint to return the two new lists.
+5.  **Update `frontend/src/types/featureTypes.ts`**: Create two new interfaces, `ViewFeatureSchema` and `ActionFeatureSchema`.
+6.  **Update `frontend/src/pages/DeviceDetailPage.tsx`**:
+    *   Fetch both `view_features` and `action_features`.
+    *   Render `view_features` in their respective group tabs.
+    *   Create a new "Configuration" tab to render `action_features`.
+7.  **Update `frontend/src/components/FeatureRenderer.tsx`**: Modify the component to handle both schema types.
+
+This refactoring will create a more intuitive and maintainable system by clearly separating read-only data from configurable actions.

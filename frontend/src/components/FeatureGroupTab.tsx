@@ -2,6 +2,7 @@ import React from 'react';
 import { type FeatureSchema } from '../types/featureTypes';
 import FeatureRenderer from './FeatureRenderer';
 import { Alert } from 'react-bootstrap';
+import { useFeatureState } from '../context/FeatureStateContext';
 
 interface FeatureGroupTabProps {
     features: FeatureSchema[];
@@ -9,6 +10,8 @@ interface FeatureGroupTabProps {
 }
 
 const FeatureGroupTab: React.FC<FeatureGroupTabProps> = ({ features, deviceId }) => {
+    const { featureState, setFeatureState } = useFeatureState();
+
     if (features.length === 0) {
         return <Alert variant="info">No features available in this category.</Alert>;
     }
@@ -16,7 +19,13 @@ const FeatureGroupTab: React.FC<FeatureGroupTabProps> = ({ features, deviceId })
     return (
         <div className="d-flex flex-wrap">
             {features.map((feature) => (
-                <FeatureRenderer key={feature.name} feature={feature} deviceId={deviceId} />
+                <FeatureRenderer
+                    key={feature.name}
+                    feature={feature}
+                    deviceId={deviceId}
+                    featureState={featureState}
+                    setFeatureState={setFeatureState}
+                />
             ))}
         </div>
     );

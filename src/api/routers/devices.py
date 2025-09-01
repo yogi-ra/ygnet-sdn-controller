@@ -5,14 +5,14 @@ import json
 import inspect
 import asyncio
 
-from ...crud import crud, schemas
+from ...crud import crud
+from ... import schemas
 from ...database import get_db
 from ...cache import get_redis_client
 from ...controllers import DEVICE_HANDLER_MAP
 from ...controllers.features.base import BaseFeature
 from ...device_info import DeviceConnectionInfo
-from ...feature_schemas import FeatureSchema, HeaderFieldSchema, HeaderFieldType # Added this import
-
+from ...feature_schemas import ViewFeatureSchema, ActionFeatureSchema, HeaderFieldSchema, HeaderFieldType, DeviceFeaturesResponse
 
 from ..dependencies import (
     require_read_privileges,
@@ -60,23 +60,18 @@ def get_supported_features():
     
     for device_type, handler_class in DEVICE_HANDLER_MAP.items():
         try:
-            features_raw = handler_class.get_supported_features()
-            if not isinstance(features_raw, list):
-                raise TypeError(f"get_supported_features for {device_type} did not return a list: {features_raw}")
-            features = [
-                feature.name
-                for feature in features_raw
-            ]
+            view_features, action_features = handler_class.get_supported_features()
+            features = [f.name for f in view_features] + [f.name for f in action_features]
             supported_features[device_type] = features
         except Exception as e:
-            print(f"Error instantiating handler or getting supported features for device type {device_type}: {e}. features_raw: {features_raw}")
+            print(f"Error instantiating handler or getting supported features for device type {device_type}: {e}.")
             supported_features[device_type] = []
     return supported_features
 
 
 @router.get(
     "/{device_id}/features",
-    response_model=Dict[str, Any], # Changed response_model to Dict[str, Any]
+    response_model=DeviceFeaturesResponse,
     dependencies=[Depends(require_read_privileges)],
 )
 async def get_device_features(
@@ -92,12 +87,11 @@ async def get_device_features(
 
     handler = get_handler_from_device_id(device_id, db)
     
-    features = []
     header_fields = []
 
     try:
         with handler:
-            features = handler.get_supported_features()
+            view_features, action_features = handler.get_supported_features()
             
             # Populate header fields
             try:
@@ -160,7 +154,14 @@ async def get_device_features(
             # Sort header fields by order
             header_fields.sort(key=lambda x: x.order or 999)
 
-            return {"features": features, "header_fields": header_fields}
+            groups = sorted(list(set([f.group for f in view_features if f.group])))
+
+            return DeviceFeaturesResponse(
+                view_features=view_features,
+                action_features=action_features,
+                header_fields=header_fields,
+                groups=groups
+            )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -322,9 +323,9 @@ async def get_feature(
     handler = get_handler_from_device_id(device_id, db)
     try:
         with handler:
-            supported_features = handler.get_supported_features()
+            view_features, _ = handler.get_supported_features()
             feature_schema = next(
-                (f for f in supported_features if f.name == feature_name),
+                (f for f in view_features if f.name == feature_name),
                 None,
             )
 
@@ -386,6 +387,7 @@ async def perform_feature_action(
     device_id: int,
     action_request: schemas.FeatureActionRequest,
     db: Session = Depends(get_db),
+    redis_client: Any = Depends(get_redis_client),
 ):
     """
     Performs an action on a specific device feature.
@@ -396,59 +398,120 @@ async def perform_feature_action(
 
     handler = get_handler_from_device_id(device_id, db)
 
+    print(f"action_request.backend_method: {action_request.backend_method}")
+    result = None
+    feature_name = None
+    
+    if action_request.backend_method:
+        # If backend_method is provided directly, use it
+        parts = action_request.backend_method.split('.')
+        if len(parts) != 2:
+            raise HTTPException(
+                status_code=500, detail=f"Invalid backend_method format: {action_request.backend_method}"
+            )
+        sub_object_name, method_name = parts
+        print(f"sub_object_name: {sub_object_name}, method_name: {method_name}")
+
+        feature_obj = getattr(handler, sub_object_name, None)
+        print(f"feature_obj: {feature_obj}")
+        if feature_obj is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Sub-object '{sub_object_name}' not found on device handler.",
+            )
+
+        method_to_call = getattr(feature_obj, method_name, None)
+        print(f"method_to_call: {method_to_call}")
+        if method_to_call is None or not callable(method_to_call):
+            raise HTTPException(
+                status_code=404,
+                detail=f"Method '{method_name}' not found or not callable on sub-object '{sub_object_name}'.",
+            )
+        
+        # Execute the method with the provided data, mapping keys to expected parameters
+        sig = inspect.signature(method_to_call)
+        call_args = {}
+        if action_request.data:
+            for param_name, param in sig.parameters.items():
+                if param_name in action_request.data:
+                    call_args[param_name] = action_request.data[param_name]
+                elif param.kind == inspect.Parameter.VAR_POSITIONAL:
+                    # Handle *args if necessary, though unlikely for these methods
+                    pass
+                elif param.kind == inspect.Parameter.VAR_KEYWORD:
+                    # Handle **kwargs if necessary
+                    call_args.update(action_request.data)
+        print(f"call_args: {call_args}")
+
+        try:
+            with handler:
+                result = method_to_call(**call_args)
+                feature_name = action_request.feature_name
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    # Fallback to existing logic if backend_method is not provided
     # Find the FeatureSchema for the requested feature_name
-    supported_features = handler.get_supported_features()
-    feature_schema = next(
-        (f for f in supported_features if f.name == action_request.feature_name),
-        None,
-    )
-
-    if not feature_schema:
-        raise HTTPException(
-            status_code=404, detail=f"Feature '{action_request.feature_name}' not found for this device."
+    else:
+        _, action_features = handler.get_supported_features()
+        feature_schema = next(
+            (f for f in action_features if f.name == action_request.feature_name),
+            None,
         )
 
-    if not feature_schema.backend_method:
-        raise HTTPException(
-            status_code=400, detail=f"Feature '{action_request.feature_name}' does not have a backend method defined."
-        )
+        if not feature_schema:
+            raise HTTPException(
+                status_code=404, detail=f"Feature '{action_request.feature_name}' not found for this device."
+            )
 
-    try:
-        with handler:
-            # Dynamically call the backend method
-            # backend_method is in the format "sub_object.method_name"
-            parts = feature_schema.backend_method.split('.')
-            if len(parts) != 2:
-                raise HTTPException(
-                    status_code=500, detail=f"Invalid backend_method format: {feature_schema.backend_method}"
-                )
-            
-            sub_object_name, method_name = parts
-            
-            feature_obj = getattr(handler, sub_object_name, None)
-            if feature_obj is None:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Sub-object '{sub_object_name}' not found on device handler.",
-                )
-            
-            method_to_call = getattr(feature_obj, method_name, None)
-            if method_to_call is None or not callable(method_to_call):
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Method '{method_name}' not found or not callable on sub-object '{sub_object_name}'.",
-                )
-            
-            # Execute the method with the provided value
-            result = method_to_call(action_request.value)
-            return {"message": "Action performed successfully", "result": result}
+        if not feature_schema.backend_method:
+            raise HTTPException(
+                status_code=400, detail=f"Feature '{action_request.feature_name}' does not have a backend method defined."
+            )
 
-    except NotImplementedError as e:
-        raise HTTPException(
-            status_code=400, detail=f"Feature action not implemented for this device type: {e}"
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        try:
+            with handler:
+                # Dynamically call the backend method
+                # backend_method is in the format "sub_object.method_name"
+                parts = feature_schema.backend_method.split('.')
+                if len(parts) != 2:
+                    raise HTTPException(
+                        status_code=500, detail=f"Invalid backend_method format: {feature_schema.backend_method}"
+                    )
+                
+                sub_object_name, method_name = parts
+                
+                feature_obj = getattr(handler, sub_object_name, None)
+                if feature_obj is None:
+                    raise HTTPException(
+                        status_code=404,
+                        detail=f"Sub-object '{sub_object_name}' not found on device handler.",
+                    )
+                
+                method_to_call = getattr(feature_obj, method_name, None)
+                if method_to_call is None or not callable(method_to_call):
+                    raise HTTPException(
+                        status_code=404,
+                        detail=f"Method '{method_name}' not found or not callable on sub-object '{sub_object_name}'.",
+                    )
+                
+                # Execute the method with the provided value
+                result = method_to_call(action_request.value)
+                feature_name = action_request.feature_name
+
+        except NotImplementedError as e:
+            raise HTTPException(
+                status_code=400, detail=f"Feature action not implemented for this device type: {e}"
+            )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+    
+    # Automatically invalidate cache for the feature that was modified
+    if feature_name:
+        cache_key = f"device:{device_id}:features:{feature_name}"
+        redis_client.delete(cache_key)
+    
+    return {"message": "Action performed successfully", "result": result}
 
 
 @router.post(

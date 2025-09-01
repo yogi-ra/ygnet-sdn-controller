@@ -1,31 +1,52 @@
 import React from 'react';
-import { type FeatureSchema, FeatureType } from '../types/featureTypes';
-import ToggleFeature from './features/ToggleFeature'; // Dedicated component for toggle
-import TextInputFeature from './features/TextInputFeature'; // Dedicated component for text input
-import DisplayTableFeature from './features/DisplayTableFeature'; // Dedicated component for table display
+import { type FeatureSchema, ViewFeatureType, ActionFeatureType } from '../types/featureTypes';
+import ToggleFeature from './features/ToggleFeature';
+import TextInputFeature from './features/TextInputFeature';
+import DisplayTableFeature from './features/DisplayTableFeature';
 import DisplayTextFeature from './features/DisplayTextFeature';
 import SelectOptionFeature from './features/SelectOptionFeature';
 import ButtonFeature from './features/ButtonFeature';
-import { Card } from 'react-bootstrap'; // Import Card for consistent styling
+import TextAreaFeature from './features/TextAreaFeature';
+import { Card } from 'react-bootstrap';
+import { useFeatureState } from '../context/FeatureStateContext';
 
 interface FeatureRendererProps {
     feature: FeatureSchema;
     deviceId: string;
 }
 
-// Map FeatureType to a React component
-const featureComponentMap: Record<FeatureType, React.FC<any>> = {
-    [FeatureType.TOGGLE]: ToggleFeature,
-    [FeatureType.INPUT_TEXT]: TextInputFeature,
-    [FeatureType.DISPLAY_TABLE]: DisplayTableFeature,
-    [FeatureType.DISPLAY_TEXT]: DisplayTextFeature,
-    [FeatureType.SELECT_OPTION]: SelectOptionFeature,
-    [FeatureType.BUTTON]: ButtonFeature,
-    // Add other feature types as needed
+const featureComponentMap: Record<ViewFeatureType | ActionFeatureType, React.FC<any>> = {
+    [ViewFeatureType.DISPLAY_TABLE]: DisplayTableFeature,
+    [ViewFeatureType.DISPLAY_TEXT]: DisplayTextFeature,
+    [ActionFeatureType.TOGGLE]: ToggleFeature,
+    [ActionFeatureType.INPUT_TEXT]: TextInputFeature,
+    [ActionFeatureType.SELECT_OPTION]: SelectOptionFeature,
+    [ActionFeatureType.BUTTON]: ButtonFeature,
+    [ActionFeatureType.TEXT_AREA]: TextAreaFeature,
 };
 
 const FeatureRenderer: React.FC<FeatureRendererProps> = ({ feature, deviceId }) => {
     const Component = featureComponentMap[feature.type];
+    const { featureState, setFeatureState } = useFeatureState();
+
+    const areDependenciesMet = () => {
+        if (!feature.dependencies || feature.dependencies.length === 0) {
+            return true;
+        }
+
+        return feature.dependencies.every(dep => {
+            const parentValue = featureState[dep.feature_name];
+
+            switch (dep.operator) {
+                case 'equals':
+                    return parentValue === dep.value;
+                case 'not_equals':
+                    return parentValue !== dep.value;
+                default:
+                    return false;
+            }
+        });
+    };
 
     if (!Component) {
         console.warn(`No component found for feature type: ${feature.type}`);
@@ -41,16 +62,16 @@ const FeatureRenderer: React.FC<FeatureRendererProps> = ({ feature, deviceId }) 
         );
     }
 
-    // You would also implement dependency checking here to conditionally render or disable
-    // based on `feature.dependencies` and the current state of other features.
-    // For now, we'll just render the component.
+    if (!areDependenciesMet()) {
+        return null;
+    }
 
     return (
         <Card className="mb-4">
             <Card.Body>
                 <Card.Title as="h3">{feature.label}</Card.Title>
                 {feature.description && <Card.Text>{feature.description}</Card.Text>}
-                <Component feature={feature} deviceId={deviceId} />
+                <Component feature={feature} deviceId={deviceId} featureState={featureState} setFeatureState={setFeatureState} />
             </Card.Body>
         </Card>
     );

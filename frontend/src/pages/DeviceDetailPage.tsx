@@ -1,4 +1,4 @@
-import React, { useState, useMemo, lazy, Suspense, useEffect, useCallback } from "react";
+import React, { useState, useMemo, lazy, Suspense, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   Container,
@@ -15,7 +15,9 @@ import {
 } from "react-bootstrap";
 import { useAuth } from "../hooks/useAuth";
 import { useDeviceDetails } from "../hooks/useDeviceDetails";
-import type { HeaderFieldSchema } from "../types/featureTypes";
+import type { HeaderFieldSchema, ViewFeatureSchema, ActionFeatureSchema } from "../types/featureTypes";
+
+import { FeatureStateProvider } from "../context/FeatureStateContext";
 
 const LazyFeatureGroupTab = lazy(() => import("../components/FeatureGroupTab"));
 
@@ -23,7 +25,7 @@ const DeviceDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { token, logout } = useAuth();
-  const { features, headerFields, loading, errors, isReachable } = useDeviceDetails(id);
+  const { viewFeatures, actionFeatures, headerFields, loading, errors, isReachable } = useDeviceDetails(id);
 
   const [command, setCommand] = useState("");
   const [isConfigCommand, setIsConfigCommand] = useState(false);
@@ -46,32 +48,31 @@ const DeviceDetailPage = () => {
   const ipAddress = getHeaderFieldValue("ip_address") || "N/A";
   const deviceType = getHeaderFieldValue("device_type") || "N/A";
 
-  const groupedFeatures = useMemo(() => {
-    const groups: { [key: string]: FeatureSchema[] } = {};
-    if (!features || !Array.isArray(features)) return {}; // Handle case where features are not yet loaded or not an array
+  const groupedViewFeatures = useMemo(() => {
+    const groups: { [key: string]: ViewFeatureSchema[] } = {};
+    if (!viewFeatures || !Array.isArray(viewFeatures)) return {};
 
-    features.forEach((feature) => {
-      const groupName = feature.group || "Other"; // Default to 'Other' if no group is defined
+    viewFeatures.forEach((feature) => {
+      const groupName = feature.group || "Other";
       if (!groups[groupName]) {
         groups[groupName] = [];
       }
       groups[groupName].push(feature);
     });
 
-    // Sort groups alphabetically, with 'Other' always last
     const sortedGroupNames = Object.keys(groups).sort((a, b) => {
       if (a === "Other") return 1;
       if (b === "Other") return -1;
       return a.localeCompare(b);
     });
 
-    const sortedGroups: { [key: string]: FeatureSchema[] } = {};
+    const sortedGroups: { [key: string]: ViewFeatureSchema[] } = {};
     sortedGroupNames.forEach(name => {
-      sortedGroups[name] = groups[name].sort((a, b) => (a.order || 0) - (b.order || 0)); // Sort features within group by order
+      sortedGroups[name] = groups[name].sort((a, b) => (a.order || 0) - (b.order || 0));
     });
 
     return sortedGroups;
-  }, [features]);
+  }, [viewFeatures]);
 
   const handleExecuteCommand = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -123,7 +124,7 @@ const DeviceDetailPage = () => {
 
     const endpoint = `/api/devices/${id}/cache/clear`;
     const prefixesToClear = [
-      "details", // Clear specific device details cache
+      "details",
       "system",
       "interfaces",
       "vlans",
@@ -162,7 +163,6 @@ const DeviceDetailPage = () => {
       }
 
       setCacheClearSuccess("Cache cleared successfully!");
-      // No need to call getFeatures() here, useDeviceDetails has refetchInterval
     } catch (err: any) {
       setCacheClearError(err.message || "An unknown error occurred while clearing cache.");
     } finally {
@@ -221,15 +221,32 @@ const DeviceDetailPage = () => {
         </Col>
       </Row>
 
-      <Tabs
-        id="device-detail-tabs"
-        activeKey={key}
-        onSelect={(k) => setKey(k!)}
-        className="mb-3 mt-4"
-        unmountOnExit={true} // Add this prop
-      >
-        {Object.entries(groupedFeatures).map(([groupName, groupFeatures]) => (
-          <Tab eventKey={groupName} title={groupName} key={groupName}>
+      <FeatureStateProvider features={[...viewFeatures, ...actionFeatures]}>
+        <Tabs
+          id="device-detail-tabs"
+          activeKey={key}
+          onSelect={(k) => setKey(k!)}
+          className="mb-3 mt-4"
+          unmountOnExit={true}
+        >
+          {Object.entries(groupedViewFeatures).map(([groupName, groupFeatures]) => (
+            <Tab eventKey={groupName} title={groupName} key={groupName}>
+              <Row className="mt-3">
+                <Col>
+                  {loading ? (
+                    <Alert variant="info">Loading features...</Alert>
+                  ) : errors.primary ? (
+                    <Alert variant="danger">Error loading features: {errors.primary}</Alert>
+                  ) : (
+                    <Suspense fallback={<Spinner animation="border" size="sm" />}>
+                      <LazyFeatureGroupTab features={groupFeatures} deviceId={id!} />
+                    </Suspense>
+                  )}
+                </Col>
+              </Row>
+            </Tab>
+          ))}
+          <Tab eventKey="configuration" title="Configuration">
             <Row className="mt-3">
               <Col>
                 {loading ? (
@@ -238,113 +255,113 @@ const DeviceDetailPage = () => {
                   <Alert variant="danger">Error loading features: {errors.primary}</Alert>
                 ) : (
                   <Suspense fallback={<Spinner animation="border" size="sm" />}>
-                    <LazyFeatureGroupTab features={groupFeatures} deviceId={id!} />
+                    <LazyFeatureGroupTab features={actionFeatures} deviceId={id!} />
                   </Suspense>
                 )}
               </Col>
             </Row>
           </Tab>
-        ))}
-        <Tab eventKey="tools" title="Tools">
-          <Row className="mt-3">
-            <Col md={6}>
-              <Card>
-                <Card.Body style={{ maxHeight: "400px", overflowY: "auto" }}>
-                  <Card.Title as="h2">Execute Command</Card.Title>
-                  <Form onSubmit={handleExecuteCommand}>
-                    <Form.Group className="mb-3" controlId="commandInput">
-                      <Form.Label>Command</Form.Label>
-                      <Form.Control
-                        as="textarea"
-                        rows={3}
-                        placeholder="Enter command to execute"
-                        value={command}
-                        onChange={(e) => setCommand(e.target.value)}
-                        required
-                      />
-                    </Form.Group>
-                    <Form.Group
-                      className="mb-3"
-                      controlId="isConfigCommandCheckbox"
-                    >
-                      <Form.Check
-                        type="checkbox"
-                        label="Configuration Command"
-                        checked={isConfigCommand}
-                        onChange={(e) => setIsConfigCommand(e.target.checked)}
-                      />
-                    </Form.Group>
+          <Tab eventKey="tools" title="Tools">
+            <Row className="mt-3">
+              <Col md={6}>
+                <Card>
+                  <Card.Body style={{ maxHeight: "400px", overflowY: "auto" }}>
+                    <Card.Title as="h2">Execute Command</Card.Title>
+                    <Form onSubmit={handleExecuteCommand}>
+                      <Form.Group className="mb-3" controlId="commandInput">
+                        <Form.Label>Command</Form.Label>
+                        <Form.Control
+                          as="textarea"
+                          rows={3}
+                          placeholder="Enter command to execute"
+                          value={command}
+                          onChange={(e) => setCommand(e.target.value)}
+                          required
+                        />
+                      </Form.Group>
+                      <Form.Group
+                        className="mb-3"
+                        controlId="isConfigCommandCheckbox"
+                      >
+                        <Form.Check
+                          type="checkbox"
+                          label="Configuration Command"
+                          checked={isConfigCommand}
+                          onChange={(e) => setIsConfigCommand(e.target.checked)}
+                        />
+                      </Form.Group>
+                      <Button
+                        variant="primary"
+                        type="submit"
+                        disabled={executingCommand}
+                      >
+                        {executingCommand ? (
+                          <Spinner as="span" animation="border" size="sm" />
+                        ) : (
+                          "Execute"
+                        )}
+                      </Button>
+                    </Form>
+                    {commandError && (
+                      <Alert variant="danger" className="mt-3">
+                        {commandError}
+                      </Alert>
+                    )}
+                    {commandOutput && (
+                      <div
+                        className="mt-3 p-3 bg-light rounded"
+                        style={{
+                          whiteSpace: "pre-wrap",
+                          fontFamily: "monospace",
+                        }}
+                      >
+                        {deviceLevel && (
+                          <>
+                            <strong>Device Level:</strong> {deviceLevel}
+                            <br />
+                          </>
+                        )}
+                        <strong>Output:</strong>
+                        <br />
+                        {commandOutput}
+                      </div>
+                    )}
+                  </Card.Body>
+                </Card>
+              </Col>
+              <Col md={6}>
+                <Card>
+                  <Card.Body>
+                    <Card.Title as="h2">Cache Management</Card.Title>
                     <Button
-                      variant="primary"
-                      type="submit"
-                      disabled={executingCommand}
+                      variant="warning"
+                      onClick={handleClearCache}
+                      disabled={clearingCache}
+                      className="mt-3"
                     >
-                      {executingCommand ? (
+                      {clearingCache ? (
                         <Spinner as="span" animation="border" size="sm" />
                       ) : (
-                        "Execute"
+                        "Clear Device Cache"
                       )}
                     </Button>
-                  </Form>
-                  {commandError && (
-                    <Alert variant="danger" className="mt-3">
-                      {commandError}
-                    </Alert>
-                  )}
-                  {commandOutput && (
-                    <div
-                      className="mt-3 p-3 bg-light rounded"
-                      style={{
-                        whiteSpace: "pre-wrap",
-                        fontFamily: "monospace",
-                      }}
-                    >
-                      {deviceLevel && (
-                        <>
-                          <strong>Device Level:</strong> {deviceLevel}
-                          <br />
-                        </>
-                      )}
-                      <strong>Output:</strong>
-                      <br />
-                      {commandOutput}
-                    </div>
-                  )}
-                </Card.Body>
-              </Card>
-            </Col>
-            <Col md={6}>
-              <Card>
-                <Card.Body>
-                  <Card.Title as="h2">Cache Management</Card.Title>
-                  <Button
-                    variant="warning"
-                    onClick={handleClearCache}
-                    disabled={clearingCache}
-                    className="mt-3"
-                  >
-                    {clearingCache ? (
-                      <Spinner as="span" animation="border" size="sm" />
-                    ) : (
-                      "Clear Device Cache"
+                    {cacheClearSuccess && (
+                      <Alert variant="success" className="mt-3">
+                        {cacheClearSuccess}
+                      </Alert>
                     )}
-                  </Button>
-                  {cacheClearSuccess && (
-                    <Alert variant="success" className="mt-3">
-                      {cacheClearSuccess}
-                    </Alert>
-                  )}
-                  {cacheClearError && (
-                    <Alert variant="danger" className="mt-3">
-                      {cacheClearError}
-                    </Alert>
-                  )}
-                </Card.Body>
-              </Card>
-            </Col>
-          </Row>
-        </Tab>
-      </Tabs>
+                    {cacheClearError && (
+                      <Alert variant="danger" className="mt-3">
+                        {cacheClearError}
+                      </Alert>
+                    )}
+                  </Card.Body>
+                </Card>
+              </Col>
+            </Row>
+          </Tab>
+        </Tabs>
+      </FeatureStateProvider>
     </Container>
   );
 };

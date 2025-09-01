@@ -2,13 +2,20 @@ from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional, Literal, Union
 from enum import Enum
 
-class FeatureType(str, Enum):
-    TOGGLE = "toggle"          # e.g., Enable/Disable SNMP
-    INPUT_TEXT = "input_text"  # e.g., Set NTP Server IP
-    DISPLAY_TABLE = "display_table" # e.g., Show ARP Table
-    DISPLAY_TEXT = "display_text"  # e.g., Show Running Config snippet
-    SELECT_OPTION = "select_option" # e.g., Choose VLAN mode (access/trunk)
-    BUTTON = "button"          # e.g., Reload Device
+class TableAction(BaseModel):
+    feature_name: str
+    backend_method: str
+
+class ViewFeatureType(str, Enum):
+    DISPLAY_TABLE = "display_table"
+    DISPLAY_TEXT = "display_text"
+
+class ActionFeatureType(str, Enum):
+    TOGGLE = "toggle"
+    INPUT_TEXT = "input_text"
+    SELECT_OPTION = "select_option"
+    BUTTON = "button"
+    TEXT_AREA = "text_area"
 
 class HeaderFieldType(str, Enum):
     TEXT = "text"
@@ -24,31 +31,59 @@ class FeatureDependency(BaseModel):
     operator: Literal["equals", "not_equals"]
     value: Union[str, bool, int]
 
-class FeatureSchema(BaseModel):
-    name: str = Field(..., description="Unique identifier for the feature (e.g., 'snmp_status', 'ntp_server').")
-    label: str = Field(..., description="Human-readable name for the feature (e.g., 'SNMP Status', 'NTP Server Configuration').")
+class TableAction(BaseModel):
+    feature_name: str
+    backend_method: str
+
+class ViewFeatureSchema(BaseModel):
+    name: str = Field(..., description="Unique identifier for the feature.")
+    label: str = Field(..., description="Human-readable name for the feature.")
     description: Optional[str] = Field(None, description="Detailed explanation of the feature.")
-    type: FeatureType = Field(..., description="The type of UI component this feature requires.")
-    read_only: bool = Field(False, description="If true, the feature is for display only.")
-    # UI-specific properties
+    type: ViewFeatureType = Field(..., description="The type of UI component this feature requires.")
+    backend_method: str = Field(..., description="Name of the backend method to call to get the data for this feature.")
+    group: Optional[str] = Field(None, description="Optional grouping for UI organization.")
+    order: Optional[int] = Field(None, description="Optional order for UI display within a group.")
+    actions: Optional[List[TableAction]] = Field(None, description="Actions that can be performed on a table row.")
+    row_identifier: Optional[str] = Field(None, description="The column in the table data to use as the row identifier for actions.")
+
+class ActionFeatureSchema(BaseModel):
+    name: str = Field(..., description="Unique identifier for the feature.")
+    label: str = Field(..., description="Human-readable name for the feature.")
+    description: Optional[str] = Field(None, description="Detailed explanation of the feature.")
+    type: ActionFeatureType = Field(..., description="The type of UI component this feature requires.")
+    backend_method: str = Field(..., description="Name of the backend method to call for this feature.")
     default_value: Any = Field(None, description="Default value for input fields or toggles.")
     options: Optional[List[FeatureOption]] = Field(None, description="For 'select_option' types.")
     placeholder: Optional[str] = Field(None, description="Placeholder text for 'input_text' types.")
-    # Dependencies and visibility rules
     dependencies: Optional[List[FeatureDependency]] = Field(None, description="Rules for conditional visibility or enablement.")
-    # Backend mapping
-    backend_method: Optional[str] = Field(None, description="Name of the backend method to call for this feature.")
-    backend_command: Optional[str] = Field(None, description="CLI command template associated with this feature (for display or execution).")
-    # Additional context for display/form rendering
-    group: Optional[str] = Field(None, description="Optional grouping for UI organization (e.g., 'System', 'Network').")
+    validation_rules: Optional[Dict[str, Any]] = Field(None, description="Validation rules for the frontend.")
+    group: Optional[str] = Field(None, description="Optional grouping for UI organization.")
     order: Optional[int] = Field(None, description="Optional order for UI display within a group.")
-    display_location: Optional[Literal["header"]] = Field(None, description="If set to 'header', this feature will also be displayed in the device header.")
 
 class HeaderFieldSchema(BaseModel):
-    name: str = Field(..., description="Unique identifier for the header field (e.g., 'hostname', 'uptime').")
-    label: str = Field(..., description="Human-readable label for the header field (e.g., 'Hostname', 'Uptime').")
-    type: HeaderFieldType = Field(..., description="The type of data this header field represents (e.g., 'text', 'statistic', 'status').")
+    name: str = Field(..., description="Unique identifier for the header field.")
+    label: str = Field(..., description="Human-readable label for the header field.")
+    type: HeaderFieldType = Field(..., description="The type of data this header field represents.")
     value: Any = Field(None, description="The current value of the header field.")
-    unit: Optional[str] = Field(None, description="Unit for statistic types (e.g., 'Mbps', '%').")
-    format: Optional[str] = Field(None, description="Formatting hint (e.g., 'duration', 'percentage').")
+    unit: Optional[str] = Field(None, description="Unit for statistic types.")
+    format: Optional[str] = Field(None, description="Formatting hint.")
     order: Optional[int] = Field(None, description="Optional order for display within the header.")
+
+class FeatureActionRequest(BaseModel):
+    feature_name: str
+    backend_method: Optional[str] = None
+    data: Optional[Dict[str, Any]] = None
+
+class FeatureActionResponse(BaseModel):
+    success: bool
+    message: str
+    data: Optional[Dict[str, Any]] = None
+
+class DeviceFeaturesResponse(BaseModel):
+    view_features: List[ViewFeatureSchema]
+    action_features: List[ActionFeatureSchema]
+    header_fields: List[HeaderFieldSchema]
+    groups: List[str]
+
+class SupportedFeaturesResponse(BaseModel):
+    supported_features: Dict[str, List[Union[ViewFeatureSchema, ActionFeatureSchema]]]

@@ -98,6 +98,42 @@ class ConnectionManager:
 
         return self._executor.submit(_execute_command)
 
+    def send_config_set(self, device_info: DeviceConnectionInfo, commands: list[str], netmiko_device_type: str, **kwargs):
+        """Submits a config set execution request to the thread pool and returns a Future."""
+        def _execute_config_set():
+            connection = self._connect_device(device_info, netmiko_device_type) # Ensure connection is active or re-established
+            try:
+                # Ensure we are in privileged EXEC mode before sending the command
+                if not connection.check_enable_mode():
+                    connection.enable()
+                print(f"Executing config commands '{commands}' on {device_info.ip_address}...") # Corrected to ip_address
+                output = connection.send_config_set(commands, **kwargs)
+                print(f"Config commands '{commands}' executed on {device_info.ip_address}.") # Corrected to ip_address
+                return output
+            except Exception as e:
+                print(f"Error executing config commands '{commands}' on {device_info.ip_address}: {e}") # Corrected to ip_address
+                raise
+
+        return self._executor.submit(_execute_config_set)
+
+    def send_multiline_commands(self, device_info: DeviceConnectionInfo, command_patterns: list[list[str]], netmiko_device_type: str, **kwargs):
+        """Submits a multiline command execution request to the thread pool and returns a Future."""
+        def _execute_multiline_commands():
+            connection = self._connect_device(device_info, netmiko_device_type) # Ensure connection is active or re-established
+            try:
+                # Ensure we are in privileged EXEC mode before sending the command
+                if not connection.check_enable_mode():
+                    connection.enable()
+                print(f"Executing multiline commands '{command_patterns}' on {device_info.ip_address}...") # Corrected to ip_address
+                output = connection.send_multiline(command_patterns, **kwargs)
+                print(f"Multiline commands '{command_patterns}' executed on {device_info.ip_address}.") # Corrected to ip_address
+                return output
+            except Exception as e:
+                print(f"Error executing multiline commands '{command_patterns}' on {device_info.ip_address}: {e}") # Corrected to ip_address
+                raise
+
+        return self._executor.submit(_execute_multiline_commands)
+
     def disconnect_all(self):
         """
         Disconnects all active Netmiko connections.

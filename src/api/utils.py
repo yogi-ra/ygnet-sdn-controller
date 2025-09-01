@@ -28,6 +28,7 @@ def get_handler_from_device_id(device_id: int, db: Session):
             password=decrypted_password,
             secret=decrypted_secret,
             name=db_device.name,
+            id=device_id,  # Include device ID
         )
         return get_device_handler(device_info)
     except Exception as e:
@@ -35,4 +36,3 @@ def get_handler_from_device_id(device_id: int, db: Session):
         raise HTTPException(
             status_code=500, detail=f"Failed to prepare device handler: {e}"
         )
-

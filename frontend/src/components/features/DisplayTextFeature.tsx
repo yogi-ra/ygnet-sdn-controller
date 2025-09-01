@@ -1,6 +1,6 @@
 import React from 'react';
 import { Spinner, Alert } from 'react-bootstrap';
-import { type FeatureSchema, FeatureType } from '../../types/featureTypes';
+import { type FeatureSchema } from '../../types/featureTypes';
 import { useFeatureData } from '../../hooks/useFeatureData';
 
 interface DisplayTextFeatureProps {

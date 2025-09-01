@@ -37,8 +37,8 @@ const DeviceFeaturesPage = () => {
       <h1 className="mb-4">Device Features</h1>
       <div className="d-flex flex-wrap">
         {features.map((feature) => (
-          <FeatureRenderer key={feature.name} feature={feature} deviceId={deviceId} />
-        ))}
+            <FeatureRenderer key={feature.name} feature={feature} deviceId={deviceId} />
+          ))}
       </div>
     </Container>
   );
