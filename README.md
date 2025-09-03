@@ -41,6 +41,11 @@ It provides a RESTful interface to manage and interact with network devices from
 - **Ubiquiti EdgeSwitch** (`ubiquiti_edgeswitch`): For Ubiquiti EdgeSwitch devices.
 - **Ubiquiti UniFi Switch** (`ubiquiti_unifiswitch`): For Ubiquiti UniFi switches (e.g., USW-Lite-8-POE).
 
+## API Endpoints for Frontend Developers
+
+- **`GET /api/devices/supported-features`**: Returns a mapping of device types to their supported features. This endpoint helps frontend developers understand what features are available for each device type.
+- **Device-type specific views**: The frontend implements static views for specific device types (e.g., Cisco IOS Router, Cisco IOS Switch) to improve performance and maintainability.
+
 ## Building and Running
 
 ### Prerequisites

@@ -56,7 +56,6 @@ class VersionInfo(BaseModel):
 class DeviceDetail(Device):
     version: Optional[VersionInfo] = None
     interfaces: Optional[list[dict]] = None # Changed to list[dict] based on common Netmiko output for interfaces
-    is_reachable: bool = False # Add is_reachable to the schema
 
 
 class DeviceUpdate(BaseModel):
@@ -124,12 +123,6 @@ class MultilineCommandRequest(BaseModel):
 
 class MultilineCommandOutput(BaseModel):
     output: str
-
-
-class FeatureActionRequest(BaseModel):
-    feature_name: str = Field(..., description="The name of the feature to act upon.")
-    backend_method: Optional[str] = None
-    data: Optional[Dict[str, Any]] = None
 
 
 # --- Cache Schemas ---

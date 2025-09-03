@@ -1,5 +1,4 @@
 import { QueryClient } from "@tanstack/react-query";
-import * as FeatureTypes from "./types/featureTypes.ts";
 import type { DeviceTypeInfo } from "./types/deviceTypes.ts";
 
 export const queryClient = new QueryClient();
@@ -87,63 +86,4 @@ export const deleteDevice = async (
     }
     throw new Error(`Failed to delete device: ${response.statusText}`);
   }
-};
-
-export const fetchDeviceFeatures = async (deviceId: string, token: string | null): Promise<{ features: FeatureTypes.FeatureSchema[]; header_fields: FeatureTypes.HeaderFieldSchema[] }> => {
-  const headers = getAuthHeaders(token);
-  const response = await fetch(`/api/devices/${deviceId}/features`, { headers });
-
-  if (!response.ok) {
-    if (response.status === 401) {
-      throw new UnauthorizedError("Unauthorized");
-    }
-    throw new Error(`Failed to fetch device features: ${response.statusText}`);
-  }
-
-  return response.json();
-};
-
-export const fetchFeature = async (deviceId: string, featureName: string, token: string | null): Promise<any> => {
-  const headers = getAuthHeaders(token);
-  const response = await fetch(`/api/devices/${deviceId}/features/${featureName}`, { headers });
-
-  if (!response.ok) {
-    if (response.status === 401) {
-      throw new UnauthorizedError("Unauthorized");
-    }
-    throw new Error(`Failed to fetch feature: ${response.statusText}`);
-  }
-
-  return response.json();
-};
-
-export const performFeatureAction = async (
-  deviceId: string,
-  actionRequest: any,
-  token: string | null
-): Promise<any> => {
-  const headers = getAuthHeaders(token);
-  const response = await fetch(`/api/devices/${deviceId}/action`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(actionRequest),
-  });
-
-  if (!response.ok) {
-    if (response.status === 401) {
-      throw new UnauthorizedError("Unauthorized");
-    }
-    const errorText = await response.text();
-    let errorMessage = `Failed to perform action: ${response.statusText}`;
-    try {
-      const errorData = JSON.parse(errorText);
-      errorMessage = errorData.detail || errorMessage;
-    } catch (e) {
-      // If parsing fails, use the raw text
-      errorMessage = errorText || errorMessage;
-    }
-    throw new Error(errorMessage);
-  }
-
-  return response.json();
 };

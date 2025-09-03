@@ -271,3 +271,29 @@ def test_cisco_switch_get_mac_address_table(
     mock_connection_manager_instance["send_command"].assert_called_once_with(sample_cisco_switch_info, "show mac address-table", handler.netmiko_device_type) # Changed from mock_send_command
     handler.parse_cli_output.assert_called_once_with("show mac address-table", raw_mac_address_table_output)
     assert mac_table == expected_data
+
+
+def test_cisco_switch_get_supported_features(sample_cisco_switch_info):
+    """
+    Test that Cisco IOS Switch returns the correct supported features.
+    """
+    handler = get_device_handler(sample_cisco_switch_info)
+    view_features, action_features = handler.get_supported_features()
+    
+    # Check that we get the expected features
+    expected_view_features = [
+        "system_version",
+        "system_hostname",
+        "system_uptime",
+        "system_clock",
+        "interfaces_brief",
+        "interfaces_status"
+    ]
+    
+    expected_action_features = [
+        "interface_state_toggle",
+        "system_reboot"
+    ]
+    
+    assert view_features == expected_view_features
+    assert action_features == expected_action_features

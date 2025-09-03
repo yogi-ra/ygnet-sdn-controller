@@ -7,7 +7,7 @@ import { findDeviceTypeDisplayName } from "../utils/deviceTypes";
 const DeviceListPage = () => {
   const navigate = useNavigate();
   const { devices, isLoading, isError, error, deleteDevice } = useDevices();
-  const { supportedFeatures, deviceTypes } = useConfig();
+  const { deviceTypes } = useConfig();
 
   const handleAddDevice = () => {
     navigate("/devices/add");

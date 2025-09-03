@@ -6,7 +6,6 @@ interface DeviceTypeConfig {
   displayName: string;
   icon?: string;
   theme?: string;
-  featureGroups?: string[];
   customComponents?: Record<string, React.ComponentType<any>>;
 }
 
@@ -28,35 +27,30 @@ export const DeviceTypeRegistryProvider: React.FC<{ children: ReactNode }> = ({ 
       displayName: 'Cisco IOS Router',
       icon: 'router',
       theme: 'cisco',
-      featureGroups: ['System', 'Interfaces', 'Routing', 'Security', 'Discovery', 'Network'],
     },
     'cisco_ios_switch': {
       name: 'cisco_ios_switch',
       displayName: 'Cisco IOS Switch',
       icon: 'switch',
       theme: 'cisco',
-      featureGroups: ['System', 'Interfaces', 'VLANs', 'Security', 'Discovery', 'Network'],
     },
     'ubiquiti_edgerouter': {
       name: 'ubiquiti_edgerouter',
       displayName: 'Ubiquiti EdgeRouter',
       icon: 'router',
       theme: 'ubiquiti',
-      featureGroups: ['System', 'Interfaces', 'Routing', 'Security', 'Discovery', 'Network'],
     },
     'ubiquiti_edgeswitch': {
       name: 'ubiquiti_edgeswitch',
       displayName: 'Ubiquiti EdgeSwitch',
       icon: 'switch',
       theme: 'ubiquiti',
-      featureGroups: ['System', 'Interfaces', 'VLANs', 'Security', 'Discovery', 'Network'],
     },
     'ubiquiti_unifiswitch': {
       name: 'ubiquiti_unifiswitch',
       displayName: 'Ubiquiti UniFi Switch',
       icon: 'switch',
       theme: 'ubiquiti',
-      featureGroups: ['System', 'Interfaces', 'VLANs', 'Security', 'Discovery', 'Network'],
     },
   };
 

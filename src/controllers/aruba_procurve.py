@@ -1,27 +1,27 @@
-from src.controllers.base import BaseDevice
 from typing import List
-from src.feature_schemas import FeatureSchema, FeatureType
+from .base import BaseController
+from src.device_info import DeviceConnectionInfo
 from src.controllers.features.system.aruba_procurve import ArubaProcurveSystem
 
-class ArubaProcurve(BaseDevice):
-    @property
-    def netmiko_device_type(self) -> str:
-        return "hp_procurve"
-    def __init__(self, device_info):
+class ArubaProcurveController(BaseController):
+    """Controller for Aruba Procurve devices."""
+    
+    def __init__(self, device_info: DeviceConnectionInfo):
         super().__init__(device_info)
-        self.system = ArubaProcurveSystem(self)
-
+        # Initialize feature modules specific to Aruba Procurve
+        self.system = ArubaProcurveSystem(self.device_info)
+    
     @classmethod
-    def get_supported_features(cls) -> List[FeatureSchema]:
-        return [
-            FeatureSchema(
-                name="system_version",
-                label="System Version",
-                description="Displays the device's system version information.",
-                type=FeatureType.DISPLAY_TEXT,
-                read_only=True,
-                backend_method="system.get_version_info",
-                group="System",
-                order=1
-            ),
+    def get_supported_features(cls) -> List[str]:
+        """
+        Defines the features supported by Aruba Procurve devices.
+        This is a simplified version that returns feature names only.
+        """
+        features = [
+            "system_info_display",
+            "system_uptime_display",
+            "system_clock_display",
+            "interfaces_brief_table",
+            "interfaces_status_table"
         ]
+        return features

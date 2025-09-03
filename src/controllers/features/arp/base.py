@@ -5,7 +5,7 @@ from ..base import BaseFeature
 
 
 class BaseArp(BaseFeature, ABC):
-    """Abstract base class for LLDP features."""
+    """Abstract base class for ARP features."""
 
     def __init__(self, device_handler):
         self.device_handler = device_handler

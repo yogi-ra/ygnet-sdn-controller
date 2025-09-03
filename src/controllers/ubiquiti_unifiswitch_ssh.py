@@ -1,35 +1,22 @@
-from src.controllers.base import BaseDevice
-from src.feature_schemas import FeatureSchema, FeatureType
 from typing import List
+from .base import BaseController
+from ..device_info import DeviceConnectionInfo
 
-class UbiquitiUnifiSwitchSSH(BaseDevice):
-    def __init__(self, device_info):
+class UbiquitiUnifiSwitchSSHController(BaseController):
+    """Controller for Ubiquiti UniFi Switch devices via SSH."""
+    
+    def __init__(self, device_info: DeviceConnectionInfo):
         super().__init__(device_info)
         # Initialize feature modules specific to Ubiquiti UniFi Switch
-        # self.system = UbiquitiEdgeSwitchSystem(self)
-        # self.interfaces = UbiquitiEdgeSwitchInterfaces(self)
-        # self.vlans = UbiquitiEdgeSwitchVlans(self)
-
-    @property
-    def netmiko_device_type(self) -> str:
-        return "ubiquiti_unifiswitch_ssh"
-
-    def get_supported_features(self) -> List[FeatureSchema]:
+        # Currently no specific feature modules are implemented
+    
+    @classmethod
+    def get_supported_features(cls) -> List[str]:
         """
         Defines the features supported by Ubiquiti UniFi Switch devices.
+        This is a simplified version that returns feature names only.
         """
         features = [
-            # # Port Security Configuration
-            # FeatureSchema(
-            #     name="port_security_config",
-            #     label="Port Security Configuration",
-            #     description="Configure port security settings on an interface of the Ubiquiti UniFi Switch device.",
-            #     type=FeatureType.INPUT_TEXT,
-            #     read_only=False,
-            #     backend_method="interfaces.configure_port_security",
-            #     group="Security",
-            #     order=10,
-            #     placeholder="Enter interface name, max MAC addresses, and violation action (format: interface,max_macs,action)"
-            # ),
+            # Currently no specific features are implemented
         ]
         return features

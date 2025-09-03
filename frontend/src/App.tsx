@@ -10,9 +10,6 @@ import ProtectedRoute from './components/ProtectedRoute';
 import { useAuth } from './hooks/useAuth';
 import EditDevicePage from './pages/EditDevicePage';
 
-import DeviceFeaturesPage from './pages/DeviceFeaturesPage';
-
-import FeatureOutputPage from './pages/FeatureOutputPage';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { useAuthQueryClient } from './hooks/useAuthQueryClient';
 import AuthQueryClientProviderWrapper from './components/AuthQueryClientProviderWrapper';
@@ -88,22 +85,6 @@ const MainLayout = () => {
             element={
               <ProtectedRoute>
                 <EditDevicePage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/devices/:id/features"
-            element={
-              <ProtectedRoute>
-                <DeviceFeaturesPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/devices/:id/features/:featureName"
-            element={
-              <ProtectedRoute>
-                <FeatureOutputPage />
               </ProtectedRoute>
             }
           />

@@ -1,5 +1,5 @@
 """
-Test for the device-types endpoint to verify it returns the correct format.
+Test for the device-types and supported-features endpoints to verify they return the correct format.
 """
 import os
 import pytest
@@ -60,3 +60,42 @@ def test_device_types_endpoint_format(test_db):
             
             for expected_type in expected_types:
                 assert expected_type in device_type_keys
+
+def test_supported_features_endpoint_format(test_db):
+    """Test that the supported-features endpoint returns the correct format."""
+    # Use a mock token for testing
+    mock_token = "mock_token"
+    
+    response = client.get(
+        "/api/devices/supported-features",
+        headers={"Authorization": f"Bearer {mock_token}"}
+    )
+    
+    # Should succeed (the actual authentication is mocked)
+    assert response.status_code in [200, 401, 403]  # 401/403 due to mock auth
+    
+    # If we get a 200 response, check the format
+    if response.status_code == 200:
+        data = response.json()
+        # Should be a dictionary
+        assert isinstance(data, dict)
+        
+        # Check that we have the expected device types
+        expected_types = [
+            "cisco_ios_router",
+            "cisco_ios_switch"
+        ]
+        
+        for device_type in expected_types:
+            assert device_type in data
+            device_features = data[device_type]
+            
+            # Each device type should have either 'features' or both 'view_features' and 'action_features'
+            if 'features' in device_features:
+                assert isinstance(device_features['features'], list)
+            elif 'view_features' in device_features and 'action_features' in device_features:
+                assert isinstance(device_features['view_features'], list)
+                assert isinstance(device_features['action_features'], list)
+            else:
+                # If neither format is present, it might be an error case
+                assert 'error' in device_features

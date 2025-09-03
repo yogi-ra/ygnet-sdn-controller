@@ -5,11 +5,10 @@ from concurrent.futures import TimeoutError
 
 from netmiko import NetmikoAuthenticationException
 
-from src.connection_manager import ConnectionManager
-from src.device_info import DeviceConnectionInfo
-from src.config import settings
+from ..connection_manager import ConnectionManager
+from ..device_info import DeviceConnectionInfo
+from ..config import settings
 from ..parsing_utils import parse_cli_output
-from src.feature_schemas import ViewFeatureSchema, ActionFeatureSchema
 from ..exceptions import (
     DeviceConnectionError,
     DeviceTimeoutError,
@@ -180,37 +179,7 @@ class BaseDevice(ABC):
             self.device_info.device_type,
             self.netmiko_device_type,
         )
-
-    @classmethod
-    @abstractmethod
-    def get_supported_features(cls) -> Tuple[List[ViewFeatureSchema], List[ActionFeatureSchema]]:
-        pass
-
-    def check_reachability(self) -> bool:
-        try:
-            # Attempt to get a connection. If successful, the device is reachable.
-            # The connection manager handles caching, so this won't create a new connection every time.
-            future = connection_manager.get_connection(
-                self.device_info, self.netmiko_device_type
-            )
-            # We don't need to store the connection, just check if it can be established
-            future.result(timeout=settings.NETMIKO_TIMEOUT)  # Corrected timeout setting
-            return True
-        except (
-            TimeoutError,
-            DeviceConnectionError,
-            NetmikoAuthenticationException,
-        ) as e:  # Catch NetmikoAuthenticationException
-            self.logger.debug(
-                f"Device {self.device_info.ip_address} is not reachable: {e}"  # Corrected to ip_address
-            )
-            return False
-        except Exception as e:
-            self.logger.error(
-                f"An unexpected error occurred while checking reachability for {self.device_info.ip_address}: {e}"  # Corrected to ip_address
-            )
-            return False
-
+     
     def invalidate_feature_cache(self, feature_name: str) -> None:
         """
         Invalidates the cache for a specific feature by calling the API endpoint.

@@ -4,7 +4,6 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import pytest
-from src.controllers.features.system.cisco_ios import CiscoIosSystem
 from datetime import datetime
 from src.controllers import (
     DeviceConnectionInfo,
@@ -12,8 +11,6 @@ from src.controllers import (
 )
 from tests.conftest import create_future_with_result
 from netmiko.exceptions import NetmikoTimeoutException, NetmikoAuthenticationException
-
-
 
 
 @pytest.fixture
@@ -46,7 +43,9 @@ def test_check_reachability_raises_authentication_error(sample_cisco_router_info
     mock_connection_manager_instance["get_connection"].side_effect = NetmikoAuthenticationException
     handler = get_device_handler(sample_cisco_router_info)
     assert handler.check_reachability() is False
-    mock_connection_manager_instance["get_connection"].assert_called_once_with(sample_cisco_router_info, handler.netmiko_device_type)
+    mock_connection_manager_instance["get_connection"].assert_called_once_with(
+        sample_cisco_router_info, handler.netmiko_device_type
+    )
 
 
 def test_check_reachability_raises_timeout_error(sample_cisco_router_info, mock_connection_manager_instance):
@@ -54,7 +53,9 @@ def test_check_reachability_raises_timeout_error(sample_cisco_router_info, mock_
     mock_connection_manager_instance["get_connection"].side_effect = NetmikoTimeoutException
     handler = get_device_handler(sample_cisco_router_info)
     assert handler.check_reachability() is False
-    mock_connection_manager_instance["get_connection"].assert_called_once_with(sample_cisco_router_info, handler.netmiko_device_type)
+    mock_connection_manager_instance["get_connection"].assert_called_once_with(
+        sample_cisco_router_info, handler.netmiko_device_type
+    )
 
 
 # --- CiscoIosDevice Specific Method Tests (using router info) ---
@@ -109,7 +110,7 @@ def test_cisco_get_hostname(mocker, sample_cisco_router_info):
     Test that get_hostname correctly extracts the hostname.
     """
     # This test relies on the mock of get_version_info
-    mock_get_version_info = mocker.patch.object(CiscoIosSystem, "get_version_info")
+    mock_get_version_info = mocker.patch.object(handler.system, "get_version_info")
     mock_get_version_info.return_value = [{"hostname": "MyRouter"}]
 
     handler = get_device_handler(sample_cisco_router_info)
@@ -233,3 +234,29 @@ def test_cisco_get_local_users(sample_cisco_router_info, mocker, mock_connection
     # mock_parse_cli_output.assert_called_once_with(
     #     "show running-config | include ^username", raw_output, handler.device_info.device_type, handler.netmiko_device_type
     # )
+
+
+def test_cisco_router_get_supported_features(sample_cisco_router_info):
+    """
+    Test that Cisco IOS Router returns the correct supported features.
+    """
+    handler = get_device_handler(sample_cisco_router_info)
+    view_features, action_features = handler.get_supported_features()
+    
+    # Check that we get the expected features
+    expected_view_features = [
+        "system_version",
+        "system_hostname",
+        "system_uptime",
+        "system_clock",
+        "interfaces_brief",
+        "interfaces_status"
+    ]
+    
+    expected_action_features = [
+        "interface_state_toggle",
+        "system_reboot"
+    ]
+    
+    assert view_features == expected_view_features
+    assert action_features == expected_action_features

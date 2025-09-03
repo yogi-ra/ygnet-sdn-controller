@@ -1,427 +1,142 @@
-# Strategic Refactoring for Dynamic Device Features
+# Strategic Refactoring for Device Features: Simplified Approach
 
-This document outlines a comprehensive strategy to refactor the Ygnet SDN controller's backend and frontend, transitioning from a static, hardcoded feature model to a dynamic, data-driven approach. This will enable greater flexibility, extensibility, and modularity for device feature management.
+This document outlines a simplified strategy to refactor the Ygnet SDN controller's backend and frontend, focusing on clear API contracts for frontend developers without complex dynamic feature definitions.
 
-## 1. Define a Universal Feature Data Structure
+## Core Principles
 
-**Why it's crucial:**
-Currently, features are likely implicitly defined within controller classes or directly in the frontend, making additions or modifications cumbersome due to changes required in multiple places. A universal data structure acts as the contract between backend and frontend, decoupling the *definition* of a feature from its *implementation* and *display*.
+1. **API-First Approach**: Define clear, simple API endpoints that frontend developers can easily consume
+2. **Separation of Concerns**: Backend provides data, frontend handles presentation
+3. **Performance**: Eliminate unnecessary complexity that slows down the application
+4. **Maintainability**: Reduce code complexity to make the system easier to maintain
+5. **Static Views**: Create device-type specific static views in the frontend for better performance and maintainability
 
-**Proposed Structure (Pydantic/TypeScript example):**
+## Simplified Backend API Structure
 
-```python
-# In src/feature_schemas.py (new file) or extending src/schemas.py
+### Device Features Endpoint
+`GET /api/devices/supported-features`
 
-from pydantic import BaseModel, Field
-from typing import List, Dict, Any, Optional, Literal, Union
-from enum import Enum
+Returns a dictionary mapping device types to their supported features. This endpoint helps frontend developers understand what features are available for each device type:
 
-class FeatureType(str, Enum):
-    TOGGLE = "toggle"          # e.g., Enable/Disable SNMP
-    INPUT_TEXT = "input_text"  # e.g., Set NTP Server IP
-    DISPLAY_TABLE = "display_table" # e.g., Show ARP Table
-    DISPLAY_TEXT = "display_text"  # e.g., Show Running Config snippet
-    SELECT_OPTION = "select_option" # e.g., Choose VLAN mode (access/trunk)
-    BUTTON = "button"          # e.g., Reload Device
-
-class FeatureOption(BaseModel):
-    label: str
-    value: str
-
-class FeatureDependency(BaseModel):
-    feature_name: str
-    operator: Literal["equals", "not_equals"]
-    value: Union[str, bool, int]
-
-class FeatureSchema(BaseModel):
-    name: str = Field(..., description="Unique identifier for the feature (e.g., 'snmp_status', 'ntp_server').")
-    label: str = Field(..., description="Human-readable name for the feature (e.g., 'SNMP Status', 'NTP Server Configuration').")
-    description: Optional[str] = Field(None, description="Detailed explanation of the feature.")
-    type: FeatureType = Field(..., description="The type of UI component this feature requires.")
-    read_only: bool = Field(False, description="If true, the feature is for display only.")
-    # UI-specific properties
-    default_value: Any = Field(None, description="Default value for input fields or toggles.")
-    options: Optional[List[FeatureOption]] = Field(None, description="For 'select_option' types.")
-    placeholder: Optional[str] = Field(None, description="Placeholder text for 'input_text' types.")
-    # Dependencies and visibility rules
-    dependencies: Optional[List[FeatureDependency]] = Field(None, description="Rules for conditional visibility or enablement.")
-    # Backend mapping
-    backend_method: Optional[str] = Field(None, description="Name of the backend method to call for this feature.")
-    backend_command: Optional[str] = Field(None, description="CLI command template associated with this feature (for display or execution).")
-    # Additional context for display/form rendering
-    group: Optional[str] = Field(None, description="Optional grouping for UI organization (e.g., 'System', 'Network').")
-    order: Optional[int] = Field(None, description="Optional order for UI display within a group.")
-```
-
-**Implementation Considerations:**
-*   **Location:** A new file like `src/feature_schemas.py` is ideal for separation of concerns.
-*   **Validation:** Pydantic models will provide automatic data validation.
-*   **Extensibility:** The schema is designed to be easily extended.
-
-## 2. Develop a Backend Feature API
-
-**Why it's crucial:**
-This API endpoint will become the single source of truth for the frontend regarding supported device features, eliminating hardcoded logic in the frontend.
-
-**Endpoint Structure:**
-`GET /api/devices/{device_id}/features`
-*   `device_id`: The ID of the device for which features are requested.
-
-**Backend Logic (`src/api/routers/devices.py` or new `src/api/routers/features.py`):**
-1.  **Retrieve Device Information:** Fetch `device_info` (including `device_type`) from the database.
-2.  **Dynamic Feature Determination:**
-    *   Introduce a new mechanism (e.g., `FeatureRegistry` or an extension to `src/controllers/__init__.py`) to map `device_type` to a list of supported `FeatureSchema` instances.
-    *   This registry could be populated by:
-        *   **Explicit Definition:** Each device controller class (`CiscoIosRouter`, `ArubaProcurve`) defines its supported `FeatureSchema` objects.
-        *   **Automated Discovery (Advanced):** Using Python reflection to discover feature-enabled methods within `src/controllers/features/` modules and generate `FeatureSchema` objects.
-3.  **Filtering and Formatting:**
-    *   Select relevant `FeatureSchema` objects based on `device_type`.
-    *   Populate dynamic fields (e.g., current value for a "SNMP status" toggle) by making quick `send_command` calls if live data for read-only features is needed.
-    *   Return a `List[FeatureSchema]` as a JSON response.
-
-**Interaction with existing code:**
-*   Leverage `get_device_handler` in `src/controllers/__init__.py` to instantiate the correct device controller.
-*   Query the device controller instance for its supported features.
-*   Ensure proper authentication and authorization.
-
-## 3. Modularize Backend Feature Logic
-
-**Why it's crucial:**
-Existing feature-related code in `src/controllers/features/` modules (e.g., `get_aaa_config`, `configure_interface`) needs to be discoverable and callable by the new feature API.
-
-**How to achieve modularity:**
-*   **Feature Classes:** Each file in `src/controllers/features/{feature_category}/` represents a specific feature *implementation* for a given device platform.
-*   **Standardized Interfaces:** Methods within these feature classes corresponding to `FeatureSchema` entries (e.g., `get_aaa_config`, `set_snmp_status`) must have consistent input/output types.
-*   **Registration/Mapping:**
-    *   `BaseDevice` or its subclasses could maintain a dictionary mapping `FeatureSchema.name` to the actual method or a callable that executes the corresponding feature logic.
-    *   When the API receives a request to *perform* a feature action, it uses the `backend_method` from the `FeatureSchema` to dynamically call the appropriate method on the device controller instance.
-
-**Example Backend Feature Logic within `CiscoIosController` (conceptual extension):**
-
-```python
-# In src/controllers/cisco_ios.py (conceptual extension)
-
-from src.controllers.base import BaseDevice
-from src.controllers.features.aaa.cisco_ios import CiscoIosAaa
-# ... other feature imports
-
-class CiscoIosRouter(BaseDevice):
-    def __init__(self, device_info):
-        super().__init__(device_info)
-        self.aaa = CiscoIosAaa(self) # Pass self (the device handler) to the feature
-        # self.interfaces = CiscoIosInterfaces(self)
-        # ... other feature modules
-
-    # New method to expose supported features
-    def get_supported_features(self) -> List[FeatureSchema]:
-        # This is where you define the features for Cisco IOS Router
-        # You can construct these directly or load from a config/registry
-        return [
-            FeatureSchema(
-                name="aaa_config_display",
-                label="AAA Configuration",
-                description="Displays the current AAA configuration.",
-                type=FeatureType.DISPLAY_TEXT,
-                read_only=True,
-                backend_method="aaa.get_aaa_config" # Points to the method to call
-            ),
-            FeatureSchema(
-                name="snmp_status_toggle",
-                label="Enable/Disable SNMP",
-                description="Toggles SNMP service on the device.",
-                type=FeatureType.TOGGLE,
-                default_value=True, # Will be overridden by live data
-                backend_method="snmp.toggle_snmp_service" # Placeholder
-            ),
-            # ... more features
-        ]
-
-    # ... existing methods
-```
-
-## 4. Refactor Frontend for Dynamic Feature Consumption
-
-**Why it's crucial:**
-The frontend should not have hardcoded logic about specific device types or features. It should react to the data provided by the backend API.
-
-**Frontend Changes (`frontend/src/pages/DeviceDetailPage.tsx` or new `components/DeviceFeatures.tsx`):**
-1.  **Data Fetching:** When `DeviceDetailPage` loads, it will fetch device basic info, then make a `GET` request to `/api/devices/{device_id}/features`.
-2.  **State Management:** Store the fetched `List<FeatureSchema>` in the component's state.
-3.  **No More Static Imports:** Iterate over the `features` array from the backend to render components, instead of conditional rendering based on static `device_type` logic.
-
-**Conceptual React Component:**
-
-```tsx
-// In frontend/src/components/DeviceFeatures.tsx (new component)
-import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
-import { FeatureSchema } from '../types/featureTypes'; // TypeScript equivalent of backend schema
-import FeatureRenderer from './FeatureRenderer'; // Component to handle rendering each feature
-
-const DeviceFeatures: React.FC = () => {
-    const { deviceId } = useParams<{ deviceId: string }>();
-    const [features, setFeatures] = useState<FeatureSchema[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-
-    useEffect(() => {
-        const fetchFeatures = async () => {
-            try {
-                const response = await fetch(`/api/devices/${deviceId}/features`);
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                const data: FeatureSchema[] = await response.json();
-                setFeatures(data);
-            } catch (err: any) {
-                setError(err.message);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        if (deviceId) {
-            fetchFeatures();
-        }
-    }, [deviceId]);
-
-    if (loading) return <div>Loading features...</div>;
-    if (error) return <div>Error loading features: {error}</div>;
-    if (features.length === 0) return <div>No features available for this device.</div>;
-
-    return (
-        <div className="device-features-container">
-            {features.map((feature) => (
-                <FeatureRenderer key={feature.name} feature={feature} deviceId={deviceId} />
-            ))}
-        </div>
-    );
-};
-
-export default DeviceFeatures;
-```
-
-## 5. Implement Dynamic Frontend UI Rendering
-
-**Why it's crucial:**
-This is where the magic happens. Instead of writing `if (device.type === 'cisco') { /* render Cisco UI */ }`, you'll have a generic `FeatureRenderer` component that knows how to map `FeatureType` to a specific UI component.
-
-**Component Mapping:**
-Create a dictionary or switch statement that maps `FeatureType` values (e.g., `"toggle"`, `"input_text"`) to actual React components.
-
-```tsx
-// In frontend/src/components/FeatureRenderer.tsx (new component)
-import React from 'react';
-import { FeatureSchema, FeatureType } from '../types/featureTypes';
-import ToggleFeature from './features/ToggleFeature'; // Dedicated component for toggle
-import TextInputFeature from './features/TextInputFeature'; // Dedicated component for text input
-import DisplayTableFeature from './features/DisplayTableFeature'; // Dedicated component for table display
-import DisplayTextFeature from './features/DisplayTextFeature';
-import SelectOptionFeature from './features/SelectOptionFeature';
-import ButtonFeature from './features/ButtonFeature';
-
-interface FeatureRendererProps {
-    feature: FeatureSchema;
-    deviceId: string;
+```json
+{
+  "cisco_ios_router": {
+    "view_features": [
+      "system_version",
+      "system_hostname",
+      "system_uptime",
+      "system_clock",
+      "interfaces_brief",
+      "interfaces_status"
+    ],
+    "action_features": [
+      "interface_state_toggle",
+      "system_reboot"
+    ]
+  },
+  "cisco_ios_switch": {
+    "view_features": [
+      "system_version",
+      "system_hostname",
+      "system_uptime",
+      "system_clock",
+      "interfaces_brief",
+      "interfaces_status"
+    ],
+    "action_features": [
+      "interface_state_toggle",
+      "system_reboot"
+    ]
+  }
 }
-
-// Map FeatureType to a React component
-const featureComponentMap: Record<FeatureType, React.FC<any>> = {
-    [FeatureType.TOGGLE]: ToggleFeature,
-    [FeatureType.INPUT_TEXT]: TextInputFeature,
-    [FeatureType.DISPLAY_TABLE]: DisplayTableFeature,
-    [FeatureType.DISPLAY_TEXT]: DisplayTextFeature,
-    [FeatureType.SELECT_OPTION]: SelectOptionFeature,
-    [FeatureType.BUTTON]: ButtonFeature,
-    // Add other feature types as needed
-};
-
-const FeatureRenderer: React.FC<FeatureRendererProps> = ({ feature, deviceId }) => {
-    const Component = featureComponentMap[feature.type];
-
-    if (!Component) {
-        console.warn(`No component found for feature type: ${feature.type}`);
-        return null; // Or render a fallback UI
-    }
-
-    // You would also implement dependency checking here to conditionally render or disable
-    // based on `feature.dependencies` and the current state of other features.
-
-    return (
-        <div className="feature-card">
-            <h3>{feature.label}</h3>
-            {feature.description && <p>{feature.description}</p>}
-            <Component feature={feature} deviceId={deviceId} />
-        </div>
-    );
-};
-
-export default FeatureRenderer;
 ```
 
-**Handling Dependencies:**
-The `FeatureRenderer` (or individual feature components) will need logic to evaluate `feature.dependencies`, conditionally rendering or disabling components based on other features' states.
+### Device Detail Endpoint
+`GET /api/devices/{device_id}`
 
-**Form Submission/Action Triggering:**
-When a user interacts with a feature, the frontend will:
-1.  Construct a payload with `feature.name` and the new value.
-2.  Send this payload to a generic backend API endpoint (e.g., `POST /api/devices/{device_id}/action`).
-3.  The backend then uses `feature.name` and the `backend_method` from `FeatureSchema` to dynamically call the correct method on the device controller.
+Returns detailed information about a specific device including its type:
 
-## 6. Consider Database Schema Changes (if necessary)
+```json
+{
+  "id": 1,
+  "name": "Router1",
+  "device_type": "cisco_ios_router",
+  "ip_address": "192.168.1.1",
+  "port": 22,
+  "username": "admin"
+}
+```
 
-**When it's necessary:**
-*   **Custom Features:** If users can define their own features or templates.
-*   **User-Specific Feature Settings:** If feature parameters need to be stored per device or per user.
-*   **Feature-Specific Data:** If a feature generates or consumes data requiring long-term persistence (e.g., historical statistics, saved configurations).
+### Feature Data Endpoints
+Each feature has its own endpoint for retrieving or manipulating data:
 
-**Potential Schema Modifications:**
-*   **`features` table:** For metadata about user-defined or globally configurable features.
-*   **`device_features` join table:** To link devices to specific feature configurations, or to store dynamic feature values/settings.
-*   **JSONB columns:** For flexible storage of feature-related metadata or configuration directly within the `devices` table.
+1. `GET /api/devices/{device_id}/system/version` - Get system version
+2. `GET /api/devices/{device_id}/system/hostname` - Get system hostname
+3. `GET /api/devices/{device_id}/system/uptime` - Get system uptime
+4. `GET /api/devices/{device_id}/system/clock` - Get system clock
+5. `GET /api/devices/{device_id}/interfaces/brief` - Get brief interface status
+6. `GET /api/devices/{device_id}/interfaces/status` - Get detailed interface status
+7. `POST /api/devices/{device_id}/interfaces/{interface_name}/state` - Toggle interface state
+8. `POST /api/devices/{device_id}/system/reboot` - Reboot device
 
-## 7. Plan for Migration of Existing Static Feature Definitions
+## Implementation Plan
 
-**The Challenge:**
-Transitioning existing hardcoded logic.
+### Backend Changes
 
-**Migration Steps:**
-1.  **Identify all static feature definitions:** Locate `if device_type == 'cisco_ios_router': ...` blocks in frontend and backend.
-2.  **Translate to `FeatureSchema`:** Convert these static definitions into instances of the new `FeatureSchema` Pydantic model.
-3.  **Implement Backend Methods:** Ensure corresponding backend methods exist (or are refactored) in `src/controllers/features/` modules, callable by the `backend_method` specified in `FeatureSchema`.
-4.  **Gradual Rollout:**
-    *   Start by defining and exposing a few simple, read-only features through the new API.
-    *   Gradually migrate more complex or interactive features.
-    *   Maintain old and new systems in parallel temporarily if needed.
+1. **Simplify Device Feature Discovery**
+   - Add `/api/devices/supported-features` endpoint to inform frontend about available features
+   - Remove complex feature definition classes
+   - Create simple mapping of device types to available features
 
-## Overall Benefits of This Strategy:
+2. **Create Dedicated Endpoints**
+   - Create individual endpoints for each feature
+   - Each endpoint returns data in a consistent format
+   - Use appropriate HTTP methods (GET for read, POST for actions)
 
-*   **Modularity:** Clear separation of feature definition, backend implementation, and frontend rendering.
-*   **Extensibility:** Easier addition of new features or device types with minimal frontend changes.
-*   **Maintainability:** Localized changes for each feature.
-*   **Scalability:** Supports growth without a tangled codebase.
-*   **Reduced Code Duplication:** Generic rendering and action handling reduce redundant code.
+3. **Optimize Data Retrieval**
+   - Direct command execution without dynamic method resolution
+   - Proper error handling and logging
+   - Caching where appropriate
 
-## 8. Implemented Changes
+### Frontend Changes
 
-This section documents the changes that have been implemented to make the frontend more modular and dynamic, and confirms the completion of the dynamic feature system.
+1. **Static Device-Type Specific Views**
+   - Create separate view components for each device type (e.g., Cisco IOS Router, Cisco IOS Switch)
+   - Use device type information from the backend to render the appropriate view
+   - Eliminate dynamic feature rendering in favor of static, purpose-built components
 
-### Backend
+2. **Improved Performance**
+   - Static views load faster than dynamic feature rendering
+   - Reduced JavaScript bundle size by removing dynamic feature components
+   - Better code organization and maintainability
 
-*   **Universal Feature Data Structure (`src/feature_schemas.py`):** The `FeatureSchema` Pydantic model and related enums/models are defined, serving as the universal contract for features. **Extended with `HeaderFieldSchema` and `HeaderFieldType` for dynamic device header and general information display.**
-*   **Backend Feature API (`GET /api/devices/{device_id}/features`):** This endpoint in `src/api/routers/devices.py` is implemented to return a list of `FeatureSchema` objects for a specific device, leveraging the `get_supported_features` method of the device handler. **Now also returns `HeaderFieldSchema` objects with live device data for dynamic header and general information display, including error handling for data retrieval.**
-*   **Backend Feature Action API (`POST /api/devices/{device_id}/action`):** This endpoint in `src/api/routers/devices.py` is implemented to handle dynamic feature actions based on the `backend_method` defined in `FeatureSchema`.
-*   **Modularized Backend Feature Logic (`get_supported_features`):** The `get_supported_features` method is implemented in device controller classes (e.g., `CiscoIosDevice` in `src/controllers/cisco_ios.py` and `ArubaProcurve` in `src/controllers/aruba_procurve.py`) to return their supported features as `FeatureSchema` objects. **`CiscoIosSystem` (`src/controllers/features/system/cisco_ios.py`) was updated to correctly retrieve hostname, uptime, and clock information.**
-*   **`BaseFeature` Class and Updated Feature Base Classes:** `src/controllers/features/base.py` defines `BaseFeature`, and all existing feature base classes inherit from it, enabling introspection for feature discovery. **`BaseSystem` (`src/controllers/features/system/base.py`) was updated to include abstract methods for `get_uptime` and `get_clock` (returning string).**
-*   **`GET /api/devices/supported-features` Endpoint:** This endpoint in `src/api/routers/devices.py` returns a dictionary of supported device types and their features, using introspection for dynamic discovery.
-*   **Ubiquiti UniFi Controller and System Feature:** Added `src/controllers/ubiquiti_unifi.py` for Ubiquiti UniFi devices and `src/controllers/features/system/ubiquiti_unifi.py` for its system features. The `UbiquitiUniFi` controller is integrated into `src/controllers/__init__.py`.
+3. **Clear API Contracts**
+   - Frontend developers can easily see what features are available for each device type
+   - Clear mapping between device types and their respective views
+   - Consistent data fetching patterns across all device types
 
-### Frontend
+## Benefits of Simplified Approach
 
-*   **Dynamic Feature Consumption (`frontend/src/pages/DeviceFeaturesPage.tsx`):** This page fetches the `List[FeatureSchema]` from the backend and uses `FeatureRenderer` to dynamically render the features. **`frontend/src/pages/DeviceDetailPage.tsx` was refactored to fetch and display both `FeatureSchema` and `HeaderFieldSchema` data.**
-*   **Dynamic Frontend UI Rendering (`frontend/src/components/FeatureRenderer.tsx`):** This component maps `FeatureType` to specific React components (e.g., `ToggleFeature`, `TextInputFeature`, `DisplayTableFeature`, `DisplayTextFeature`, `SelectOptionFeature`, `ButtonFeature`).
-*   **Action-Oriented Feature Components:** Components like `ToggleFeature.tsx`, `TextInputFeature.tsx`, `SelectOptionFeature.tsx`, and `ButtonFeature.tsx` correctly construct and send `FeatureActionRequest` payloads to the `POST /api/devices/{device_id}/action` endpoint.
-*   **Display-Only Feature Components:** Components like `DisplayTableFeature.tsx` and `DisplayTextFeature.tsx` correctly fetch and display data from the `GET /api/devices/${deviceId}/features/${feature.name}` endpoint.
-*   **`ConfigContext`:** `frontend/src/context/ConfigContext.tsx` fetches and stores supported features from the backend for dynamic UI rendering.
-*   **`DeviceListPage` Refactor:** `frontend/src/pages/DeviceListPage.tsx` uses the `useConfig` hook to display supported features and navigate to the `DeviceFeaturesPage`.
-*   **`FeatureOutputPage`:** `frontend/src/pages/FeatureOutputPage.tsx` displays the output of a specific feature.
-*   **`api.ts` Update:** `frontend/src/api.ts` includes the `FeatureSchema` interface and. **Updated `fetchDeviceFeatures` to expect and return the combined `features` and `header_fields` response.**
-*   **`featureTypes.ts` Update:** **`frontend/src/types/featureTypes.ts` was updated to include `HeaderFieldSchema` and `HeaderFieldType` interfaces, and `display_location` in `FeatureSchema`.**
-*   **Dynamic Device Header and General Information Tab:** **`frontend/src/pages/DeviceDetailPage.tsx` now dynamically renders device header information based on `HeaderFieldSchema` and includes a new "General Information" tab that displays these fields in a prettified format.**
+* **Clarity**: Clear API contracts make development easier for both teams
+* **Performance**: Static views and reduced complexity lead to faster response times
+* **Maintainability**: Simpler code is easier to understand and modify
+* **Flexibility**: Frontend developers can easily integrate with backend APIs
+* **Reliability**: Fewer moving parts reduce potential points of failure
+* **Developer Experience**: Frontend engineers have clear information about available features
 
-## 9. Enhancing Frontend with Backend-Driven Validation
+## Migration Steps
 
-To make the UI even more robust and user-friendly, we will implement a system for backend-driven validation of user input. This will allow the backend to specify validation rules for each feature, and the frontend will use these rules to provide real-time feedback to the user.
+1. **API Implementation**
+   - Implement `/api/devices/supported-features` endpoint
+   - Document API contracts clearly
 
-### Plan:
+2. **Frontend Implementation**
+   - Create device-type specific view components
+   - Implement routing logic to render appropriate views based on device type
+   - Update existing components to use new static views
 
-1.  **Extend `FeatureSchema`:** Add a new optional field `validation_rules` to the `FeatureSchema` in `src/feature_schemas.py`. This field will be a dictionary containing validation parameters, such as `pattern`, `min_length`, and `max_length`.
-2.  **Update Device Controller:** In `src/controllers/cisco_ios.py`, we will add validation rules to an existing feature. For example, for the `ntp_server_ip` feature, we will add a regex pattern to validate the IP address format.
-3.  **Update Frontend Types:** The `FeatureSchema` interface in `frontend/src/types/featureTypes.ts` will be updated to include the new `validationRules` property.
-4.  **Implement Frontend Validation Logic:** The `TextInputFeature.tsx` component will be modified to:
-    *   Check for the presence of `validationRules` in the feature schema.
-    *   Perform validation on user input based on these rules.
-    *   Display appropriate validation feedback to the user (e.g., error messages, highlighting the input field).
+3. **Testing and Deployment**
+   - Test all device types with their respective views
+   - Verify that the new `/api/devices/supported-features` endpoint works correctly
+   - Gradually deploy changes to production
 
-This approach will further decouple the frontend from the backend, making the UI more dynamic and adaptable to changes in backend requirements.
-
-## 10. Refactoring to View and Action Features
-
-To provide a clearer distinction between viewing data and performing actions, we are refactoring the feature system to use two distinct schemas: `ViewFeatureSchema` for read-only data and `ActionFeatureSchema` for interactive/editable features.
-
-### New Architecture:
-
-*   **`ViewFeatureSchema`**: This schema will define features that display information. It will include fields for `name`, `label`, `description`, `type` (e.g., `DISPLAY_TABLE`, `DISPLAY_TEXT`), and `backend_method` to fetch the data.
-*   **`ActionFeatureSchema`**: This schema will define features that allow user interaction, such as configuration changes. It will include fields for `name`, `label`, `description`, `type` (e.g., `TOGGLE`, `INPUT_TEXT`, `BUTTON`), `backend_method` to call for the action, and UI-specific properties like `placeholder` and `validation_rules`.
-*   **Backend API (`GET /api/devices/{device_id}/features`)**: The endpoint will be updated to return two separate lists: `view_features` and `action_features`.
-*   **Frontend UI**:
-    *   The existing tabs (e.g., "System", "Network") will now exclusively display read-only information from the `view_features` list.
-    *   A new top-level "Configuration" tab will be introduced to house all the interactive features from the `action_features` list.
-
-### Plan:
-
-1.  **Update `GEMINI.md`**: Document the new architecture with `ViewFeatureSchema` and `ActionFeatureSchema`.
-2.  **Refactor `src/feature_schemas.py`**: Split the `FeatureSchema` into `ViewFeatureSchema` and `ActionFeatureSchema`.
-3.  **Update `src/controllers/cisco_ios.py`**: Modify the `get_supported_features` method to return two lists: `view_features` and `action_features`.
-4.  **Update `src/api/routers/devices.py`**: Adjust the `GET /api/devices/{device_id}/features` endpoint to return the two new lists.
-5.  **Update `frontend/src/types/featureTypes.ts`**: Create two new interfaces, `ViewFeatureSchema` and `ActionFeatureSchema`.
-6.  **Update `frontend/src/pages/DeviceDetailPage.tsx`**:
-    *   Fetch both `view_features` and `action_features`.
-    *   Render `view_features` in their respective group tabs.
-    *   Create a new "Configuration" tab to render `action_features`.
-7.  **Update `frontend/src/components/FeatureRenderer.tsx`**: Modify the component to handle both schema types.
-
-This refactoring will create a more intuitive and maintainable system by clearly separating read-only data from configurable actions.
-
-## 11. Full Frontend-Driven UI System
-
-To address the limitations of the current backend-defined frontend approach, we will refactor the system to make the frontend fully responsible for UI rendering and interactions. This approach will provide better UX, improved performance, and enable better team separation.
-
-### Issues with Current Approach
-
-1.  **Not Future-Proof**: Backend-defined UI components limit UX flexibility and innovation.
-2.  **Long Loading Times**: The current system loads all feature definitions and data at once, leading to slow page loads.
-3.  **Team Separation Challenges**: Frontend and backend teams cannot work independently on different sections of the application.
-4.  **Limited Customization**: Users cannot customize the UI to their specific needs or workflows.
-
-### Proposed Architecture
-
-*   **Backend API as Data Provider**: The backend will provide pure data through RESTful APIs, without defining UI components.
-*   **Frontend as UI Orchestrator**: The frontend will be fully responsible for rendering UI components based on data received from the backend.
-*   **Feature Discovery**: The frontend will dynamically discover available features and render appropriate UI components.
-*   **State Management**: The frontend will manage its own state, with backend APIs providing data synchronization.
-
-### Plan:
-
-1.  **Refactor Backend APIs**:
-    *   Simplify existing APIs to return pure data without UI definitions.
-    *   Create new endpoints for specific data queries rather than comprehensive feature definitions.
-    *   Implement proper caching strategies to reduce API calls.
-
-2.  **Enhance Frontend Architecture**:
-    *   Implement a component registry that maps data types to UI components.
-    *   Create a dynamic rendering engine that can render UI components based on data schemas.
-    *   Implement lazy loading for UI components to improve initial load times.
-    *   Add client-side caching to reduce redundant API calls.
-
-3.  **Improve Data Flow**:
-    *   Implement a unidirectional data flow pattern (similar to Flux or Redux).
-    *   Create a centralized state management system for the application.
-    *   Implement optimistic UI updates for better user experience.
-
-4.  **Team Separation Enhancements**:
-    *   Define clear API contracts between frontend and backend.
-    *   Implement API mocking for frontend development without backend dependencies.
-    *   Create separate documentation for frontend and backend teams.
-
-5.  **Performance Optimizations**:
-    *   Implement code splitting to load only necessary components.
-    *   Add progressive loading for large data sets.
-    *   Implement proper error handling and retry mechanisms.
-
-6.  **User Customization**:
-    *   Allow users to customize UI layouts and component visibility.
-    *   Implement user preferences storage.
-    *   Add drag-and-drop UI customization capabilities.
-
-This refactoring will make the system more flexible, performant, and maintainable while enabling better collaboration between frontend and backend teams.
+This simplified approach will create a more maintainable and performant system while providing clear contracts between frontend and backend teams.
