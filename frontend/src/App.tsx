@@ -1,4 +1,4 @@
-import { Container, Navbar, Nav } from 'react-bootstrap';
+import { Container, Navbar, Nav, Button } from 'react-bootstrap';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
@@ -10,7 +10,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import { useAuth } from './hooks/useAuth';
 import EditDevicePage from './pages/EditDevicePage';
 
-import { QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { useAuthQueryClient } from './hooks/useAuthQueryClient';
 import AuthQueryClientProviderWrapper from './components/AuthQueryClientProviderWrapper';
 import useTokenValidation from './hooks/useTokenValidation';
@@ -35,6 +35,8 @@ const MainLayout = () => {
             <Nav className="me-auto">
               <Nav.Link href="/dashboard">Dashboard</Nav.Link>
               <Nav.Link href="/devices">Devices</Nav.Link>
+            </Nav>
+            <Nav>
               {token ? (
                 <Nav.Link onClick={logout}>Logout</Nav.Link>
               ) : (

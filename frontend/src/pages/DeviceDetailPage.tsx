@@ -1,5 +1,5 @@
 import React from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../hooks/useAuth";
 import { useNavigate } from "react-router-dom";
@@ -7,19 +7,24 @@ import { Container, Spinner, Alert } from "react-bootstrap";
 import CiscoIosRouterDetailPage from "./device-types/CiscoIosRouterDetailPage";
 import CiscoIosSwitchDetailPage from "./device-types/CiscoIosSwitchDetailPage";
 
-// A simple component to fetch device type
-const useDeviceType = (deviceId: string | undefined) => {
+const DeviceDetailPage = () => {
+  const { id } = useParams<{ id: string }>();
+  const location = useLocation();
   const { token, logout } = useAuth();
   const navigate = useNavigate();
+  
+  // Get device data passed from the device list page
+  const deviceData = location.state?.device;
 
-  return useQuery<string, Error>({
-    queryKey: ["deviceType", deviceId],
+  // If we don't have device data, fetch it
+  const { data: device, isLoading, error } = useQuery<any, Error>({
+    queryKey: ["deviceDetail", id],
     queryFn: async () => {
-      if (!token || !deviceId) {
+      if (!token || !id) {
         throw new Error("Missing token or device ID");
       }
 
-      const response = await fetch(`/api/devices/${deviceId}`, {
+      const response = await fetch(`/api/devices/${id}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -35,16 +40,11 @@ const useDeviceType = (deviceId: string | undefined) => {
         throw new Error(`Failed to fetch device: ${response.statusText}`);
       }
 
-      const data = await response.json();
-      return data.device_type;
+      return response.json();
     },
-    enabled: !!deviceId && !!token,
+    enabled: !!id && !!token && !deviceData, // Only fetch if we don't have device data
+    initialData: deviceData, // Use passed data if available
   });
-};
-
-const DeviceDetailPage = () => {
-  const { id } = useParams<{ id: string }>();
-  const { data: deviceType, isLoading, error } = useDeviceType(id);
 
   if (isLoading) {
     return (
@@ -52,7 +52,7 @@ const DeviceDetailPage = () => {
         <Spinner animation="border" role="status">
           <span className="visually-hidden">Loading...</span>
         </Spinner>
-        <p>Loading device type...</p>
+        <p>Loading device details...</p>
       </Container>
     );
   }
@@ -67,12 +67,12 @@ const DeviceDetailPage = () => {
     );
   }
 
-  // Render the appropriate component based on device type
-  switch (deviceType) {
+  // Render the appropriate component based on device type, passing device data
+  switch (device.device_type) {
     case "cisco_ios_router":
-      return <CiscoIosRouterDetailPage />;
+      return <CiscoIosRouterDetailPage device={device} />;
     case "cisco_ios_switch":
-      return <CiscoIosSwitchDetailPage />;
+      return <CiscoIosSwitchDetailPage device={device} />;
     default:
       // For unsupported device types, show a generic message
       return (
@@ -80,7 +80,7 @@ const DeviceDetailPage = () => {
           <Alert variant="warning">
             <Alert.Heading>Device Type Not Supported</Alert.Heading>
             <p>
-              The device type "{deviceType}" is not currently supported with a specific view.
+              The device type "{device.device_type}" is not currently supported with a specific view.
               Please contact the development team to request support for this device type.
             </p>
           </Alert>

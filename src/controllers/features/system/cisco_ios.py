@@ -62,7 +62,11 @@ class CiscoIosSystem(BaseSystem):
         try:
             command = "show clock"
             raw_output = self.device_handler.send_command(command)
-            return raw_output.strip()
+            # Remove asterisk from the beginning if present
+            cleaned_output = raw_output.strip()
+            if cleaned_output.startswith('*'):
+                cleaned_output = cleaned_output[1:].strip()
+            return cleaned_output
         except Exception as e:
             self.device_handler.logger.error(f"Error getting clock: {e}")
             return "Unknown"

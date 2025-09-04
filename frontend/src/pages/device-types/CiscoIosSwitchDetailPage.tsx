@@ -11,16 +11,195 @@ import {
   Button,
   Badge,
   Table,
+  Tabs,
+  Tab,
 } from "react-bootstrap";
 import { useAuth } from "../../hooks/useAuth";
-import { useStaticDeviceDetails } from "../../hooks/useStaticDeviceDetails";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-const CiscoIosSwitchDetailPage = () => {
+// Separate hook for system information with lazy loading
+const useSystemInfo = (deviceId: string | undefined, enabled: boolean) => {
+  const { token, logout } = useAuth();
+  const navigate = useNavigate();
+
+  return useQuery<any, Error>({
+    queryKey: ["systemInfo", deviceId],
+    queryFn: async () => {
+      if (!token || !deviceId) {
+        throw new Error("Missing token or device ID");
+      }
+
+      const response = await fetch(`/api/devices/${deviceId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      
+      if (response.status === 401) {
+        logout();
+        navigate("/login");
+        throw new Error("Session expired or unauthorized. Please log in again.");
+      }
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch device details: ${response.statusText}`);
+      }
+      
+      const deviceData = await response.json();
+      return deviceData.version || {};
+    },
+    enabled, // Controlled by the enabled parameter
+  });
+};
+
+// Separate hook for clock information
+const useClockInfo = (deviceId: string | undefined, enabled: boolean) => {
+  const { token, logout } = useAuth();
+  const navigate = useNavigate();
+
+  return useQuery<string, Error>({
+    queryKey: ["clockInfo", deviceId],
+    queryFn: async () => {
+      if (!token || !deviceId) {
+        throw new Error("Missing token or device ID");
+      }
+
+      const response = await fetch(`/api/devices/${deviceId}/system/clock`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      
+      if (response.status === 401) {
+        logout();
+        navigate("/login");
+        throw new Error("Session expired or unauthorized. Please log in again.");
+      }
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch clock info: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      return data.clock || "N/A";
+    },
+    enabled, // Controlled by the enabled parameter
+  });
+};
+
+// Separate hook for interfaces with lazy loading
+const useInterfaces = (deviceId: string | undefined, enabled: boolean) => {
+  const { token, logout } = useAuth();
+  const navigate = useNavigate();
+
+  return useQuery<any[], Error>({
+    queryKey: ["interfacesBrief", deviceId],
+    queryFn: async () => {
+      if (!token || !deviceId) {
+        throw new Error("Missing token or device ID");
+      }
+      
+      const response = await fetch(`/api/devices/${deviceId}/interfaces/brief`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      
+      if (response.status === 401) {
+        logout();
+        navigate("/login");
+        throw new Error("Session expired or unauthorized. Please log in again.");
+      }
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch interfaces: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      // Ensure we return an array
+      return Array.isArray(data) ? data : [];
+    },
+    enabled, // Controlled by the enabled parameter
+  });
+};
+
+// Separate hook for VLAN information with lazy loading
+const useVlanInfo = (deviceId: string | undefined, enabled: boolean) => {
+  const { token, logout } = useAuth();
+  const navigate = useNavigate();
+
+  return useQuery<any[], Error>({
+    queryKey: ["vlanInfo", deviceId],
+    queryFn: async () => {
+      if (!token || !deviceId) {
+        throw new Error("Missing token or device ID");
+      }
+      
+      const response = await fetch(`/api/devices/${deviceId}/vlans/brief`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      
+      if (response.status === 401) {
+        logout();
+        navigate("/login");
+        throw new Error("Session expired or unauthorized. Please log in again.");
+      }
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch VLANs: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      // Ensure we return an array
+      return Array.isArray(data) ? data : [];
+    },
+    enabled, // Controlled by the enabled parameter
+  });
+};
+
+const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { token, logout } = useAuth();
-  const { systemInfo, interfaces, isReachable, loading, errors } = useStaticDeviceDetails(id);
-
+  const queryClient = useQueryClient();
+  
+  // Tab state
+  const [activeTab, setActiveTab] = useState("overview");
+  
+  // Lazy load data based on active tab
+  const { data: systemInfo, isLoading: systemLoading, error: systemError } = useSystemInfo(id, activeTab === "overview");
+  const { data: clockInfo, isLoading: clockLoading, error: clockError } = useClockInfo(id, activeTab === "overview");
+  const { data: interfaces, isLoading: interfacesLoading, error: interfacesError } = useInterfaces(id, activeTab === "interfaces");
+  const { data: vlanInfo, isLoading: vlanLoading, error: vlanError } = useVlanInfo(id, activeTab === "vlans");
+  
+  // Device reachability (always loaded)
+  const { data: isReachable = false } = useQuery<boolean, Error>({
+    queryKey: ["deviceReachability", id],
+    queryFn: async () => {
+      if (!token) {
+        throw new Error("No authentication token found.");
+      }
+      
+      const response = await fetch(`/api/devices/${id}/check-reachability`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch reachability: ${response.statusText}`);
+      }
+      
+      return response.json();
+    },
+    enabled: !!id,
+    initialData: device?.is_reachable, // Use initial data from passed device object
+    refetchInterval: 5000, // Poll reachability every 5 seconds
+  });
+  
+  // Command execution state
   const [command, setCommand] = useState("");
   const [isConfigCommand, setIsConfigCommand] = useState(false);
   const [commandOutput, setCommandOutput] = useState<string | null>(null);
@@ -28,9 +207,12 @@ const CiscoIosSwitchDetailPage = () => {
   const [executingCommand, setExecutingCommand] = useState(false);
   const [commandError, setCommandError] = useState<string | null>(null);
 
-  const [clearingCache, setClearingCache] = useState(false);
-  const [cacheClearSuccess, setCacheClearSuccess] = useState<string | null>(null);
-  const [cacheClearError, setCacheClearError] = useState<string | null>(null);
+  // Handle tab changes
+  const handleTabSelect = (tabKey: string | null) => {
+    if (tabKey) {
+      setActiveTab(tabKey);
+    }
+  };
 
   const handleExecuteCommand = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,27 +258,7 @@ const CiscoIosSwitchDetailPage = () => {
   const handleClearCache = async () => {
     if (!id) return;
 
-    setClearingCache(true);
-    setCacheClearSuccess(null);
-    setCacheClearError(null);
-
     const endpoint = `/api/devices/${id}/cache/clear`;
-    const prefixesToClear = [
-      "details",
-      "system",
-      "interfaces",
-      "vlans",
-      "acls",
-      "snmp",
-      "logging",
-      "ntp",
-      "aaa",
-      "active_users",
-      "local_users",
-      "clock",
-      "lldp",
-      "ip_arp",
-    ];
 
     try {
       const response = await fetch(endpoint, {
@@ -105,7 +267,6 @@ const CiscoIosSwitchDetailPage = () => {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ prefixes: prefixesToClear }),
       });
 
       if (response.status === 401) {
@@ -119,34 +280,17 @@ const CiscoIosSwitchDetailPage = () => {
         throw new Error(errorData.detail || "Failed to clear cache");
       }
 
-      setCacheClearSuccess("Cache cleared successfully!");
+      // Invalidate all queries for this device to force refresh
+      queryClient.invalidateQueries({ queryKey: ["deviceDetail", id] });
+      queryClient.invalidateQueries({ queryKey: ["systemInfo", id] });
+      queryClient.invalidateQueries({ queryKey: ["clockInfo", id] });
+      queryClient.invalidateQueries({ queryKey: ["interfacesBrief", id] });
+      queryClient.invalidateQueries({ queryKey: ["vlanInfo", id] });
+      queryClient.invalidateQueries({ queryKey: ["deviceReachability", id] });
     } catch (err: any) {
-      setCacheClearError(err.message || "An unknown error occurred while clearing cache.");
-    } finally {
-      setClearingCache(false);
+      console.error("Error clearing cache:", err);
     }
   };
-
-  if (loading) {
-    return (
-      <Container fluid className="mt-4 text-center">
-        <Spinner animation="border" role="status">
-          <span className="visually-hidden">Loading...</span>
-        </Spinner>
-        <p>Loading device details...</p>
-      </Container>
-    );
-  }
-
-  if (errors.system || errors.interfaces) {
-    return (
-      <Container fluid className="mt-4">
-        <Alert variant="danger">
-          Error: {errors.system || errors.interfaces}. Please try again later.
-        </Alert>
-      </Container>
-    );
-  }
 
   return (
     <Container fluid className="mt-4">
@@ -154,174 +298,262 @@ const CiscoIosSwitchDetailPage = () => {
         <Col>
           <Card>
             <Card.Body>
-              <Card.Title as="h1" className="mb-3">
-                {systemInfo?.hostname || "N/A"} ({systemInfo?.version || "N/A"})
-                <Badge bg={isReachable ? "success" : "danger"} className="ms-2">
-                  {isReachable ? "Online" : "Offline"}
-                </Badge>
-              </Card.Title>
-              <Card.Subtitle className="mb-2 text-muted">
-                Device ID: {id} (Cisco IOS Switch)
-              </Card.Subtitle>
-              <Card.Text>
-                <strong>Uptime:</strong> {systemInfo?.uptime || "N/A"}
-              </Card.Text>
-              <Card.Text>
-                <strong>Clock:</strong> {systemInfo?.clock || "N/A"}
-              </Card.Text>
-              <Button variant="secondary" onClick={() => navigate(-1)}>
-                Back to Devices
-              </Button>
-            </Card.Body>
-          </Card>
-        </Col>
-      </Row>
-
-      {/* Switch-specific features */}
-      <Row className="mb-4">
-        <Col>
-          <Card>
-            <Card.Body>
-              <Card.Title as="h2">VLAN Information</Card.Title>
-              <Alert variant="info">
-                VLAN information would be displayed here for Cisco IOS switches.
-              </Alert>
-            </Card.Body>
-          </Card>
-        </Col>
-      </Row>
-
-      <Row className="mb-4">
-        <Col>
-          <Card>
-            <Card.Body>
-              <Card.Title as="h2">Interfaces</Card.Title>
-              {interfaces && interfaces.length > 0 ? (
-                <Table striped bordered hover responsive>
-                  <thead>
-                    <tr>
-                      <th>Interface</th>
-                      <th>IP Address</th>
-                      <th>Status</th>
-                      <th>Protocol</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {interfaces.map((iface, index) => (
-                      <tr key={index}>
-                        <td>{iface.interface}</td>
-                        <td>{iface.ip_address || "N/A"}</td>
-                        <td>{iface.status}</td>
-                        <td>{iface.protocol}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </Table>
-              ) : (
-                <Alert variant="info">No interfaces found.</Alert>
-              )}
-            </Card.Body>
-          </Card>
-        </Col>
-      </Row>
-
-      <Row>
-        <Col md={6}>
-          <Card>
-            <Card.Body style={{ maxHeight: "400px", overflowY: "auto" }}>
-              <Card.Title as="h2">Execute Command</Card.Title>
-              <Form onSubmit={handleExecuteCommand}>
-                <Form.Group className="mb-3" controlId="commandInput">
-                  <Form.Label>Command</Form.Label>
-                  <Form.Control
-                    as="textarea"
-                    rows={3}
-                    placeholder="Enter command to execute"
-                    value={command}
-                    onChange={(e) => setCommand(e.target.value)}
-                    required
-                  />
-                </Form.Group>
-                <Form.Group
-                  className="mb-3"
-                  controlId="isConfigCommandCheckbox"
-                >
-                  <Form.Check
-                    type="checkbox"
-                    label="Configuration Command"
-                    checked={isConfigCommand}
-                    onChange={(e) => setIsConfigCommand(e.target.checked)}
-                  />
-                </Form.Group>
-                <Button
-                  variant="primary"
-                  type="submit"
-                  disabled={executingCommand}
-                >
-                  {executingCommand ? (
-                    <Spinner as="span" animation="border" size="sm" />
-                  ) : (
-                    "Execute"
-                  )}
-                </Button>
-              </Form>
-              {commandError && (
-                <Alert variant="danger" className="mt-3">
-                  {commandError}
-                </Alert>
-              )}
-              {commandOutput && (
-                <div
-                  className="mt-3 p-3 bg-light rounded"
-                  style={{
-                    whiteSpace: "pre-wrap",
-                    fontFamily: "monospace",
-                  }}
-                >
-                  {deviceLevel && (
-                    <>
-                      <strong>Device Level:</strong> {deviceLevel}
-                      <br />
-                    </>
-                  )}
-                  <strong>Output:</strong>
-                  <br />
-                  {commandOutput}
+              <div className="d-flex justify-content-between align-items-start">
+                <div>
+                  <Card.Title as="h1" className="mb-3">
+                    {device?.name || "Unknown Device"} ({device?.ip_address || "Unknown IP"})
+                    <Badge bg={device?.is_reachable ? "success" : "danger"} className="ms-2">
+                      {device?.is_reachable ? "Online" : "Offline"}
+                    </Badge>
+                  </Card.Title>
+                  <Card.Subtitle className="mb-2 text-muted">
+                    Device ID: {device?.id} | IP: {device?.ip_address} | Type: Cisco IOS Switch
+                  </Card.Subtitle>
                 </div>
-              )}
-            </Card.Body>
-          </Card>
-        </Col>
-        <Col md={6}>
-          <Card>
-            <Card.Body>
-              <Card.Title as="h2">Cache Management</Card.Title>
-              <Button
-                variant="warning"
-                onClick={handleClearCache}
-                disabled={clearingCache}
-                className="mt-3"
-              >
-                {clearingCache ? (
-                  <Spinner as="span" animation="border" size="sm" />
-                ) : (
-                  "Clear Device Cache"
-                )}
-              </Button>
-              {cacheClearSuccess && (
-                <Alert variant="success" className="mt-3">
-                  {cacheClearSuccess}
-                </Alert>
-              )}
-              {cacheClearError && (
-                <Alert variant="danger" className="mt-3">
-                  {cacheClearError}
-                </Alert>
-              )}
+                <div>
+                  <Button variant="outline-primary" onClick={handleClearCache}>
+                    Refresh
+                  </Button>
+                  <Button variant="secondary" onClick={() => navigate(-1)} className="ms-2">
+                    Back to Devices
+                  </Button>
+                </div>
+              </div>
             </Card.Body>
           </Card>
         </Col>
       </Row>
+
+      <Tabs
+        activeKey={activeTab}
+        onSelect={handleTabSelect}
+        className="mb-3"
+        mountOnEnter={true}
+        unmountOnExit={true}
+      >
+        <Tab eventKey="overview" title="Overview">
+          <Row className="mb-4">
+            <Col>
+              <Card>
+                <Card.Body>
+                  <Card.Title as="h2">System Information</Card.Title>
+                  {systemError ? (
+                    <Alert variant="danger">
+                      Error: {systemError.message}. Please try again later.
+                    </Alert>
+                  ) : systemLoading ? (
+                    <div className="text-center">
+                      <Spinner animation="border" role="status">
+                        <span className="visually-hidden">Loading...</span>
+                      </Spinner>
+                    </div>
+                  ) : systemInfo ? (
+                    <Table striped bordered hover>
+                      <tbody>
+                        <tr>
+                          <td><strong>Hostname:</strong></td>
+                          <td>{systemInfo.hostname || "N/A"}</td>
+                        </tr>
+                        <tr>
+                          <td><strong>Version:</strong></td>
+                          <td>{systemInfo.version || "N/A"}</td>
+                        </tr>
+                        <tr>
+                          <td><strong>Uptime:</strong></td>
+                          <td>{systemInfo.uptime || "N/A"}</td>
+                        </tr>
+                        <tr>
+                          <td><strong>Clock:</strong></td>
+                          <td>{clockInfo || "N/A"}</td>
+                        </tr>
+                      </tbody>
+                    </Table>
+                  ) : (
+                    <Alert variant="info">No system information available.</Alert>
+                  )}
+                </Card.Body>
+              </Card>
+            </Col>
+          </Row>
+        </Tab>
+        
+        <Tab eventKey="interfaces" title="Interfaces">
+          <Row className="mb-4">
+            <Col>
+              <Card>
+                <Card.Body>
+                  <Card.Title as="h2">Interfaces</Card.Title>
+                  {interfacesError ? (
+                    <Alert variant="danger">
+                      Error: {interfacesError.message}. Please try again later.
+                    </Alert>
+                  ) : interfacesLoading ? (
+                    <div className="text-center">
+                      <Spinner animation="border" role="status">
+                        <span className="visually-hidden">Loading...</span>
+                      </Spinner>
+                    </div>
+                  ) : interfaces && interfaces.length > 0 ? (
+                    <Table striped bordered hover responsive>
+                      <thead>
+                        <tr>
+                          <th>Interface</th>
+                          <th>IP Address</th>
+                          <th>Status</th>
+                          <th>Protocol</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {interfaces.map((iface: any, index: number) => (
+                          <tr key={index}>
+                            <td>{iface.interface || iface.intf || "N/A"}</td>
+                            <td>{iface.ip_address || iface.ip || "N/A"}</td>
+                            <td>{iface.status || "N/A"}</td>
+                            <td>{iface.proto || "N/A"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </Table>
+                  ) : (
+                    <Alert variant="info">No interfaces found.</Alert>
+                  )}
+                </Card.Body>
+              </Card>
+            </Col>
+          </Row>
+        </Tab>
+        
+        <Tab eventKey="vlans" title="VLANs">
+          <Row className="mb-4">
+            <Col>
+              <Card>
+                <Card.Body>
+                  <Card.Title as="h2">VLAN Information</Card.Title>
+                  {vlanError ? (
+                    <Alert variant="danger">
+                      Error: {vlanError.message}. Please try again later.
+                    </Alert>
+                  ) : vlanLoading ? (
+                    <div className="text-center">
+                      <Spinner animation="border" role="status">
+                        <span className="visually-hidden">Loading...</span>
+                      </Spinner>
+                    </div>
+                  ) : vlanInfo && vlanInfo.length > 0 ? (
+                    <Table striped bordered hover responsive>
+                      <thead>
+                        <tr>
+                          <th>VLAN ID</th>
+                          <th>Name</th>
+                          <th>Status</th>
+                          <th>Ports</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {vlanInfo.map((vlan: any, index: number) => (
+                          <tr key={index}>
+                            <td>{vlan.vlan_id || vlan.id || "N/A"}</td>
+                            <td>{vlan.vlan_name || "N/A"}</td>
+                            <td>{vlan.status || "N/A"}</td>
+                            <td>
+                              {vlan.ports 
+                                ? Array.isArray(vlan.ports) 
+                                  ? vlan.ports.join(', ') 
+                                  : typeof vlan.ports === 'string' 
+                                    ? vlan.ports.split(' ').join(', ')
+                                    : vlan.ports
+                                : vlan.interfaces 
+                                  ? Array.isArray(vlan.interfaces)
+                                    ? vlan.interfaces.join(', ')
+                                    : typeof vlan.interfaces === 'string'
+                                      ? vlan.interfaces.split(' ').join(', ')
+                                      : vlan.interfaces
+                                  : "N/A"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </Table>
+                  ) : (
+                    <Alert variant="info">No VLAN information available.</Alert>
+                  )}
+                </Card.Body>
+              </Card>
+            </Col>
+          </Row>
+        </Tab>
+        
+        <Tab eventKey="commands" title="Commands">
+          <Row>
+            <Col md={6}>
+              <Card>
+                <Card.Body style={{ maxHeight: "400px", overflowY: "auto" }}>
+                  <Card.Title as="h2">Execute Command</Card.Title>
+                  <Form onSubmit={handleExecuteCommand}>
+                    <Form.Group className="mb-3" controlId="commandInput">
+                      <Form.Label>Command</Form.Label>
+                      <Form.Control
+                        as="textarea"
+                        rows={3}
+                        placeholder="Enter command to execute"
+                        value={command}
+                        onChange={(e) => setCommand(e.target.value)}
+                        required
+                      />
+                    </Form.Group>
+                    <Form.Group
+                      className="mb-3"
+                      controlId="isConfigCommandCheckbox"
+                    >
+                      <Form.Check
+                        type="checkbox"
+                        label="Configuration Command"
+                        checked={isConfigCommand}
+                        onChange={(e) => setIsConfigCommand(e.target.checked)}
+                      />
+                    </Form.Group>
+                    <Button
+                      variant="primary"
+                      type="submit"
+                      disabled={executingCommand}
+                    >
+                      {executingCommand ? (
+                        <Spinner as="span" animation="border" size="sm" />
+                      ) : (
+                        "Execute"
+                      )}
+                    </Button>
+                  </Form>
+                  {commandError && (
+                    <Alert variant="danger" className="mt-3">
+                      {commandError}
+                    </Alert>
+                  )}
+                  {commandOutput && (
+                    <div
+                      className="mt-3 p-3 bg-light rounded"
+                      style={{
+                        whiteSpace: "pre-wrap",
+                        fontFamily: "monospace",
+                      }}
+                    >
+                      {deviceLevel && (
+                        <>
+                          <strong>Device Level:</strong> {deviceLevel}
+                          <br />
+                        </>
+                      )}
+                      <strong>Output:</strong>
+                      <br />
+                      {typeof commandOutput === 'string' ? commandOutput : JSON.stringify(commandOutput, null, 2)}
+                    </div>
+                  )}
+                </Card.Body>
+              </Card>
+            </Col>
+          </Row>
+        </Tab>
+      </Tabs>
     </Container>
   );
 };

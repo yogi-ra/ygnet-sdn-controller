@@ -1,6 +1,6 @@
-# Strategic Refactoring for Device Features: Simplified Approach
+# Strategic Refactoring for Device Features: Cisco IOS Focus
 
-This document outlines a simplified strategy to refactor the Ygnet SDN controller's backend and frontend, focusing on clear API contracts for frontend developers without complex dynamic feature definitions.
+This document outlines a strategy to refactor the Ygnet SDN controller's backend and frontend, focusing specifically on Cisco IOS devices (routers and switches) to provide clear API contracts for frontend developers.
 
 ## Core Principles
 
@@ -139,4 +139,4 @@ Each feature has its own endpoint for retrieving or manipulating data:
    - Verify that the new `/api/devices/supported-features` endpoint works correctly
    - Gradually deploy changes to production
 
-This simplified approach will create a more maintainable and performant system while providing clear contracts between frontend and backend teams.
+This simplified approach will create a more maintainable and performant system while providing clear contracts between frontend and backend teams, focusing specifically on Cisco IOS devices.

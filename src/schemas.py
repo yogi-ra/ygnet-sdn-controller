@@ -55,7 +55,6 @@ class VersionInfo(BaseModel):
 
 class DeviceDetail(Device):
     version: Optional[VersionInfo] = None
-    interfaces: Optional[list[dict]] = None # Changed to list[dict] based on common Netmiko output for interfaces
 
 
 class DeviceUpdate(BaseModel):

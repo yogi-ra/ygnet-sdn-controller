@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from contextlib import asynccontextmanager
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
@@ -9,18 +10,8 @@ from .tasks import check_device_for_changes, update_device_reachability_status #
 # Create all database tables
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(
-    title="SDN Controller API",
-    description="API to manage network devices and run commands using a modular, OOP controller.",
-    version="1.0.0",
-)
-
 # Initialize scheduler
 scheduler = AsyncIOScheduler()
-
-# Include the API routers
-app.include_router(auth.router, prefix="/api")
-app.include_router(devices.router, prefix="/api")
 
 
 def scheduled_task(trigger):
@@ -40,15 +31,25 @@ async def schedule_update_device_reachability_status():
     await update_device_reachability_status()
 
 
-@app.on_event("startup")
-async def startup_event():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
     scheduler.start()
-
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
+    yield
+    # Shutdown
     scheduler.shutdown()
+
+
+app = FastAPI(
+    title="SDN Controller API",
+    description="API to manage network devices and run commands using a modular, OOP controller.",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+
+# Include the API routers
+app.include_router(auth.router, prefix="/api")
+app.include_router(devices.router, prefix="/api")
 
 
 @app.get("/")

@@ -1,7 +1,7 @@
 from typing import List, Dict, Any, Union, Tuple
 from abc import ABC, abstractmethod
 import logging
-from concurrent.futures import TimeoutError
+from concurrent.futures import TimeoutError as FutureTimeoutError
 
 from netmiko import NetmikoAuthenticationException
 
@@ -15,6 +15,7 @@ from ..exceptions import (
     DeviceAuthenticationError,
     DeviceError,
 )
+from ..cache import get_redis_client
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +61,7 @@ class BaseDevice(ABC):
             self.logger.info(
                 f"Successfully connected to {self.device_info.ip_address}"  # Corrected to ip_address
             )
-        except TimeoutError:
+        except FutureTimeoutError:
             self.logger.error(
                 f"Connection to {self.device_info.ip_address} timed out."  # Corrected to ip_address
             )
@@ -102,7 +103,7 @@ class BaseDevice(ABC):
         """
         self.disconnect()
 
-    def send_command(self, command: str, **kwargs) -> str:
+    def send_command(self, command: str, timeout: int = None, **kwargs) -> str:
         """
         Sends a single command to the device.
         """
@@ -112,7 +113,9 @@ class BaseDevice(ABC):
             # Ensure we are in privileged EXEC mode before sending the command
             if not self.connection.check_enable_mode():
                 self.connection.enable()
-            output = self.connection.send_command(command, **kwargs)
+            # Set a reasonable timeout for command execution
+            cmd_timeout = timeout or settings.NETMIKO_READ_TIMEOUT
+            output = self.connection.send_command(command, read_timeout=cmd_timeout, **kwargs)
             self.logger.debug(f"Raw output from Netmiko for command '{command}':\n{output}")
             return output
         except Exception as e:
@@ -123,7 +126,7 @@ class BaseDevice(ABC):
                 f"Failed to send command '{command}' to {self.device_info.ip_address}: {e}"  # Corrected to ip_address
             )
 
-    def send_config_set(self, commands: List[str], **kwargs) -> str:
+    def send_config_set(self, commands: List[str], timeout: int = None, **kwargs) -> str:
         """
         Sends a list of configuration commands to the device.
         """
@@ -133,7 +136,9 @@ class BaseDevice(ABC):
             # Ensure we are in privileged EXEC mode before sending the command
             if not self.connection.check_enable_mode():
                 self.connection.enable()
-            output = self.connection.send_config_set(commands, **kwargs)
+            # Set a reasonable timeout for command execution
+            cmd_timeout = timeout or settings.NETMIKO_READ_TIMEOUT
+            output = self.connection.send_config_set(commands, cmd_timeout=cmd_timeout, **kwargs)
             self.logger.debug(f"Raw output from Netmiko for config commands '{commands}':\n{output}")
             return output
         except Exception as e:
@@ -144,7 +149,7 @@ class BaseDevice(ABC):
                 f"Failed to send config commands '{commands}' to {self.device_info.ip_address}: {e}"  # Corrected to ip_address
             )
 
-    def send_multiline_commands(self, command_patterns: List[List[str]]) -> str:
+    def send_multiline_commands(self, command_patterns: List[List[str]], timeout: int = None) -> str:
         """
         Sends multiple commands to the device, handling additional prompts based on patterns.
         """
@@ -152,7 +157,9 @@ class BaseDevice(ABC):
             self.connect()
 
         try:
-            output = self.connection.send_multiline(command_patterns)
+            # Set a reasonable timeout for command execution
+            cmd_timeout = timeout or settings.NETMIKO_READ_TIMEOUT
+            output = self.connection.send_multiline(command_patterns, read_timeout=cmd_timeout)
             self.logger.debug(
                 f"Raw output from Netmiko for multiline commands: {command_patterns}\n{output}"
             )
@@ -186,30 +193,13 @@ class BaseDevice(ABC):
         This method should be called after configuration changes to ensure fresh data.
         """
         try:
-            import requests
-            import os
-            
-            # Get API base URL from environment or use default
-            api_base_url = os.getenv("API_BASE_URL", "http://localhost:8000")
-            
-            # Construct the cache clear endpoint URL
-            cache_clear_url = f"{api_base_url}/api/devices/{self.device_info.id}/cache/clear"
-            
-            # Prepare the request data
-            cache_clear_data = {
-                "prefixes": [f"device:{self.device_info.id}:features:{feature_name}"]
-            }
-            
-            # Make the request to clear the cache
-            response = requests.post(
-                cache_clear_url,
-                json=cache_clear_data,
-                headers={"Content-Type": "application/json"}
-            )
-            
-            if response.status_code == 204:
-                self.logger.info(f"Successfully invalidated cache for feature: {feature_name}")
-            else:
-                self.logger.warning(f"Failed to invalidate cache for feature: {feature_name}. Status code: {response.status_code}")
+            # Clear Redis cache entries for this device and feature
+            redis_client = get_redis_client()
+            pattern = f"device:{self.device_info.id}:features:{feature_name}"
+            keys_to_delete = redis_client.keys(pattern)
+            if keys_to_delete:
+                redis_client.delete(*keys_to_delete)
+                
+            self.logger.info(f"Successfully invalidated cache for feature: {feature_name}")
         except Exception as e:
             self.logger.error(f"Error invalidating cache for feature {feature_name}: {e}")

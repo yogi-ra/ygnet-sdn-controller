@@ -3,12 +3,17 @@ from sqlalchemy.orm import Session
 from typing import List, Any, Dict
 import json
 import asyncio
+from concurrent.futures import TimeoutError as FutureTimeoutError
 
 from ...crud import crud
 from ... import schemas
 from ...database import get_db
 from ...controllers import DEVICE_HANDLER_MAP
 from ...device_info import DeviceConnectionInfo
+from ...config import settings
+from ...connection_manager import ConnectionManager
+from ...cache import get_redis_client
+from ..decorators import cache_response
 
 from ..dependencies import (
     require_read_privileges,
@@ -33,7 +38,8 @@ DEVICE_TYPE_DISPLAY_NAMES = {
 }
 
 @router.get("/device-types", dependencies=[Depends(require_read_privileges)])
-def get_device_types():
+@cache_response("device_types", ttl=300)
+def get_device_types(request: Request):
     """
     Returns a list of supported device types with their display names.
     """
@@ -45,6 +51,77 @@ def get_device_types():
         })
     return device_types
 
+@router.post("/{device_id}/clear-cache", dependencies=[Depends(require_write_privileges)])
+def clear_device_connection_cache(device_id: int, db: Session = Depends(get_db)):
+    """
+    Clears the connection cache for a specific device.
+    """
+    db_device = crud.get_device(db, device_id=device_id)
+    if db_device is None:
+        raise HTTPException(status_code=404, detail="Device not found")
+        
+    connection_manager = ConnectionManager()
+    device_info = DeviceConnectionInfo(
+        device_type=db_device.device_type,
+        ip_address=db_device.ip_address,
+        port=db_device.port,
+        username=db_device.username,
+        password=db_device.password,
+        secret=db_device.secret
+    )
+    device_key = device_info.get_key()
+    
+    # Remove the specific device connection if it exists
+    if device_key in connection_manager._connections:
+        try:
+            connection_manager._connections[device_key].disconnect()
+        except:
+            pass
+        finally:
+            del connection_manager._connections[device_key]
+            
+    # Clear Redis cache entries for this device
+    redis_client = get_redis_client()
+    pattern = f"device:{device_id}:*"
+    keys_to_delete = redis_client.keys(pattern)
+    if keys_to_delete:
+        redis_client.delete(*keys_to_delete)
+            
+    return {"message": f"Connection cache cleared for device {device_id}"}
+
+@router.post("/{device_id}/cache/clear", dependencies=[Depends(require_write_privileges)])
+def clear_device_cache(device_id: int, db: Session = Depends(get_db)):
+    """
+    Clears the Redis cache for a specific device.
+    """
+    db_device = crud.get_device(db, device_id=device_id)
+    if db_device is None:
+        raise HTTPException(status_code=404, detail="Device not found")
+    
+    # Clear Redis cache entries for this device
+    redis_client = get_redis_client()
+    
+    # List of cache prefixes used in device endpoints
+    cache_prefixes = [
+        "device_detail",
+        "device_system_version",
+        "device_system_hostname",
+        "device_system_uptime",
+        "device_system_clock",
+        "device_interfaces_brief",
+        "device_interfaces_status",
+        "device_vlans_brief"
+    ]
+    
+    # Delete cache entries for each prefix with the device_id
+    deleted_count = 0
+    for prefix in cache_prefixes:
+        cache_key = f"{prefix}:{device_id}"
+        if redis_client.exists(cache_key):
+            redis_client.delete(cache_key)
+            deleted_count += 1
+            
+    return {"message": f"Cache cleared for device {device_id}. {deleted_count} cache entries removed."}
 
 @router.post(
     "/", response_model=schemas.Device, dependencies=[Depends(require_write_privileges)]
@@ -63,7 +140,8 @@ def create_device(device: schemas.DeviceCreate, db: Session = Depends(get_db)):
     response_model=List[schemas.Device],
     dependencies=[Depends(require_read_privileges)],
 )
-async def read_devices(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+@cache_response("devices_list", ttl=60)
+async def read_devices(request: Request, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     """
     Retrieve all network devices from the database, including their reachability status.
     Performs reachability checks asynchronously to avoid blocking.
@@ -96,9 +174,12 @@ async def read_devices(skip: int = 0, limit: int = 100, db: Session = Depends(ge
     response_model=schemas.DeviceDetail,
     dependencies=[Depends(require_read_privileges)],
 )
-async def read_device(device_id: int, db: Session = Depends(get_db)):
+@cache_response("device_detail", ttl=60)
+async def read_device(request: Request, device_id: int, db: Session = Depends(get_db)):
     """
     Retrieve a single network device by its ID with detailed information.
+    Only includes version information. Interfaces and other operational data 
+    should be fetched lazily by the frontend as needed.
     """
     db_device = crud.get_device(db, device_id=device_id)
     if db_device is None:
@@ -106,15 +187,13 @@ async def read_device(device_id: int, db: Session = Depends(get_db)):
 
     handler = get_handler_from_device_id(device_id, db)
     version_info = None
-    interfaces_brief = None
 
     try:
         with handler:
             raw_version_info = handler.system.get_version_info()
             version_info = raw_version_info[0] if raw_version_info else None
-            interfaces_brief = handler.interfaces.get_interfaces_brief()
     except Exception as e:
-        error_msg = f"Error fetching operational data for device {device_id}: {str(e)}"
+        error_msg = f"Error fetching version info for device {device_id}: {str(e)}"
         print(error_msg)
         # Don't raise an exception here, just return the device info without the additional data
 
@@ -128,7 +207,6 @@ async def read_device(device_id: int, db: Session = Depends(get_db)):
     device_detail = schemas.DeviceDetail(
         **device_dict,
         version=version_info if version_info else None,
-        interfaces=interfaces_brief if interfaces_brief else []
     )
 
     return device_detail
@@ -171,12 +249,20 @@ def delete_device(
     if not db_device:
         raise HTTPException(status_code=404, detail="Device not found")
     crud.delete_device(db, device_id=device_id)
+    
+    # Clear Redis cache entries for this device
+    redis_client = get_redis_client()
+    pattern = f"device:{device_id}:*"
+    keys_to_delete = redis_client.keys(pattern)
+    if keys_to_delete:
+        redis_client.delete(*keys_to_delete)
     return
 
 
 # Direct API endpoints for device features
 @router.get("/{device_id}/system/version", dependencies=[Depends(require_read_privileges)])
-def get_system_version(device_id: int, db: Session = Depends(get_db)):
+@cache_response("device_system_version", ttl=300)
+def get_system_version(request: Request, device_id: int, db: Session = Depends(get_db)):
     """
     Get system version information.
     """
@@ -192,7 +278,8 @@ def get_system_version(device_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{device_id}/system/hostname", dependencies=[Depends(require_read_privileges)])
-def get_system_hostname(device_id: int, db: Session = Depends(get_db)):
+@cache_response("device_system_hostname", ttl=300)
+def get_system_hostname(request: Request, device_id: int, db: Session = Depends(get_db)):
     """
     Get system hostname.
     """
@@ -208,7 +295,8 @@ def get_system_hostname(device_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{device_id}/system/uptime", dependencies=[Depends(require_read_privileges)])
-def get_system_uptime(device_id: int, db: Session = Depends(get_db)):
+@cache_response("device_system_uptime", ttl=300)
+def get_system_uptime(request: Request, device_id: int, db: Session = Depends(get_db)):
     """
     Get system uptime.
     """
@@ -224,7 +312,8 @@ def get_system_uptime(device_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{device_id}/system/clock", dependencies=[Depends(require_read_privileges)])
-def get_system_clock(device_id: int, db: Session = Depends(get_db)):
+@cache_response("device_system_clock", ttl=300)
+def get_system_clock(request: Request, device_id: int, db: Session = Depends(get_db)):
     """
     Get system clock.
     """
@@ -233,6 +322,10 @@ def get_system_clock(device_id: int, db: Session = Depends(get_db)):
         with handler:
             clock = handler.system.get_clock()
             return {"clock": clock}
+    except FutureTimeoutError:
+        error_msg = f"Timeout getting system clock for device {device_id}"
+        print(error_msg)
+        raise HTTPException(status_code=504, detail=error_msg)
     except Exception as e:
         error_msg = f"Failed to get system clock for device {device_id}: {str(e)}"
         print(error_msg)
@@ -240,7 +333,8 @@ def get_system_clock(device_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{device_id}/interfaces/brief", dependencies=[Depends(require_read_privileges)])
-def get_interfaces_brief(device_id: int, db: Session = Depends(get_db)):
+@cache_response("device_interfaces_brief", ttl=120)
+def get_interfaces_brief(request: Request, device_id: int, db: Session = Depends(get_db)):
     """
     Get brief interface status.
     """
@@ -249,6 +343,10 @@ def get_interfaces_brief(device_id: int, db: Session = Depends(get_db)):
         with handler:
             interfaces = handler.interfaces.get_interfaces_brief()
             return interfaces
+    except FutureTimeoutError:
+        error_msg = f"Timeout getting interfaces brief for device {device_id}"
+        print(error_msg)
+        raise HTTPException(status_code=504, detail=error_msg)
     except Exception as e:
         error_msg = f"Failed to get interfaces brief for device {device_id}: {str(e)}"
         print(error_msg)
@@ -256,7 +354,8 @@ def get_interfaces_brief(device_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{device_id}/interfaces/status", dependencies=[Depends(require_read_privileges)])
-def get_interfaces_status(device_id: int, db: Session = Depends(get_db)):
+@cache_response("device_interfaces_status", ttl=120)
+def get_interfaces_status(request: Request, device_id: int, db: Session = Depends(get_db)):
     """
     Get detailed interface status.
     """
@@ -265,8 +364,33 @@ def get_interfaces_status(device_id: int, db: Session = Depends(get_db)):
         with handler:
             status = handler.interfaces.get_interfaces_status()
             return status
+    except FutureTimeoutError:
+        error_msg = f"Timeout getting interfaces status for device {device_id}"
+        print(error_msg)
+        raise HTTPException(status_code=504, detail=error_msg)
     except Exception as e:
         error_msg = f"Failed to get interfaces status for device {device_id}: {str(e)}"
+        print(error_msg)
+        raise HTTPException(status_code=500, detail=error_msg)
+
+
+@router.get("/{device_id}/vlans/brief", dependencies=[Depends(require_read_privileges)])
+@cache_response("device_vlans_brief", ttl=300)
+def get_vlans_brief(request: Request, device_id: int, db: Session = Depends(get_db)):
+    """
+    Get brief VLAN information.
+    """
+    handler = get_handler_from_device_id(device_id, db)
+    try:
+        with handler:
+            vlans = handler.vlans.get_vlan_brief()
+            return vlans
+    except FutureTimeoutError:
+        error_msg = f"Timeout getting VLAN brief for device {device_id}"
+        print(error_msg)
+        raise HTTPException(status_code=504, detail=error_msg)
+    except Exception as e:
+        error_msg = f"Failed to get VLAN brief for device {device_id}: {str(e)}"
         print(error_msg)
         raise HTTPException(status_code=500, detail=error_msg)
 
@@ -286,6 +410,10 @@ def set_interface_state(
         with handler:
             result = handler.interfaces.set_interface_state(interface_name, state)
             return {"result": result}
+    except FutureTimeoutError:
+        error_msg = f"Timeout setting interface state for device {device_id}, interface {interface_name}"
+        print(error_msg)
+        raise HTTPException(status_code=504, detail=error_msg)
     except Exception as e:
         error_msg = f"Failed to set interface state for device {device_id}, interface {interface_name}: {str(e)}"
         print(error_msg)
@@ -303,8 +431,59 @@ def reboot_system(device_id: int, db: Session = Depends(get_db)):
             # In a real implementation, this would call handler.system.reboot()
             # For now, we'll just return a success message
             return {"message": "System reboot initiated"}
+    except FutureTimeoutError:
+        error_msg = f"Timeout rebooting system for device {device_id}"
+        print(error_msg)
+        raise HTTPException(status_code=504, detail=error_msg)
     except Exception as e:
         error_msg = f"Failed to reboot system for device {device_id}: {str(e)}"
+        print(error_msg)
+        raise HTTPException(status_code=500, detail=error_msg)
+
+
+@router.post("/{device_id}/execute-command", dependencies=[Depends(require_write_privileges)])
+def execute_command(
+    device_id: int,
+    command_input: schemas.CommandInput,
+    db: Session = Depends(get_db)
+):
+    """
+    Execute a command on the device.
+    """
+    handler = get_handler_from_device_id(device_id, db)
+    try:
+        with handler:
+            if command_input.is_config:
+                # Execute configuration commands
+                if isinstance(command_input.command, list):
+                    output = handler.send_config_set(command_input.command, timeout=settings.NETMIKO_READ_TIMEOUT)
+                else:
+                    output = handler.send_config_set([command_input.command], timeout=settings.NETMIKO_READ_TIMEOUT)
+            else:
+                # Execute regular commands
+                if isinstance(command_input.command, list):
+                    # Join multiple commands with newlines
+                    command_str = '\n'.join(command_input.command)
+                else:
+                    command_str = command_input.command
+                output = handler.send_command(command_str, timeout=settings.NETMIKO_READ_TIMEOUT)
+            
+            # Try to parse the output, but return raw output if parsing fails or returns empty result
+            try:
+                parsed_output = handler.parse_cli_output(command_str if not command_input.is_config else "config", output)
+                # If parsing returns an empty list/dict, return raw output instead
+                if not parsed_output:
+                    return {"output": output}
+                return {"output": parsed_output}
+            except Exception:
+                # If parsing fails with an exception, return the raw output
+                return {"output": output}
+    except FutureTimeoutError:
+        error_msg = f"Timeout executing command for device {device_id}"
+        print(error_msg)
+        raise HTTPException(status_code=504, detail=error_msg)
+    except Exception as e:
+        error_msg = f"Failed to execute command for device {device_id}: {str(e)}"
         print(error_msg)
         raise HTTPException(status_code=500, detail=error_msg)
 
@@ -348,7 +527,8 @@ async def check_device_reachability(
 
 
 @router.get("/supported-features", dependencies=[Depends(require_read_privileges)])
-def get_supported_features():
+@cache_response("supported_features", ttl=300)
+def get_supported_features(request: Request):
     """
     Returns a dictionary mapping device types to their supported features.
     This endpoint helps frontend developers understand what features are available for each device type.
