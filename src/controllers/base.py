@@ -138,7 +138,7 @@ class BaseDevice(ABC):
                 self.connection.enable()
             # Set a reasonable timeout for command execution
             cmd_timeout = timeout or settings.NETMIKO_READ_TIMEOUT
-            output = self.connection.send_config_set(commands, cmd_timeout=cmd_timeout, **kwargs)
+            output = self.connection.send_config_set(commands, read_timeout=cmd_timeout, **kwargs)
             self.logger.debug(f"Raw output from Netmiko for config commands '{commands}':\n{output}")
             return output
         except Exception as e:

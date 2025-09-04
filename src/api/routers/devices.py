@@ -395,11 +395,10 @@ def get_vlans_brief(request: Request, device_id: int, db: Session = Depends(get_
         raise HTTPException(status_code=500, detail=error_msg)
 
 
-@router.post("/{device_id}/interfaces/{interface_name}/state", dependencies=[Depends(require_write_privileges)])
+@router.post("/{device_id}/interfaces/state", dependencies=[Depends(require_write_privileges)])
 def set_interface_state(
     device_id: int, 
-    interface_name: str, 
-    state: bool, 
+    interface_state: schemas.InterfaceState, 
     db: Session = Depends(get_db)
 ):
     """
@@ -408,14 +407,14 @@ def set_interface_state(
     handler = get_handler_from_device_id(device_id, db)
     try:
         with handler:
-            result = handler.interfaces.set_interface_state(interface_name, state)
+            result = handler.interfaces.set_interface_state(interface_state.interface_name, interface_state.state)
             return {"result": result}
     except FutureTimeoutError:
-        error_msg = f"Timeout setting interface state for device {device_id}, interface {interface_name}"
+        error_msg = f"Timeout setting interface state for device {device_id}, interface {interface_state.interface_name}"
         print(error_msg)
         raise HTTPException(status_code=504, detail=error_msg)
     except Exception as e:
-        error_msg = f"Failed to set interface state for device {device_id}, interface {interface_name}: {str(e)}"
+        error_msg = f"Failed to set interface state for device {device_id}, interface {interface_state.interface_name}: {str(e)}"
         print(error_msg)
         raise HTTPException(status_code=500, detail=error_msg)
 
@@ -455,18 +454,12 @@ def execute_command(
         with handler:
             if command_input.is_config:
                 # Execute configuration commands
-                if isinstance(command_input.command, list):
-                    output = handler.send_config_set(command_input.command, timeout=settings.NETMIKO_READ_TIMEOUT)
-                else:
-                    output = handler.send_config_set([command_input.command], timeout=settings.NETMIKO_READ_TIMEOUT)
+                commands = command_input.command if isinstance(command_input.command, list) else [command_input.command]
+                output = handler.send_config_set(commands)
             else:
                 # Execute regular commands
-                if isinstance(command_input.command, list):
-                    # Join multiple commands with newlines
-                    command_str = '\n'.join(command_input.command)
-                else:
-                    command_str = command_input.command
-                output = handler.send_command(command_str, timeout=settings.NETMIKO_READ_TIMEOUT)
+                command_str = '\n'.join(command_input.command) if isinstance(command_input.command, list) else command_input.command
+                output = handler.send_command(command_str)
             
             # Try to parse the output, but return raw output if parsing fails or returns empty result
             try:

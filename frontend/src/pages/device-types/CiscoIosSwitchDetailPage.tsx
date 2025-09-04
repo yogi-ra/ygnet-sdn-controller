@@ -159,6 +159,12 @@ const useVlanInfo = (deviceId: string | undefined, enabled: boolean) => {
   });
 };
 
+// Helper function to determine if interface is administratively up
+const isInterfaceAdminUp = (status: string) => {
+  // Interface is administratively down only if explicitly marked as such
+  return !status?.toLowerCase().includes("administratively down");
+};
+
 const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -171,7 +177,7 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
   // Lazy load data based on active tab
   const { data: systemInfo, isLoading: systemLoading, error: systemError } = useSystemInfo(id, activeTab === "overview");
   const { data: clockInfo, isLoading: clockLoading, error: clockError } = useClockInfo(id, activeTab === "overview");
-  const { data: interfaces, isLoading: interfacesLoading, error: interfacesError } = useInterfaces(id, activeTab === "interfaces");
+  const { data: interfaces, isLoading: interfacesLoading, error: interfacesError, refetch: refetchInterfaces } = useInterfaces(id, activeTab === "interfaces");
   const { data: vlanInfo, isLoading: vlanLoading, error: vlanError } = useVlanInfo(id, activeTab === "vlans");
   
   // Device reachability (always loaded)
@@ -211,6 +217,42 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
   const handleTabSelect = (tabKey: string | null) => {
     if (tabKey) {
       setActiveTab(tabKey);
+    }
+  };
+
+  // Handle interface toggle
+  const handleToggleInterface = async (interfaceName: string, currentState: string) => {
+    if (!id || !token) return;
+    
+    // Toggle based on administrative state, not operational state
+    const newState = !isInterfaceAdminUp(currentState);
+    
+    try {
+      const response = await fetch(`/api/devices/${id}/interfaces/state`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ interface_name: interfaceName, state: newState }),
+      });
+      
+      if (response.status === 401) {
+        logout();
+        navigate("/login");
+        return;
+      }
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || "Failed to toggle interface");
+      }
+      
+      // Refresh interfaces data
+      refetchInterfaces();
+    } catch (err: any) {
+      console.error("Error toggling interface:", err);
+      alert(`Error toggling interface: ${err.message || "Unknown error"}`);
     }
   };
 
@@ -351,19 +393,19 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
                     <Table striped bordered hover>
                       <tbody>
                         <tr>
-                          <td><strong>Hostname:</strong></td>
+                          <td><strong>Hostname</strong></td>
                           <td>{systemInfo.hostname || "N/A"}</td>
                         </tr>
                         <tr>
-                          <td><strong>Version:</strong></td>
+                          <td><strong>Version</strong></td>
                           <td>{systemInfo.version || "N/A"}</td>
                         </tr>
                         <tr>
-                          <td><strong>Uptime:</strong></td>
+                          <td><strong>Uptime</strong></td>
                           <td>{systemInfo.uptime || "N/A"}</td>
                         </tr>
                         <tr>
-                          <td><strong>Clock:</strong></td>
+                          <td><strong>Clock</strong></td>
                           <td>{clockInfo || "N/A"}</td>
                         </tr>
                       </tbody>
@@ -401,6 +443,7 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
                           <th>IP Address</th>
                           <th>Status</th>
                           <th>Protocol</th>
+                          <th>Actions</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -410,6 +453,19 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
                             <td>{iface.ip_address || iface.ip || "N/A"}</td>
                             <td>{iface.status || "N/A"}</td>
                             <td>{iface.proto || "N/A"}</td>
+                            <td>
+                              <Button
+                                size="sm"
+                                variant={isInterfaceAdminUp(iface.status) ? "danger" : "success"}
+                                onClick={() => handleToggleInterface(
+                                  iface.interface || iface.intf || "",
+                                  iface.status || ""
+                                )}
+                                disabled={!device?.is_reachable}
+                              >
+                                {isInterfaceAdminUp(iface.status) ? "Shut Down" : "Enable"}
+                              </Button>
+                            </td>
                           </tr>
                         ))}
                       </tbody>

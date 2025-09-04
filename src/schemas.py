@@ -106,6 +106,11 @@ class CommandInput(BaseModel):
     command: Union[str, List[str]]
     is_config: bool = False
 
+class InterfaceState(BaseModel):
+    interface_name: str
+    state: bool
+
+
 
 class CommandOutput(BaseModel):
     output: str
