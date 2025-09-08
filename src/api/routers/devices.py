@@ -395,6 +395,27 @@ def get_vlans_brief(request: Request, device_id: int, db: Session = Depends(get_
         raise HTTPException(status_code=500, detail=error_msg)
 
 
+@router.get("/{device_id}/routing", dependencies=[Depends(require_read_privileges)])
+@cache_response("device_routing_table", ttl=300)
+def get_routing_table(request: Request, device_id: int, db: Session = Depends(get_db)):
+    """
+    Get routing table information.
+    """
+    handler = get_handler_from_device_id(device_id, db)
+    try:
+        with handler:
+            routing_table = handler.routing.get_routing_table()
+            return routing_table
+    except FutureTimeoutError:
+        error_msg = f"Timeout getting routing table for device {device_id}"
+        print(error_msg)
+        raise HTTPException(status_code=504, detail=error_msg)
+    except Exception as e:
+        error_msg = f"Failed to get routing table for device {device_id}: {str(e)}"
+        print(error_msg)
+        raise HTTPException(status_code=500, detail=error_msg)
+
+
 @router.post("/{device_id}/vlans/{vlan_id}/assign-port", dependencies=[Depends(require_write_privileges)])
 def assign_port_to_vlan(
     device_id: int,

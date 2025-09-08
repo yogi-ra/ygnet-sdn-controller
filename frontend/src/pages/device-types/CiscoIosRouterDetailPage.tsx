@@ -135,9 +135,24 @@ const useRoutingInfo = (deviceId: string | undefined, enabled: boolean) => {
         throw new Error("Missing token or device ID");
       }
       
-      // Placeholder for routing information endpoint
-      // In a real implementation, this would fetch actual routing data
-      return [];
+      const response = await fetch(`/api/devices/${deviceId}/routing`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      
+      if (response.status === 401) {
+        logout();
+        navigate("/login");
+        throw new Error("Session expired or unauthorized. Please log in again.");
+      }
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch routing information: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      return Array.isArray(data) ? data : [];
     },
     enabled, // Controlled by the enabled parameter
   });
@@ -479,10 +494,31 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
                         <span className="visually-hidden">Loading...</span>
                       </Spinner>
                     </div>
-                  ) : routingInfo ? (
-                    <Alert variant="info">
-                      Routing information would be displayed here for Cisco IOS routers.
-                    </Alert>
+                  ) : routingInfo && routingInfo.length > 0 ? (
+                    <Table striped bordered hover responsive>
+                      <thead>
+                        <tr>
+                          <th>Protocol</th>
+                          <th>Destination</th>
+                          <th>Next Hop</th>
+                          <th>Next Hop Interface</th>
+                          <th>Metric</th>
+                          <th>Uptime</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {routingInfo.map((route: any, index: number) => (
+                          <tr key={index}>
+                            <td>{route.protocol || "N/A"}</td>
+                            <td>{route.network || "N/A"}/{route.prefix_length || "N/A"}</td>
+                            <td>{route.nexthop_ip || "N/A"}</td>
+                            <td>{route.nexthop_if || "N/A"}</td>
+                            <td>{route.metric || "N/A"}</td>
+                            <td>{route.uptime || "N/A"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </Table>
                   ) : (
                     <Alert variant="info">No routing information available.</Alert>
                   )}
