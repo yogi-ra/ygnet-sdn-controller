@@ -20,7 +20,7 @@ import { useAssignPortToVlan } from '../../api/vlans';
 import VlanConfiguration from '../../components/VlanConfiguration';
 
 // Separate hook for system information with lazy loading
-const useSystemInfo = (deviceId: string | undefined, enabled: boolean) => {
+const useSystemInfo = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -50,12 +50,12 @@ const useSystemInfo = (deviceId: string | undefined, enabled: boolean) => {
       const deviceData = await response.json();
       return deviceData.version || {};
     },
-    enabled, // Controlled by the enabled parameter
+    enabled: enabled && isDeviceReachable, // Controlled by the enabled parameter and device reachability
   });
 };
 
 // Separate hook for clock information
-const useClockInfo = (deviceId: string | undefined, enabled: boolean) => {
+const useClockInfo = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -85,12 +85,12 @@ const useClockInfo = (deviceId: string | undefined, enabled: boolean) => {
       const data = await response.json();
       return data.clock || "N/A";
     },
-    enabled, // Controlled by the enabled parameter
+    enabled: enabled && isDeviceReachable, // Controlled by the enabled parameter and device reachability
   });
 };
 
 // Separate hook for interfaces with lazy loading
-const useInterfaces = (deviceId: string | undefined, enabled: boolean) => {
+const useInterfaces = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -121,13 +121,13 @@ const useInterfaces = (deviceId: string | undefined, enabled: boolean) => {
       // Ensure we return an array
       return Array.isArray(data) ? data : [];
     },
-    enabled, // Controlled by the enabled parameter
+    enabled: enabled && isDeviceReachable, // Controlled by the enabled parameter and device reachability
     staleTime: 1000 * 60 * 5, // Keep data fresh for 5 minutes
   });
 };
 
 // Separate hook for VLAN information with lazy loading
-const useVlanInfo = (deviceId: string | undefined, enabled: boolean) => {
+const useVlanInfo = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -158,7 +158,7 @@ const useVlanInfo = (deviceId: string | undefined, enabled: boolean) => {
       // Ensure we return an array
       return Array.isArray(data) ? data : [];
     },
-    enabled, // Controlled by the enabled parameter
+    enabled: enabled && isDeviceReachable, // Controlled by the enabled parameter and device reachability
   });
 };
 
@@ -173,16 +173,10 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
   const navigate = useNavigate();
   const { token, logout } = useAuth();
   const queryClient = useQueryClient();
+  const assignPortToVlan = useAssignPortToVlan(id);
   
   // Tab state
   const [activeTab, setActiveTab] = useState("overview");
-  
-  // Lazy load data based on active tab
-  const { data: systemInfo, isLoading: systemLoading, error: systemError } = useSystemInfo(id, activeTab === "overview");
-  const { data: clockInfo, isLoading: clockLoading, error: clockError } = useClockInfo(id, activeTab === "overview");
-  const { data: interfaces, isLoading: interfacesLoading, error: interfacesError, refetch: refetchInterfaces } = useInterfaces(id, activeTab === "interfaces" || activeTab === "vlans"); // Only enable interfaces fetching when on interfaces or VLANs tab
-  const { data: vlanInfo, isLoading: vlanLoading, error: vlanError } = useVlanInfo(id, activeTab === "vlans");
-  const assignPortToVlan = useAssignPortToVlan(id);
   
   // Device reachability (always loaded)
   const { data: isReachable = false } = useQuery<boolean, Error>({
@@ -191,23 +185,29 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
       if (!token) {
         throw new Error("No authentication token found.");
       }
-      
+
       const response = await fetch(`/api/devices/${id}/check-reachability`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
-      
+
       if (!response.ok) {
         throw new Error(`Failed to fetch reachability: ${response.statusText}`);
       }
-      
+
       return response.json();
     },
-    enabled: !!id,
+    enabled: !!id && device?.is_reachable !== false, // Only enabled if device is not explicitly offline
     initialData: device?.is_reachable, // Use initial data from passed device object
     refetchInterval: 5000, // Poll reachability every 5 seconds
   });
+  
+  // Lazy load data based on active tab
+  const { data: systemInfo, isLoading: systemLoading, error: systemError } = useSystemInfo(id, activeTab === "overview", isReachable);
+  const { data: clockInfo, isLoading: clockLoading, error: clockError } = useClockInfo(id, activeTab === "overview", isReachable);
+  const { data: interfaces, isLoading: interfacesLoading, error: interfacesError, refetch: refetchInterfaces } = useInterfaces(id, activeTab === "interfaces" || activeTab === "vlans", isReachable); // Only enable interfaces fetching when on interfaces or VLANs tab
+  const { data: vlanInfo, isLoading: vlanLoading, error: vlanError } = useVlanInfo(id, activeTab === "vlans", isReachable);
   
   // Command execution state
   const [command, setCommand] = useState("");

@@ -84,7 +84,13 @@ const DeviceListPage = () => {
                       variant="info"
                       size="sm"
                       className="me-2"
-                      onClick={() => navigate(`/devices/${device.id}`, { state: { device } })}
+                      onClick={() => {
+                        if (device.is_reachable === false) {
+                          toast.error("Cannot view details for an offline device.");
+                        } else {
+                          navigate(`/devices/${device.id}`, { state: { device } });
+                        }
+                      }}
                       disabled={device.is_reachable === false}
                       style={device.is_reachable === false ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
                       title={device.is_reachable === false ? "Device is offline" : "View device details"}

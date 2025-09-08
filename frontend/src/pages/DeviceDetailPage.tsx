@@ -1,9 +1,9 @@
-import React from "react";
-import { useParams, useLocation } from "react-router-dom";
+import React, { useEffect } from "react";
+import { useParams, useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../hooks/useAuth";
-import { useNavigate } from "react-router-dom";
 import { Container, Spinner, Alert } from "react-bootstrap";
+import OfflineBanner from "../components/OfflineBanner";
 import CiscoIosRouterDetailPage from "./device-types/CiscoIosRouterDetailPage";
 import CiscoIosSwitchDetailPage from "./device-types/CiscoIosSwitchDetailPage";
 
@@ -12,9 +12,12 @@ const DeviceDetailPage = () => {
   const location = useLocation();
   const { token, logout } = useAuth();
   const navigate = useNavigate();
-  
+
   // Get device data passed from the device list page
   const deviceData = location.state?.device;
+
+  // Check if device is explicitly marked as offline from the list navigation
+  const isDeviceOfflineFromList = deviceData && deviceData.is_reachable === false;
 
   // If we don't have device data, fetch it
   const { data: device, isLoading, error } = useQuery<any, Error>({
@@ -42,9 +45,29 @@ const DeviceDetailPage = () => {
 
       return response.json();
     },
-    enabled: !!id && !!token && !deviceData, // Only fetch if we don't have device data
-    initialData: deviceData, // Use passed data if available
+    enabled: !!id && !!token && !isDeviceOfflineFromList,
+    initialData: deviceData,
   });
+
+  // If the device is offline and we got this information from the list, display a banner
+  if (isDeviceOfflineFromList) {
+    return (
+      <Container fluid className="mt-4">
+        <OfflineBanner deviceName={deviceData?.name} />
+      </Container>
+    );
+  }
+
+  // Check if device is offline based on fetched data
+  const isDeviceOffline = device && device.is_reachable === false;
+
+  if (isDeviceOffline) {
+    return (
+      <Container fluid className="mt-4">
+        <OfflineBanner deviceName={device?.name} />
+      </Container>
+    );
+  }
 
   if (isLoading) {
     return (

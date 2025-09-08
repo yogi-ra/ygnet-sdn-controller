@@ -17,8 +17,7 @@ import {
 import { useAuth } from "../../hooks/useAuth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-// Separate hook for system information with lazy loading
-const useSystemInfo = (deviceId: string | undefined, enabled: boolean) => {
+const useSystemInfo = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -48,12 +47,12 @@ const useSystemInfo = (deviceId: string | undefined, enabled: boolean) => {
       const deviceData = await response.json();
       return deviceData.version || {};
     },
-    enabled, // Controlled by the enabled parameter
+    enabled: enabled && isDeviceReachable, // Controlled by the enabled parameter
   });
 };
 
 // Separate hook for clock information
-const useClockInfo = (deviceId: string | undefined, enabled: boolean) => {
+const useClockInfo = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -83,12 +82,12 @@ const useClockInfo = (deviceId: string | undefined, enabled: boolean) => {
       const data = await response.json();
       return data.clock || "N/A";
     },
-    enabled, // Controlled by the enabled parameter
+    enabled: enabled && isDeviceReachable, // Controlled by the enabled parameter
   });
 };
 
 // Separate hook for interfaces with lazy loading
-const useInterfaces = (deviceId: string | undefined, enabled: boolean) => {
+const useInterfaces = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -119,12 +118,12 @@ const useInterfaces = (deviceId: string | undefined, enabled: boolean) => {
       // Ensure we return an array
       return Array.isArray(data) ? data : [];
     },
-    enabled, // Controlled by the enabled parameter
+    enabled: enabled && isDeviceReachable, // Controlled by the enabled parameter
   });
 };
 
 // Separate hook for routing information with lazy loading
-const useRoutingInfo = (deviceId: string | undefined, enabled: boolean) => {
+const useRoutingInfo = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -154,7 +153,7 @@ const useRoutingInfo = (deviceId: string | undefined, enabled: boolean) => {
       const data = await response.json();
       return Array.isArray(data) ? data : [];
     },
-    enabled, // Controlled by the enabled parameter
+    enabled: enabled && isDeviceReachable, // Controlled by the enabled parameter
   });
 };
 
@@ -169,15 +168,9 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
   const navigate = useNavigate();
   const { token, logout } = useAuth();
   const queryClient = useQueryClient();
-  
+
   // Tab state
   const [activeTab, setActiveTab] = useState("overview");
-  
-  // Lazy load data based on active tab
-  const { data: systemInfo, isLoading: systemLoading, error: systemError } = useSystemInfo(id, activeTab === "overview");
-  const { data: clockInfo, isLoading: clockLoading, error: clockError } = useClockInfo(id, activeTab === "overview");
-  const { data: interfaces, isLoading: interfacesLoading, error: interfacesError, refetch: refetchInterfaces } = useInterfaces(id, activeTab === "interfaces");
-  const { data: routingInfo, isLoading: routingLoading, error: routingError } = useRoutingInfo(id, activeTab === "routing");
   
   // Device reachability (always loaded)
   const { data: isReachable = false } = useQuery<boolean, Error>({
@@ -198,11 +191,17 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
       }
       
       return response.json();
-      },
-    enabled: !!id,
+    },
+    enabled: !!id && device?.is_reachable !== false, // Only enabled if device is not explicitly offline
     initialData: device?.is_reachable, // Use initial data from passed device object
     refetchInterval: 5000, // Poll reachability every 5 seconds
   });
+  
+  // Lazy load data based on active tab
+  const { data: systemInfo, isLoading: systemLoading, error: systemError } = useSystemInfo(id, activeTab === "overview", isReachable);
+  const { data: clockInfo, isLoading: clockLoading, error: clockError } = useClockInfo(id, activeTab === "overview", isReachable);
+  const { data: interfaces, isLoading: interfacesLoading, error: interfacesError, refetch: refetchInterfaces } = useInterfaces(id, activeTab === "interfaces", isReachable);
+  const { data: routingInfo, isLoading: routingLoading, error: routingError } = useRoutingInfo(id, activeTab === "routing", isReachable);
   
   // Command execution state
   const [command, setCommand] = useState("");

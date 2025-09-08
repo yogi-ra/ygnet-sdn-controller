@@ -24,3 +24,6 @@ frontend/node_modules/
 # Development specific
 nohup.out
 commit_message.txt
+
+# AI reference file
+reference-to-ai
