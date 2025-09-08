@@ -1,19 +1,21 @@
-"""
-Custom exceptions for the SDN controller project.
-"""
+from fastapi import HTTPException, status
 
-class DeviceError(Exception):
-    """Base exception class for all device-related errors."""
-    pass
+class DeviceConnectionError(HTTPException):
+    def __init__(self, detail: str):
+        super().__init__(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=detail)
 
-class DeviceConnectionError(DeviceError):
-    """Raised when a connection to the device cannot be established."""
-    pass
+class DeviceTimeoutError(DeviceConnectionError):
+    def __init__(self, detail: str):
+        super().__init__(detail=detail)
 
-class DeviceAuthenticationError(DeviceError):
-    """Raised for authentication failures."""
-    pass
+class DeviceAuthenticationError(DeviceConnectionError):
+    def __init__(self, detail: str):
+        super().__init__(detail=detail)
 
-class DeviceTimeoutError(DeviceError):
-    """Raised when a connection attempt times out."""
-    pass
+class DeviceError(HTTPException):
+    def __init__(self, detail: str, status_code: int = status.HTTP_500_INTERNAL_SERVER_ERROR):
+        super().__init__(status_code=status_code, detail=detail)
+
+class DeviceUnreachableError(DeviceConnectionError):
+    def __init__(self, detail: str):
+        super().__init__(detail=detail)

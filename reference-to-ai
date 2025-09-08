@@ -1,84 +1,9 @@
-@tanstack_react-query.js?v=c629f883:2252 Uncaught TypeError: this[#client].defaultMutationOptions is not a function
-    at MutationObserver.setOptions (@tanstack_react-query.js?v=c629f883:2252:33)
-    at new MutationObserver (@tanstack_react-query.js?v=c629f883:2242:10)
-    at @tanstack_react-query.js?v=c629f883:3425:11
-    at mountStateImpl (react-dom_client.js?v=c629f883:4658:26)
-    at mountState (react-dom_client.js?v=c629f883:4679:24)
-    at Object.useState (react-dom_client.js?v=c629f883:16538:20)
-    at exports.useState (chunk-2WHLTL63.js?v=c629f883:952:36)
-    at useMutation (@tanstack_react-query.js?v=c629f883:3424:30)
-    at useAssignPortToVlan (vlans.ts:10:10)
-    at CiscoIosSwitchDetailPage (CiscoIosSwitchDetailPage.tsx:183:28)
-setOptions @ @tanstack_react-query.js?v=c629f883:2252
-MutationObserver @ @tanstack_react-query.js?v=c629f883:2242
-(anonymous) @ @tanstack_react-query.js?v=c629f883:3425
-mountStateImpl @ react-dom_client.js?v=c629f883:4658
-mountState @ react-dom_client.js?v=c629f883:4679
-useState @ react-dom_client.js?v=c629f883:16538
-exports.useState @ chunk-2WHLTL63.js?v=c629f883:952
-useMutation @ @tanstack_react-query.js?v=c629f883:3424
-useAssignPortToVlan @ vlans.ts:10
-CiscoIosSwitchDetailPage @ CiscoIosSwitchDetailPage.tsx:183
-react_stack_bottom_frame @ react-dom_client.js?v=c629f883:17422
-renderWithHooks @ react-dom_client.js?v=c629f883:4204
-updateFunctionComponent @ react-dom_client.js?v=c629f883:6617
-beginWork @ react-dom_client.js?v=c629f883:7652
-runWithFiberInDEV @ react-dom_client.js?v=c629f883:1483
-performUnitOfWork @ react-dom_client.js?v=c629f883:10866
-workLoopSync @ react-dom_client.js?v=c629f883:10726
-renderRootSync @ react-dom_client.js?v=c629f883:10709
-performWorkOnRoot @ react-dom_client.js?v=c629f883:10357
-performWorkOnRootViaSchedulerTask @ react-dom_client.js?v=c629f883:11621
-performWorkUntilDeadline @ react-dom_client.js?v=c629f883:34
-<CiscoIosSwitchDetailPage>
-exports.jsxDEV @ react_jsx-dev-runtime.js?v=c629f883:248
-DeviceDetailPage @ DeviceDetailPage.tsx:75
-react_stack_bottom_frame @ react-dom_client.js?v=c629f883:17422
-renderWithHooksAgain @ react-dom_client.js?v=c629f883:4279
-renderWithHooks @ react-dom_client.js?v=c629f883:4215
-updateFunctionComponent @ react-dom_client.js?v=c629f883:6617
-beginWork @ react-dom_client.js?v=c629f883:7652
-runWithFiberInDEV @ react-dom_client.js?v=c629f883:1483
-performUnitOfWork @ react-dom_client.js?v=c629f883:10866
-workLoopSync @ react-dom_client.js?v=c629f883:10726
-renderRootSync @ react-dom_client.js?v=c629f883:10709
-performWorkOnRoot @ react-dom_client.js?v=c629f883:10357
-performWorkOnRootViaSchedulerTask @ react-dom_client.js?v=c629f883:11621
-performWorkUntilDeadline @ react-dom_client.js?v=c629f883:34
-<DeviceDetailPage>
-exports.jsxDEV @ react_jsx-dev-runtime.js?v=c629f883:248
-MainLayout @ App.tsx:81
-react_stack_bottom_frame @ react-dom_client.js?v=c629f883:17422
-renderWithHooksAgain @ react-dom_client.js?v=c629f883:4279
-renderWithHooks @ react-dom_client.js?v=c629f883:4215
-updateFunctionComponent @ react-dom_client.js?v=c629f883:6617
-beginWork @ react-dom_client.js?v=c629f883:7652
-runWithFiberInDEV @ react-dom_client.js?v=c629f883:1483
-performUnitOfWork @ react-dom_client.js?v=c629f883:10866
-workLoopSync @ react-dom_client.js?v=c629f883:10726
-renderRootSync @ react-dom_client.js?v=c629f883:10709
-performWorkOnRoot @ react-dom_client.js?v=c629f883:10328
-performWorkOnRootViaSchedulerTask @ react-dom_client.js?v=c629f883:11621
-performWorkUntilDeadline @ react-dom_client.js?v=c629f883:34
-<MainLayout>
-exports.jsxDEV @ react_jsx-dev-runtime.js?v=c629f883:248
-App @ App.tsx:105
-react_stack_bottom_frame @ react-dom_client.js?v=c629f883:17422
-renderWithHooksAgain @ react-dom_client.js?v=c629f883:4279
-renderWithHooks @ react-dom_client.js?v=c629f883:4215
-updateFunctionComponent @ react-dom_client.js?v=c629f883:6617
-beginWork @ react-dom_client.js?v=c629f883:7652
-runWithFiberInDEV @ react-dom_client.js?v=c629f883:1483
-performUnitOfWork @ react-dom_client.js?v=c629f883:10866
-workLoopSync @ react-dom_client.js?v=c629f883:10726
-renderRootSync @ react-dom_client.js?v=c629f883:10709
-performWorkOnRoot @ react-dom_client.js?v=c629f883:10328
-performWorkOnRootViaSchedulerTask @ react-dom_client.js?v=c629f883:11621
-performWorkUntilDeadline @ react-dom_client.js?v=c629f883:34
-<App>
-exports.jsxDEV @ react_jsx-dev-runtime.js?v=c629f883:248
-(anonymous) @ main.tsx:13
-DeviceDetailPage.tsx:75 An error occurred in the <CiscoIosSwitchDetailPage> component.
-
-Consider adding an error boundary to your tree to customize error handling behavior.
-Visit https://react.dev/link/error-boundaries to learn more about error boundaries.
+ad_unlocked
+  File "<frozen importlib._bootstrap_external>", line 1026, in exec_module
+  File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+  File "C:\Users\adm1n\ygnet-sdn-controller\src\main.py", line 8, in <module>
+    from .tasks import check_device_for_changes, update_device_reachability_status # Import new task
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\adm1n\ygnet-sdn-controller\src\tasks.py", line 33
+    from sqlalchemy.orm import Session
+SyntaxError: expected 'except' or 'finally' block 

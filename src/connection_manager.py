@@ -1,8 +1,10 @@
 import threading
+import socket
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from netmiko import ConnectHandler, NetmikoTimeoutException, NetmikoAuthenticationException
 from src.config import settings
 from src.device_info import DeviceConnectionInfo
+from src.exceptions import DeviceUnreachableError
 
 # Mapping from our internal device types to Netmiko device types
 NETMIKO_DEVICE_TYPE_MAP = {
@@ -27,6 +29,20 @@ class ConnectionManager:
                     cls._instance._executor = ThreadPoolExecutor(max_workers=settings.MAX_WORKER_THREADS)
                     cls._instance._executor_shutdown = False
         return cls._instance
+
+    def _check_tcp_port_open(self, ip_address: str, port: int, timeout: float = 2.0) -> bool:
+        """
+        Checks if a TCP port is open on a given IP address.
+        """
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(timeout)
+        try:
+            sock.connect((ip_address, port))
+            return True
+        except (socket.timeout, ConnectionRefusedError, OSError):
+            return False
+        finally:
+            sock.close()
 
     def _connect_device(self, device_info: DeviceConnectionInfo, netmiko_device_type: str):
         """Establishes a Netmiko connection to the device."""
@@ -56,6 +72,11 @@ class ConnectionManager:
 
             # Establish a new connection
             try:
+                # Perform a quick TCP port check before attempting full Netmiko connection
+                print(f"Checking TCP port {device_info.port} on {device_info.ip_address}...")
+                if not self._check_tcp_port_open(device_info.ip_address, device_info.port):
+                    raise DeviceUnreachableError(f"TCP connection to device {device_info.ip_address}:{device_info.port} failed. Port may be closed or device unreachable.")
+                
                 print(f"Attempting to connect to {device_info.ip_address}...")
                 # Use the mapped Netmiko device type
                 netmiko_type = NETMIKO_DEVICE_TYPE_MAP.get(device_info.device_type, device_info.device_type)

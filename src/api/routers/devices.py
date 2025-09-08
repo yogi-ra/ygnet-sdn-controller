@@ -147,26 +147,7 @@ async def read_devices(request: Request, skip: int = 0, limit: int = 100, db: Se
     Performs reachability checks asynchronously to avoid blocking.
     """
     db_devices = crud.get_devices(db, skip=skip, limit=limit)
-    devices_with_status = []
-    
-    # Create tasks for all device reachability checks
-    tasks = []
-    for db_device in db_devices:
-        device_dict = schemas.Device.from_orm(db_device).dict()
-        devices_with_status.append(device_dict)
-        tasks.append(check_device_reachability(db_device.id, db))
-    
-    # Run all checks concurrently
-    if tasks:
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        for i, result in enumerate(results):
-            if isinstance(result, Exception):
-                devices_with_status[i]["is_reachable"] = False
-                print(f"Error checking reachability for device {db_devices[i].id}: {result}")
-            else:
-                devices_with_status[i]["is_reachable"] = result
-    
-    return devices_with_status
+    return [schemas.Device.from_orm(db_device) for db_device in db_devices]
 
 
 @router.get(
@@ -551,6 +532,8 @@ def execute_command(
         raise HTTPException(status_code=500, detail=error_msg)
 
 
+from ...exceptions import DeviceConnectionError, DeviceUnreachableError, DeviceTimeoutError, DeviceAuthenticationError
+
 @router.get(
     "/{device_id}/check-reachability",
     response_model=bool,
@@ -563,10 +546,18 @@ async def check_device_reachability(
     """
     Checks if a device is reachable by attempting to establish a Netmiko connection.
     This function is made async to prevent blocking other requests.
+    It updates the device's reachability status in the database.
     """
+    is_reachable = False
     try:
+        db_device = crud.get_device(db, device_id=device_id)
+        if not db_device:
+            raise HTTPException(status_code=404, detail="Device not found")
+
         handler = get_handler_from_device_id(device_id, db)
+        
         # Use asyncio.wait_for to add a timeout to the connection attempt
+        # The underlying ConnectionManager will use the fast TCP check.
         import asyncio
         from concurrent.futures import ThreadPoolExecutor
         
@@ -578,15 +569,29 @@ async def check_device_reachability(
         with ThreadPoolExecutor() as executor:
             result = await asyncio.wait_for(
                 loop.run_in_executor(executor, connect_handler),
-                timeout=10.0  # 10 second timeout
+                timeout=settings.NETMIKO_TIMEOUT # Use general Netmiko timeout
             )
-        return result
-    except asyncio.TimeoutError:
+        is_reachable = result
+    except (asyncio.TimeoutError, FutureTimeoutError, DeviceTimeoutError):
         print(f"Timeout checking reachability for device {device_id}")
-        return False
-    except Exception as e:
+        is_reachable = False
+    except (DeviceUnreachableError, DeviceConnectionError, DeviceAuthenticationError) as e:
         print(f"Error checking reachability for device {device_id}: {str(e)}")
-        return False
+        is_reachable = False
+    except Exception as e:
+        print(f"An unexpected error occurred during reachability check for device {device_id}: {str(e)}")
+        is_reachable = False
+    
+    # Update database directly
+    db_device = crud.get_device(db, device_id=device_id) # Re-fetch to ensure fresh object
+    if db_device and db_device.is_reachable != is_reachable:
+        db_device.is_reachable = is_reachable
+        db.add(db_device)
+        db.commit()
+        db.refresh(db_device)
+        print(f"Updated reachability for device {device_id} to {is_reachable}")
+    
+    return is_reachable
 
 
 @router.get("/supported-features", dependencies=[Depends(require_read_privileges)])
