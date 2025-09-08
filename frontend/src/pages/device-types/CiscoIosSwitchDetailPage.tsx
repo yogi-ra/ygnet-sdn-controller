@@ -122,6 +122,7 @@ const useInterfaces = (deviceId: string | undefined, enabled: boolean) => {
       return Array.isArray(data) ? data : [];
     },
     enabled, // Controlled by the enabled parameter
+    staleTime: 1000 * 60 * 5, // Keep data fresh for 5 minutes
   });
 };
 
