@@ -80,6 +80,12 @@ Each feature has its own endpoint for retrieving or manipulating data:
 
 ## Implementation Plan
 
+### Performance Enhancements
+
+1. **Low-Level Netmiko Prompt Checking**
+   - Implement low-level prompt checking in Netmiko to reduce the delay between commands.
+   - Use `global_delay_factor=0.5` and `fast_cli=True` in the `ConnectHandler` to speed up interactions.
+
 ### Backend Changes
 
 1. **Simplify Device Feature Discovery**
@@ -98,6 +104,16 @@ Each feature has its own endpoint for retrieving or manipulating data:
    - Caching where appropriate
 
 ### Frontend Changes
+
+1. **Async Frontend**
+   - Ensure all data fetching and processing is done asynchronously to prevent UI blocking.
+   - Use `useEffect` and `useState` to manage loading and error states.
+   - Utilize `@tanstack/react-query` for efficient server state management.
+
+2. **User Experience**
+   - Provide clear loading indicators (e.g., spinners) when data is being fetched.
+   - Disable interactive elements (e.g., buttons) during loading to prevent inconsistent states.
+   - Use a modern notification system (e.g., `react-hot-toast`) for user feedback instead of blocking alerts.
 
 1. **Static Device-Type Specific Views**
    - Create separate view components for each device type (e.g., Cisco IOS Router, Cisco IOS Switch)

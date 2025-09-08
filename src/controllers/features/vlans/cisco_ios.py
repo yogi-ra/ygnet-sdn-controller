@@ -57,3 +57,64 @@ class CiscoIosVlans(BaseVlans):
         except Exception as e:
             self.device_handler.logger.error(f"Error getting spanning-tree summary: {e}")
             return []
+
+    def assign_port_to_vlan(self, vlan_id: int, port: str) -> bool:
+        try:
+            commands = [
+                f"interface {port}",
+                f"switchport access vlan {vlan_id}",
+            ]
+            self.device_handler.send_config_set(commands)
+            self.device_handler.clear_cache(["device_vlans_brief"])
+            return True
+        except Exception as e:
+            self.device_handler.logger.error(f"Error assigning port {port} to VLAN {vlan_id}: {e}")
+            return False
+
+    def configure_interface_vlan(self, interface_config: dict) -> bool:
+        try:
+            commands = [
+                f"interface {interface_config['interface_name']}",
+            ]
+
+            if interface_config['mode'] == "access":
+                commands.append("switchport mode access")
+                if interface_config.get('access_vlan'):
+                    commands.append(f"switchport access vlan {interface_config['access_vlan']}")
+            elif interface_config['mode'] == "trunk":
+                commands.append("switchport mode trunk")
+                if interface_config.get('allowed_vlans'):
+                    commands.append(f"switchport trunk allowed vlan {interface_config['allowed_vlans']}")
+                if interface_config.get('native_vlan'):
+                    commands.append(f"switchport trunk native vlan {interface_config['native_vlan']}")
+            
+            self.device_handler.send_config_set(commands)
+            self.device_handler.clear_cache(["device_vlans_brief", "device_interfaces_brief"])
+            return True
+        except Exception as e:
+            self.device_handler.logger.error(f"Error configuring interface VLAN for {interface_config.get('interface_name')}: {e}")
+            return False
+
+    def configure_interface_vlan(self, interface_config: dict) -> bool:
+        try:
+            commands = [
+                f"interface {interface_config['interface_name']}",
+            ]
+
+            if interface_config['mode'] == "access":
+                commands.append("switchport mode access")
+                if interface_config.get('access_vlan'):
+                    commands.append(f"switchport access vlan {interface_config['access_vlan']}")
+            elif interface_config['mode'] == "trunk":
+                commands.append("switchport mode trunk")
+                if interface_config.get('allowed_vlans'):
+                    commands.append(f"switchport trunk allowed vlan {interface_config['allowed_vlans']}")
+                if interface_config.get('native_vlan'):
+                    commands.append(f"switchport trunk native vlan {interface_config['native_vlan']}")
+            
+            self.device_handler.send_config_set(commands)
+            self.device_handler.clear_cache(["device_vlans_brief", "device_interfaces_brief"])
+            return True
+        except Exception as e:
+            self.device_handler.logger.error(f"Error configuring interface VLAN for {interface_config.get('interface_name')}: {e}")
+            return False

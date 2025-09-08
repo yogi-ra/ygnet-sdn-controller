@@ -1,40 +1,11 @@
 import { QueryClient } from "@tanstack/react-query";
-import { useAuth } from "./useAuth";
-import { UnauthorizedError } from "../api";
-import { useNavigate } from "react-router-dom";
 
-export const useAuthQueryClient = () => {
-  const { logout } = useAuth();
-  const navigate = useNavigate();
-
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: {
-        retry: (failureCount, error) => {
-          if (error instanceof UnauthorizedError) {
-            logout();
-            navigate("/login");
-            return false;
-          }
-          return failureCount < 3;
-        },
-        onError: (error) => {
-          if (error instanceof UnauthorizedError) {
-            logout();
-            navigate("/login");
-          }
-        },
-      },
-      mutations: {
-        onError: (error) => {
-          if (error instanceof UnauthorizedError) {
-            logout();
-            navigate("/login");
-          }
-        },
-      },
+// Create the QueryClient instance once globally
+export const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 3, // Default retries
     },
-  });
-
-  return queryClient;
-};
+    mutations: {}, // Re-adding an empty mutations object to satisfy useMutation
+  },
+});

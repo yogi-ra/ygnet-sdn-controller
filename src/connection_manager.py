@@ -66,7 +66,9 @@ class ConnectionManager:
                     password=device_info.password,
                     secret=device_info.secret,
                     port=device_info.port,
-                    timeout=settings.NETMIKO_TIMEOUT
+                    timeout=settings.NETMIKO_TIMEOUT,
+                    global_delay_factor=0.5,
+                    fast_cli=True,
                 )
                 self._connections[device_key] = connection
                 print(f"Successfully connected to {device_info.ip_address}.")

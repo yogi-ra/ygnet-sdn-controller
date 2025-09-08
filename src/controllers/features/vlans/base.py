@@ -25,3 +25,7 @@ class BaseVlans(BaseFeature, ABC):
     @abstractmethod
     def get_vlan_config(self) -> List[Dict[str, Any]]:
         pass
+
+    @abstractmethod
+    def assign_port_to_vlan(self, vlan_id: int, port: str) -> bool:
+        pass

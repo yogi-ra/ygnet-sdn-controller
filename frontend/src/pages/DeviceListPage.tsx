@@ -1,7 +1,8 @@
-import { Container, Table, Button, Alert } from "react-bootstrap";
+import { Container, Table, Button, Alert, Spinner } from "react-bootstrap";
 import { useNavigate } from "react-router-dom";
 import { useDevices } from "../hooks/useDevices";
 import { useConfig } from "../context/ConfigContext";
+import { toast } from "react-hot-toast";
 import { findDeviceTypeDisplayName } from "../utils/deviceTypes";
 
 const DeviceListPage = () => {
@@ -17,11 +18,11 @@ const DeviceListPage = () => {
     if (window.confirm("Are you sure you want to delete this device?")) {
       deleteDevice(deviceId, {
         onSuccess: () => {
-          alert("Device deleted successfully!");
+          toast.success("Device deleted successfully!");
         },
         onError: (err: any) => {
           console.error("Error deleting device:", err);
-          alert("Failed to delete device. Please try again.");
+          toast.error("Failed to delete device. Please try again.");
         },
       });
     }
@@ -30,18 +31,26 @@ const DeviceListPage = () => {
   return (
     <Container fluid className="mt-4">
       <h1 className="mb-4">Devices</h1>
-      <Button variant="primary" onClick={handleAddDevice} className="mb-3">
-        Add New Device
-      </Button>
-      {isLoading ? (
-        <Alert variant="info">
-          Loading devices...
-        </Alert>
-      ) : !devices || devices.length === 0 ? (
+      <div className="d-flex justify-content-between mb-3">
+        <Button variant="primary" onClick={handleAddDevice} disabled={isLoading}>
+          Add New Device
+        </Button>
+        {isLoading && (
+          <div className="d-flex align-items-center">
+            <Spinner animation="border" size="sm" role="status" className="me-2">
+              <span className="visually-hidden">Loading...</span>
+            </Spinner>
+            <span>Loading devices...</span>
+          </div>
+        )}
+      </div>
+      {isError && <Alert variant="danger">Failed to load devices.</Alert>}
+      {!isLoading && !isError && devices && devices.length === 0 && (
         <Alert variant="info">
           No devices found. Click "Add New Device" to add one.
         </Alert>
-      ) : (
+      )}
+      {!isLoading && !isError && devices && devices.length > 0 && (
         <div className="table-responsive">
           <Table striped bordered hover className="shadow-sm">
             <thead>

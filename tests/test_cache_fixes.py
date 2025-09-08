@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import patch, MagicMock
 from src.connection_manager import ConnectionManager
-from src.api.routers.devices import clear_device_connection_cache, clear_connection_cache
+from src.api.routers.devices import clear_device_connection_cache
 from src.controllers.base import BaseDevice
 from src.device_info import DeviceConnectionInfo
 

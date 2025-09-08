@@ -128,25 +128,35 @@ class BaseDevice(ABC):
 
     def send_config_set(self, commands: List[str], timeout: int = None, **kwargs) -> str:
         """
-        Sends a list of configuration commands to the device.
+        Sends a list of configuration commands to the device, ensuring proper mode transitions.
         """
         if not self.connection:
             self.connect()
         try:
-            # Ensure we are in privileged EXEC mode before sending the command
+            # Ensure we are in privileged EXEC mode
             if not self.connection.check_enable_mode():
                 self.connection.enable()
+
             # Set a reasonable timeout for command execution
             cmd_timeout = timeout or settings.NETMIKO_READ_TIMEOUT
-            output = self.connection.send_config_set(commands, read_timeout=cmd_timeout, **kwargs)
+            # Netmiko's send_config_set handles entering and exiting config mode by default
+            output = self.connection.send_config_set(commands, read_timeout=cmd_timeout, exit_config_mode=True, **kwargs)
+            
             self.logger.debug(f"Raw output from Netmiko for config commands '{commands}':\n{output}")
             return output
         except Exception as e:
+            # Attempt to exit config mode only if we are currently in it
+            try:
+                if self.connection.check_config_mode():
+                    self.connection.exit_config_mode()
+            except Exception as exit_e:
+                self.logger.error(f"Error attempting to exit config mode: {exit_e}")
+
             self.logger.error(
-                f"Failed to send config commands '{commands}' to {self.device_info.ip_address}: {e}"  # Corrected to ip_address
+                f"Failed to send config commands '{commands}' to {self.device_info.ip_address}: {e}"
             )
             raise DeviceError(
-                f"Failed to send config commands '{commands}' to {self.device_info.ip_address}: {e}"  # Corrected to ip_address
+                f"Failed to send config commands '{commands}' to {self.device_info.ip_address}: {e}"
             )
 
     def send_multiline_commands(self, command_patterns: List[List[str]], timeout: int = None) -> str:

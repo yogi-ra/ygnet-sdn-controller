@@ -16,6 +16,8 @@ import {
 } from "react-bootstrap";
 import { useAuth } from "../../hooks/useAuth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useAssignPortToVlan } from '../../api/vlans';
+import VlanConfiguration from '../../components/VlanConfiguration';
 
 // Separate hook for system information with lazy loading
 const useSystemInfo = (deviceId: string | undefined, enabled: boolean) => {
@@ -177,8 +179,9 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
   // Lazy load data based on active tab
   const { data: systemInfo, isLoading: systemLoading, error: systemError } = useSystemInfo(id, activeTab === "overview");
   const { data: clockInfo, isLoading: clockLoading, error: clockError } = useClockInfo(id, activeTab === "overview");
-  const { data: interfaces, isLoading: interfacesLoading, error: interfacesError, refetch: refetchInterfaces } = useInterfaces(id, activeTab === "interfaces");
+  const { data: interfaces, isLoading: interfacesLoading, error: interfacesError, refetch: refetchInterfaces } = useInterfaces(id, true); // Always enable interfaces fetching
   const { data: vlanInfo, isLoading: vlanLoading, error: vlanError } = useVlanInfo(id, activeTab === "vlans");
+  const assignPortToVlan = useAssignPortToVlan(id);
   
   // Device reachability (always loaded)
   const { data: isReachable = false } = useQuery<boolean, Error>({
@@ -212,6 +215,7 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
   const [deviceLevel, setDeviceLevel] = useState<string | null>(null);
   const [executingCommand, setExecutingCommand] = useState(false);
   const [commandError, setCommandError] = useState<string | null>(null);
+  const [selectedPorts, setSelectedPorts] = useState<{ [key: string]: string }>({});
 
   // Handle tab changes
   const handleTabSelect = (tabKey: string | null) => {
@@ -256,6 +260,25 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
     }
   };
 
+  const handlePortSelection = (vlanId: string, port: string) => {
+    setSelectedPorts(prev => ({
+      ...prev,
+      [vlanId]: port
+    }));
+  };
+
+  const handleAssignPort = async (vlanId: string) => {
+    const port = selectedPorts[vlanId];
+    if (!id || !port) return;
+
+    try {
+      await assignPortToVlan.mutateAsync({ vlanId, port });
+    } catch (err: any) {
+      console.error("Error assigning port to VLAN:", err);
+      alert(`Error assigning port to VLAN: ${err.message || "Unknown error"}`);
+    }
+  };
+
   const handleExecuteCommand = async (e: React.FormEvent) => {
     e.preventDefault();
     setExecutingCommand(true);
@@ -291,7 +314,8 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
       setDeviceLevel(data.device_level || null);
     } catch (err: any) {
       setCommandError(err.message || "An unknown error occurred.");
-    } finally {
+    }
+    finally {
       setExecutingCommand(false);
       setCommand("");
     }
@@ -482,59 +506,16 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
         <Tab eventKey="vlans" title="VLANs">
           <Row className="mb-4">
             <Col>
-              <Card>
-                <Card.Body>
-                  <Card.Title as="h2">VLAN Information</Card.Title>
-                  {vlanError ? (
-                    <Alert variant="danger">
-                      Error: {vlanError.message}. Please try again later.
-                    </Alert>
-                  ) : vlanLoading ? (
-                    <div className="text-center">
-                      <Spinner animation="border" role="status">
-                        <span className="visually-hidden">Loading...</span>
-                      </Spinner>
-                    </div>
-                  ) : vlanInfo && vlanInfo.length > 0 ? (
-                    <Table striped bordered hover responsive>
-                      <thead>
-                        <tr>
-                          <th>VLAN ID</th>
-                          <th>Name</th>
-                          <th>Status</th>
-                          <th>Ports</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {vlanInfo.map((vlan: any, index: number) => (
-                          <tr key={index}>
-                            <td>{vlan.vlan_id || vlan.id || "N/A"}</td>
-                            <td>{vlan.vlan_name || "N/A"}</td>
-                            <td>{vlan.status || "N/A"}</td>
-                            <td>
-                              {vlan.ports 
-                                ? Array.isArray(vlan.ports) 
-                                  ? vlan.ports.join(', ') 
-                                  : typeof vlan.ports === 'string' 
-                                    ? vlan.ports.split(' ').join(', ')
-                                    : vlan.ports
-                                : vlan.interfaces 
-                                  ? Array.isArray(vlan.interfaces)
-                                    ? vlan.interfaces.join(', ')
-                                    : typeof vlan.interfaces === 'string'
-                                      ? vlan.interfaces.split(' ').join(', ')
-                                      : vlan.interfaces
-                                  : "N/A"}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </Table>
-                  ) : (
-                    <Alert variant="info">No VLAN information available.</Alert>
-                  )}
-                </Card.Body>
-              </Card>
+              <VlanConfiguration
+                deviceId={id}
+                vlanInfo={vlanInfo}
+                vlanLoading={vlanLoading}
+                vlanError={vlanError}
+                interfaces={interfaces}
+                interfacesLoading={interfacesLoading}
+                interfacesError={interfacesError}
+                deviceReachable={isReachable}
+              />
             </Col>
           </Row>
         </Tab>

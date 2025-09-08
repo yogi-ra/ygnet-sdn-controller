@@ -111,6 +111,17 @@ class InterfaceState(BaseModel):
     state: bool
 
 
+class PortAssignment(BaseModel):
+    port: str
+
+
+class InterfaceVlanConfig(BaseModel):
+    interface_name: str
+    mode: str  # "access" or "trunk"
+    access_vlan: Optional[int] = None
+    allowed_vlans: Optional[str] = None  # e.g., "10,20,30-40"
+    native_vlan: Optional[int] = None
+
 
 class CommandOutput(BaseModel):
     output: str

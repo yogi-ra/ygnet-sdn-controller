@@ -8,12 +8,12 @@ import DeviceDetailPage from './pages/DeviceDetailPage';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import { useAuth } from './hooks/useAuth';
+import useTokenValidation from './hooks/useTokenValidation';
 import EditDevicePage from './pages/EditDevicePage';
 
 import { QueryClientProvider, useQueryClient } from '@tanstack/react-query';
-import { useAuthQueryClient } from './hooks/useAuthQueryClient';
 import AuthQueryClientProviderWrapper from './components/AuthQueryClientProviderWrapper';
-import useTokenValidation from './hooks/useTokenValidation';
+import { Toaster } from 'react-hot-toast';
 
 const MainLayout = () => {
   const { token, logout, isLoading } = useAuth();
@@ -101,6 +101,7 @@ function App() {
     <AuthProvider>
       <BrowserRouter>
         <AuthQueryClientProviderWrapper>
+          <Toaster />
           <MainLayout />
         </AuthQueryClientProviderWrapper>
       </BrowserRouter>

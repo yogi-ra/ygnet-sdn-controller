@@ -5,6 +5,9 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   root: '.', // Explicitly set the root to the frontend directory
+  optimizeDeps: {
+    exclude: ['@tanstack/react-query'],
+  },
   server: {
     proxy: {
       '/api': {

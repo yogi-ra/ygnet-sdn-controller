@@ -395,6 +395,55 @@ def get_vlans_brief(request: Request, device_id: int, db: Session = Depends(get_
         raise HTTPException(status_code=500, detail=error_msg)
 
 
+@router.post("/{device_id}/vlans/{vlan_id}/assign-port", dependencies=[Depends(require_write_privileges)])
+def assign_port_to_vlan(
+    device_id: int,
+    vlan_id: int,
+    port_assignment: schemas.PortAssignment,
+    db: Session = Depends(get_db),
+):
+    """
+    Assign a port to a specific VLAN.
+    """
+    handler = get_handler_from_device_id(device_id, db)
+    try:
+        with handler:
+            result = handler.vlans.assign_port_to_vlan(vlan_id, port_assignment.port)
+            return {"result": result}
+    except FutureTimeoutError:
+        error_msg = f"Timeout assigning port to VLAN for device {device_id}"
+        print(error_msg)
+        raise HTTPException(status_code=504, detail=error_msg)
+    except Exception as e:
+        error_msg = f"Failed to assign port to VLAN for device {device_id}: {str(e)}"
+        print(error_msg)
+        raise HTTPException(status_code=500, detail=error_msg)
+
+
+@router.post("/{device_id}/interfaces/vlan-config", dependencies=[Depends(require_write_privileges)])
+def configure_interface_vlan(
+    device_id: int,
+    interface_config: schemas.InterfaceVlanConfig,
+    db: Session = Depends(get_db),
+):
+    """
+    Configures VLAN settings for a specific interface (access or trunk).
+    """
+    handler = get_handler_from_device_id(device_id, db)
+    try:
+        with handler:
+            result = handler.vlans.configure_interface_vlan(interface_config)
+            return {"result": result}
+    except FutureTimeoutError:
+        error_msg = f"Timeout configuring VLAN for interface {interface_config.interface_name} on device {device_id}"
+        print(error_msg)
+        raise HTTPException(status_code=504, detail=error_msg)
+    except Exception as e:
+        error_msg = f"Failed to configure VLAN for interface {interface_config.interface_name} on device {device_id}: {str(e)}"
+        print(error_msg)
+        raise HTTPException(status_code=500, detail=error_msg)
+
+
 @router.post("/{device_id}/interfaces/state", dependencies=[Depends(require_write_privileges)])
 def set_interface_state(
     device_id: int, 
