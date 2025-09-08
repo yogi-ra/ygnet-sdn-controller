@@ -132,7 +132,15 @@ def create_device(device: schemas.DeviceCreate, db: Session = Depends(get_db)):
     """
     if crud.get_device_by_name(db, name=device.name):
         raise HTTPException(status_code=400, detail="Device name already registered")
-    return crud.create_device(db=db, device=device)
+    
+    # Create the device
+    created_device = crud.create_device(db=db, device=device)
+    
+    # Clear the devices list cache
+    redis_client = get_redis_client()
+    redis_client.delete("devices_list")
+    
+    return created_device
 
 
 @router.get(
@@ -213,6 +221,11 @@ def update_device(
     updated_device = crud.update_device(
         db, device_id=device_id, device_update=device_update
     )
+    
+    # Clear the devices list cache
+    redis_client = get_redis_client()
+    redis_client.delete("devices_list")
+    
     return updated_device
 
 
@@ -237,6 +250,10 @@ def delete_device(
     keys_to_delete = redis_client.keys(pattern)
     if keys_to_delete:
         redis_client.delete(*keys_to_delete)
+        
+    # Clear the devices list cache
+    redis_client.delete("devices_list")
+        
     return
 
 
