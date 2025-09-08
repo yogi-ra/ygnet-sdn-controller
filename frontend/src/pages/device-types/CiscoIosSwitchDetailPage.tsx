@@ -179,7 +179,7 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
   // Lazy load data based on active tab
   const { data: systemInfo, isLoading: systemLoading, error: systemError } = useSystemInfo(id, activeTab === "overview");
   const { data: clockInfo, isLoading: clockLoading, error: clockError } = useClockInfo(id, activeTab === "overview");
-  const { data: interfaces, isLoading: interfacesLoading, error: interfacesError, refetch: refetchInterfaces } = useInterfaces(id, true); // Always enable interfaces fetching
+  const { data: interfaces, isLoading: interfacesLoading, error: interfacesError, refetch: refetchInterfaces } = useInterfaces(id, activeTab === "interfaces" || activeTab === "vlans"); // Only enable interfaces fetching when on interfaces or VLANs tab
   const { data: vlanInfo, isLoading: vlanLoading, error: vlanError } = useVlanInfo(id, activeTab === "vlans");
   const assignPortToVlan = useAssignPortToVlan(id);
   
