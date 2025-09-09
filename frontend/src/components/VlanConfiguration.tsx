@@ -30,6 +30,12 @@ interface VlanConfigurationProps {
   deviceReachable: boolean;
 }
 
+/**
+ * VLAN Configuration Component
+ * 
+ * This component displays VLAN information and allows configuration of VLANs and interfaces.
+ * It receives interface data from its parent component to avoid duplicate API calls.
+ */
 const VlanConfiguration: React.FC<VlanConfigurationProps> = ({
   deviceId,
   vlanInfo,

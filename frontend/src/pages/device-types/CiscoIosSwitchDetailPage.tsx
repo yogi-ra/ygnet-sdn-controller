@@ -89,7 +89,8 @@ const useClockInfo = (deviceId: string | undefined, enabled: boolean, isDeviceRe
   });
 };
 
-// Separate hook for interfaces with lazy loading
+// Separate hook for interfaces with lazy loading - fetch once for both interfaces and VLANs tabs
+// to avoid duplicate API calls to the same endpoint
 const useInterfaces = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
@@ -203,10 +204,12 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
     refetchInterval: 5000, // Poll reachability every 5 seconds
   });
   
+  // Fetch interfaces once for both interfaces and VLANs tabs to avoid duplicate API calls
+  const { data: interfaces, isLoading: interfacesLoading, error: interfacesError, refetch: refetchInterfaces } = useInterfaces(id, activeTab === "interfaces" || activeTab === "vlans", isReachable);
+  
   // Lazy load data based on active tab
   const { data: systemInfo, isLoading: systemLoading, error: systemError } = useSystemInfo(id, activeTab === "overview", isReachable);
   const { data: clockInfo, isLoading: clockLoading, error: clockError } = useClockInfo(id, activeTab === "overview", isReachable);
-  const { data: interfaces, isLoading: interfacesLoading, error: interfacesError, refetch: refetchInterfaces } = useInterfaces(id, activeTab === "interfaces" || activeTab === "vlans", isReachable); // Only enable interfaces fetching when on interfaces or VLANs tab
   const { data: vlanInfo, isLoading: vlanLoading, error: vlanError } = useVlanInfo(id, activeTab === "vlans", isReachable);
   
   // Command execution state
