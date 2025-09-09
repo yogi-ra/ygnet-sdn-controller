@@ -603,6 +603,11 @@ async def check_device_reachability(
             device_update = schemas.DeviceUpdate(is_reachable=is_reachable)
             crud.update_device(db, device_id, device_update)
             print(f"Updated reachability for device {device_id} to {is_reachable}")
+
+            redis_client = get_redis_client()
+            cache_key = f"device_detail:{device_id}"
+            if redis_client.exists(cache_key):
+                redis_client.delete(cache_key)
     except Exception as e:
         print(f"Failed to update reachability status for device {device_id}: {str(e)}")
     
