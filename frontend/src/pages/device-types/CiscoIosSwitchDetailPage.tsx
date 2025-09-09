@@ -220,6 +220,9 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
   const [executingCommand, setExecutingCommand] = useState(false);
   const [commandError, setCommandError] = useState<string | null>(null);
   const [selectedPorts, setSelectedPorts] = useState<{ [key: string]: string }>({});
+  
+  // Interface toggle loading states
+  const [togglingInterfaces, setTogglingInterfaces] = useState<{ [key: string]: boolean }>({});
 
   // Handle tab changes
   const handleTabSelect = (tabKey: string | null) => {
@@ -231,6 +234,9 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
   // Handle interface toggle
   const handleToggleInterface = async (interfaceName: string, currentState: string) => {
     if (!id || !token) return;
+    
+    // Set loading state for this interface
+    setTogglingInterfaces(prev => ({ ...prev, [interfaceName]: true }));
     
     // Toggle based on administrative state, not operational state
     const newState = !isInterfaceAdminUp(currentState);
@@ -256,11 +262,27 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
         throw new Error(errorData.detail || "Failed to toggle interface");
       }
       
-      // Refresh interfaces data
-      refetchInterfaces();
+      // Clear device cache to ensure we get fresh data from the device
+      await fetch(`/api/devices/${id}/cache/clear`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      
+      // Invalidate all relevant queries to force refresh
+      queryClient.invalidateQueries({ queryKey: ["interfacesBrief", id] });
     } catch (err: any) {
       console.error("Error toggling interface:", err);
       alert(`Error toggling interface: ${err.message || "Unknown error"}`);
+    } finally {
+      // Reset loading state for this interface
+      setTogglingInterfaces(prev => {
+        const newState = { ...prev };
+        delete newState[interfaceName];
+        return newState;
+      });
     }
   };
 
@@ -489,9 +511,20 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
                                   iface.interface || iface.intf || "",
                                   iface.status || ""
                                 )}
-                                disabled={!device?.is_reachable}
+                                disabled={!device?.is_reachable || togglingInterfaces[iface.interface || iface.intf || ""]}
                               >
-                                {isInterfaceAdminUp(iface.status) ? "Shut Down" : "Enable"}
+                                {togglingInterfaces[iface.interface || iface.intf || ""] ? (
+                                  <>
+                                    <Spinner
+                                      as="span"
+                                      animation="border"
+                                      size="sm"
+                                      role="status"
+                                      aria-hidden="true"
+                                    />
+                                    <span className="visually-hidden">Loading...</span>
+                                  </>
+                                ) : isInterfaceAdminUp(iface.status) ? "Shut Down" : "Enable"}
                               </Button>
                             </td>
                           </tr>
