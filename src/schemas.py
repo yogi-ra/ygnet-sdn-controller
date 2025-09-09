@@ -65,6 +65,7 @@ class DeviceUpdate(BaseModel):
     username: Optional[str] = None
     password: Optional[str] = None
     secret: Optional[str] = None
+    is_reachable: Optional[bool] = None
 
 
 # --- User Schemas ---

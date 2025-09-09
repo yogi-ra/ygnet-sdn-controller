@@ -2,6 +2,7 @@ import asyncio
 from sqlalchemy.orm import Session
 from redis import Redis
 
+from .schemas import DeviceUpdate
 from .crud import crud
 from .database import SessionLocal
 from .cache import get_redis_client
@@ -96,19 +97,20 @@ async def _check_and_update_device_reachability(device_id: int, db: Session):
         is_reachable = False
     
     # Update the device's reachability status in the database
-    if db_device.is_reachable != is_reachable:  # Only update if status changed
-        db_device.is_reachable = is_reachable
-        db.add(db_device) # Add to session for update
-        db.commit()
-        db.refresh(db_device)
-        print(
-            f"Updated reachability for device {db_device.name} (ID: {db_device.id}) to {is_reachable}"
-        )
-        
-        # Invalidate all caches related to this device
-        pattern = f"device:{db_device.id}:*"
-        for key in redis_client.scan_iter(pattern):
-            redis_client.delete(key)
-        print(
-            f"Invalidated cache for device {db_device.name} (ID: {db_device.id}) due to reachability status change."
-        )
+    try:
+        db_device = crud.get_device(db, device_id=device_id)  # Re-fetch to ensure fresh object
+        if db_device and db_device.is_reachable != is_reachable:
+            # Create a DeviceUpdate object to update the reachability status
+            device_update = DeviceUpdate(is_reachable=is_reachable)
+            crud.update_device(db, device_id, device_update)
+            print(f"Updated reachability for device {device_id} to {is_reachable}")
+
+            # Invalidate all caches related to this device
+            pattern = f"device:{db_device.id}:*"
+            for key in redis_client.scan_iter(pattern):
+                redis_client.delete(key)
+            print(
+                f"Invalidated cache for device {db_device.name} (ID: {db_device.id}) due to reachability status change."
+            )
+    except Exception as e:
+        print(f"Failed to update reachability status for device {device_id}: {str(e)}")

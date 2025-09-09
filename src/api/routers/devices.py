@@ -3,8 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Any, Dict
 import json
 import asyncio
-from concurrent.futures import TimeoutError as FutureTimeoutError
-
+from concurrent.futures import TimeoutError as FutureTimeoutError, ThreadPoolExecutor
 from ...crud import crud
 from ... import schemas
 from ...database import get_db
@@ -148,7 +147,6 @@ def create_device(device: schemas.DeviceCreate, db: Session = Depends(get_db)):
     response_model=List[schemas.Device],
     dependencies=[Depends(require_read_privileges)],
 )
-@cache_response("devices_list", ttl=60)
 async def read_devices(request: Request, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     """
     Retrieve all network devices from the database, including their reachability status.
@@ -575,8 +573,7 @@ async def check_device_reachability(
         
         # Use asyncio.wait_for to add a timeout to the connection attempt
         # The underlying ConnectionManager will use the fast TCP check.
-        import asyncio
-        from concurrent.futures import ThreadPoolExecutor
+
         
         def connect_handler():
             with handler:
@@ -598,15 +595,16 @@ async def check_device_reachability(
     except Exception as e:
         print(f"An unexpected error occurred during reachability check for device {device_id}: {str(e)}")
         is_reachable = False
-    
-    # Update database directly
-    db_device = crud.get_device(db, device_id=device_id) # Re-fetch to ensure fresh object
-    if db_device and db_device.is_reachable != is_reachable:
-        db_device.is_reachable = is_reachable
-        db.add(db_device)
-        db.commit()
-        db.refresh(db_device)
-        print(f"Updated reachability for device {device_id} to {is_reachable}")
+
+    try:
+        db_device = crud.get_device(db, device_id=device_id)  # Re-fetch to ensure fresh object
+        if db_device and db_device.is_reachable != is_reachable:
+            # Create a DeviceUpdate object to update the reachability status
+            device_update = schemas.DeviceUpdate(is_reachable=is_reachable)
+            crud.update_device(db, device_id, device_update)
+            print(f"Updated reachability for device {device_id} to {is_reachable}")
+    except Exception as e:
+        print(f"Failed to update reachability status for device {device_id}: {str(e)}")
     
     return is_reachable
 
