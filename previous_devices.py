@@ -424,30 +424,6 @@ def change_vlan_name(
         raise HTTPException(status_code=500, detail=error_msg)
 
 
-@router.post("/{device_id}/vlans", dependencies=[Depends(require_write_privileges)])
-def create_vlan(
-    device_id: int,
-    vlan_create: schemas.VlanCreate,
-    db: Session = Depends(get_db),
-):
-    """
-    Create a new VLAN.
-    """
-    handler = get_handler_from_device_id(device_id, db)
-    try:
-        with handler:
-            result = handler.vlans.create_vlan(vlan_create.vlan_id, vlan_create.name)
-            return {"result": result}
-    except FutureTimeoutError:
-        error_msg = f"Timeout creating VLAN for device {device_id}"
-        print(error_msg)
-        raise HTTPException(status_code=504, detail=error_msg)
-    except Exception as e:
-        error_msg = f"Failed to create VLAN for device {device_id}: {str(e)}"
-        print(error_msg)
-        raise HTTPException(status_code=500, detail=error_msg)
-
-
 @router.post("/{device_id}/interfaces/vlan-config", dependencies=[Depends(require_write_privileges)])
 def configure_interface_vlan(
     device_id: int,

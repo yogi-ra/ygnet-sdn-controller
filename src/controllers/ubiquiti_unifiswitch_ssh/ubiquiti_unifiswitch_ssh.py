@@ -1,9 +1,13 @@
 from typing import List
-from .base import BaseController
-from ..device_info import DeviceConnectionInfo
+from ..base import BaseDevice
+from ...device_info import DeviceConnectionInfo
 
-class UbiquitiUnifiSwitchSSHController(BaseController):
+class UbiquitiUnifiSwitchSSHController(BaseDevice):
     """Controller for Ubiquiti UniFi Switch devices via SSH."""
+    
+    @property
+    def netmiko_device_type(self) -> str:
+        return "ubiquiti_edgeswitch"
     
     def __init__(self, device_info: DeviceConnectionInfo):
         super().__init__(device_info)

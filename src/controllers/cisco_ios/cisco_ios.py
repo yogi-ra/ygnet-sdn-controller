@@ -1,6 +1,6 @@
 from typing import List, Tuple
 
-from .base import BaseDevice
+from ..base import BaseDevice
 from .features.system.cisco_ios import CiscoIosSystem
 from .features.interfaces.cisco_ios import CiscoIosInterfaces
 from .features.vlans.cisco_ios import CiscoIosVlans

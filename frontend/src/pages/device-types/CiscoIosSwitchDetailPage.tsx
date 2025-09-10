@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   Container,
@@ -20,38 +20,13 @@ import { useAssignPortToVlan } from '../../api/vlans';
 import VlanConfiguration from '../../components/VlanConfiguration';
 
 // Separate hook for system information with lazy loading
-const useSystemInfo = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
-  const { token, logout } = useAuth();
-  const navigate = useNavigate();
-
-  return useQuery<any, Error>({
-    queryKey: ["systemInfo", deviceId],
-    queryFn: async () => {
-      if (!token || !deviceId) {
-        throw new Error("Missing token or device ID");
-      }
-
-      const response = await fetch(`/api/devices/${deviceId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      
-      if (response.status === 401) {
-        logout();
-        navigate("/login");
-        throw new Error("Session expired or unauthorized. Please log in again.");
-      }
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch device details: ${response.statusText}`);
-      }
-      
-      const deviceData = await response.json();
-      return deviceData.version || {};
-    },
-    enabled: enabled && isDeviceReachable, // Controlled by the enabled parameter and device reachability
-  });
+const useSystemInfo = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean, deviceData: any) => {
+  // Return the version information from the passed device data instead of making another request
+  return {
+    data: deviceData?.version || {},
+    isLoading: false,
+    error: null
+  };
 };
 
 // Separate hook for clock information
@@ -208,9 +183,24 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
   const { data: interfaces, isLoading: interfacesLoading, error: interfacesError, refetch: refetchInterfaces } = useInterfaces(id, activeTab === "interfaces" || activeTab === "vlans", isReachable);
   
   // Lazy load data based on active tab
-  const { data: systemInfo, isLoading: systemLoading, error: systemError } = useSystemInfo(id, activeTab === "overview", isReachable);
+  const { data: systemInfo, isLoading: systemLoading, error: systemError } = useSystemInfo(id, activeTab === "overview", isReachable, device);
   const { data: clockInfo, isLoading: clockLoading, error: clockError } = useClockInfo(id, activeTab === "overview", isReachable);
   const { data: vlanInfo, isLoading: vlanLoading, error: vlanError } = useVlanInfo(id, activeTab === "vlans", isReachable);
+  
+  // Track if we're switching to the overview tab to show loading state properly
+  const [isSwitchingToOverview, setIsSwitchingToOverview] = useState(false);
+  
+  // When switching to overview tab, set switching state
+  useEffect(() => {
+    if (activeTab === "overview") {
+      setIsSwitchingToOverview(true);
+      // Reset after a short delay to allow data to load
+      const timer = setTimeout(() => {
+        setIsSwitchingToOverview(false);
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [activeTab]);
   
   // Command execution state
   const [command, setCommand] = useState("");
@@ -433,7 +423,7 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
                     <Alert variant="danger">
                       Error: {systemError.message}. Please try again later.
                     </Alert>
-                  ) : systemLoading ? (
+                  ) : (systemLoading || clockLoading) || isSwitchingToOverview ? (
                     <div className="text-center">
                       <Spinner animation="border" role="status">
                         <span className="visually-hidden">Loading...</span>

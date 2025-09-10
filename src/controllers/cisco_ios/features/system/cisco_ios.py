@@ -1,4 +1,4 @@
-from .base import BaseSystem
+from ....features.system.base import BaseSystem
 from typing import List, Dict, Any
 
 

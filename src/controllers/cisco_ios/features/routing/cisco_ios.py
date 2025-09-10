@@ -1,4 +1,4 @@
-from .base import BaseRouting
+from ....features.routing.base import BaseRouting
 from typing import List, Dict, Any, Union
 
 class CiscoIosRouting(BaseRouting):

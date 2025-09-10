@@ -1,0 +1,3 @@
+from .ubiquiti_unifiswitch_ssh_handler import UbiquitiUnifiSwitchSSHDeviceHandler
+
+__all__ = ['UbiquitiUnifiSwitchSSHDeviceHandler']

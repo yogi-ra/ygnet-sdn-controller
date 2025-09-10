@@ -1,21 +1,25 @@
 from typing import List
-from .base import BaseController
-from ..device_info import DeviceConnectionInfo
+from ..base import BaseDevice
+from ...device_info import DeviceConnectionInfo
 
 # Import feature modules
-from ..controllers.features.system.ubiquiti_edgeswitch import UbiquitiEdgeSwitchSystem
-from ..controllers.features.interfaces.ubiquiti_edgeswitch import UbiquitiEdgeSwitchInterfaces
-from ..controllers.features.vlans.ubiquiti_edgeswitch import UbiquitiEdgeSwitchVlans
+from ..features.system.ubiquiti_edgeswitch import UbiquitiEdgeSwitchSystem
+from ..features.interfaces.ubiquiti_edgeswitch import UbiquitiEdgeSwitchInterfaces
+from ..features.vlans.ubiquiti_edgeswitch import UbiquitiEdgeSwitchVlans
 
-class UbiquitiEdgeController(BaseController):
+class UbiquitiEdgeController(BaseDevice):
     """Controller for Ubiquiti Edge devices."""
+    
+    @property
+    def netmiko_device_type(self) -> str:
+        return "ubiquiti_edge"
     
     def __init__(self, device_info: DeviceConnectionInfo):
         super().__init__(device_info)
         # Initialize feature modules specific to Ubiquiti EdgeSwitch
-        self.system = UbiquitiEdgeSwitchSystem(self.device_info)
-        self.interfaces = UbiquitiEdgeSwitchInterfaces(self.device_info)
-        self.vlans = UbiquitiEdgeSwitchVlans(self.device_info)
+        self.system = UbiquitiEdgeSwitchSystem(self)
+        self.interfaces = UbiquitiEdgeSwitchInterfaces(self)
+        self.vlans = UbiquitiEdgeSwitchVlans(self)
     
     @classmethod
     def get_supported_features(cls) -> List[str]:

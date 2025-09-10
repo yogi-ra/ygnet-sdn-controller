@@ -1,15 +1,19 @@
 from typing import List
-from .base import BaseController
-from src.device_info import DeviceConnectionInfo
-from src.controllers.features.system.aruba_procurve import ArubaProcurveSystem
+from ..base import BaseDevice
+from ...device_info import DeviceConnectionInfo
+from ..features.system.aruba_procurve import ArubaProcurveSystem
 
-class ArubaProcurveController(BaseController):
+class ArubaProcurveController(BaseDevice):
     """Controller for Aruba Procurve devices."""
+    
+    @property
+    def netmiko_device_type(self) -> str:
+        return "hp_procurve"
     
     def __init__(self, device_info: DeviceConnectionInfo):
         super().__init__(device_info)
         # Initialize feature modules specific to Aruba Procurve
-        self.system = ArubaProcurveSystem(self.device_info)
+        self.system = ArubaProcurveSystem(self)
     
     @classmethod
     def get_supported_features(cls) -> List[str]:

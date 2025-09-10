@@ -1,4 +1,4 @@
-from .base import BaseInterfaces
+from ....features.interfaces.base import BaseInterfaces
 from typing import List, Dict, Any, Union
 
 class CiscoIosInterfaces(BaseInterfaces):

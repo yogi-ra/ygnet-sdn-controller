@@ -113,15 +113,19 @@ const VlanConfiguration: React.FC<VlanConfigurationProps> = ({
   };
 
   const handleVlanNameChange = (vlanId: string, newName: string) => {
-    setVlanNameEdits(prev => ({
-      ...prev,
-      [vlanId]: newName
-    }));
+    setVlanNameEdits(prev => {
+      // If the new name is empty, we still want to update the state
+      // This allows users to clear the field completely
+      return {
+        ...prev,
+        [vlanId]: newName
+      };
+    });
   };
 
   const handleSaveVlanName = async (vlanId: string) => {
     const newName = vlanNameEdits[vlanId];
-    if (!deviceId || !newName) return;
+    if (!deviceId || newName === undefined) return; // Allow empty string but not undefined
 
     try {
       await changeVlanName.mutateAsync({ vlanId, newName });
@@ -131,7 +135,7 @@ const VlanConfiguration: React.FC<VlanConfigurationProps> = ({
         delete newState[vlanId];
         return newState;
       });
-      setToastMessage(`Successfully changed VLAN ${vlanId} name to ${newName}`);
+      setToastMessage(`Successfully changed VLAN ${vlanId} name to ${newName || "(empty)"}`);
       setToastVariant('success');
       setShowToast(true);
     } catch (err: any) {
