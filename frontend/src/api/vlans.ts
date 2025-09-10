@@ -67,3 +67,34 @@ export const useChangeVlanName = (deviceId: string | undefined) => {
     },
   });
 };
+
+export const useCreateVlan = (deviceId: string | undefined) => {
+  const { token } = useAuth();
+
+  return useMutation({
+    mutationFn: async ({ vlan_id, name }: { vlan_id: number; name?: string }) => {
+      if (!token || !deviceId) {
+        throw new Error('Missing token or device ID');
+      }
+
+      const response = await fetch(`/api/devices/${deviceId}/vlans`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ vlan_id, name }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to create VLAN');
+      }
+
+      return response.json();
+    },
+    onSuccess: () => {
+      console.log('VLAN creation successful, will re-fetch VLANs later.');
+    },
+  });
+};

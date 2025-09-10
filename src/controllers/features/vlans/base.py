@@ -31,6 +31,11 @@ class BaseVlans(BaseFeature, ABC):
         pass
 
     @abstractmethod
+    def create_vlan(self, vlan_id: int, name: str = None) -> bool:
+        """Create a new VLAN."""
+        pass
+
+    @abstractmethod
     def change_vlan_name(self, vlan_id: int, new_name: str) -> bool:
         """Change the name of a VLAN."""
         pass

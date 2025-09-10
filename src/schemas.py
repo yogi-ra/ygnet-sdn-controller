@@ -120,6 +120,11 @@ class VlanNameChange(BaseModel):
     new_name: str
 
 
+class VlanCreate(BaseModel):
+    vlan_id: int
+    name: Optional[str] = None
+
+
 class InterfaceVlanConfig(BaseModel):
     interface_name: str
     mode: str  # "access" or "trunk"
