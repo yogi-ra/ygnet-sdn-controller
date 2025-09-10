@@ -50,44 +50,6 @@ def get_device_types(request: Request):
         })
     return device_types
 
-@router.post("/{device_id}/clear-cache", dependencies=[Depends(require_write_privileges)])
-def clear_device_connection_cache(device_id: int, db: Session = Depends(get_db)):
-    """
-    Clears the connection cache for a specific device.
-    """
-    db_device = crud.get_device(db, device_id=device_id)
-    if db_device is None:
-        raise HTTPException(status_code=404, detail="Device not found")
-        
-    connection_manager = ConnectionManager()
-    device_info = DeviceConnectionInfo(
-        device_type=db_device.device_type,
-        ip_address=db_device.ip_address,
-        port=db_device.port,
-        username=db_device.username,
-        password=db_device.password,
-        secret=db_device.secret
-    )
-    device_key = device_info.get_key()
-    
-    # Remove the specific device connection if it exists
-    if device_key in connection_manager._connections:
-        try:
-            connection_manager._connections[device_key].disconnect()
-        except:
-            pass
-        finally:
-            del connection_manager._connections[device_key]
-            
-    # Clear Redis cache entries for this device
-    redis_client = get_redis_client()
-    pattern = f"device:{device_id}:*"
-    keys_to_delete = redis_client.keys(pattern)
-    if keys_to_delete:
-        redis_client.delete(*keys_to_delete)
-            
-    return {"message": f"Connection cache cleared for device {device_id}"}
-
 @router.post("/{device_id}/cache/clear", dependencies=[Depends(require_write_privileges)])
 def clear_device_cache(device_id: int, db: Session = Depends(get_db)):
     """
