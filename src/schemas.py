@@ -116,6 +116,10 @@ class PortAssignment(BaseModel):
     port: str
 
 
+class VlanNameChange(BaseModel):
+    new_name: str
+
+
 class InterfaceVlanConfig(BaseModel):
     interface_name: str
     mode: str  # "access" or "trunk"

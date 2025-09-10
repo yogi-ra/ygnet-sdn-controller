@@ -29,3 +29,8 @@ class BaseVlans(BaseFeature, ABC):
     @abstractmethod
     def assign_port_to_vlan(self, vlan_id: int, port: str) -> bool:
         pass
+
+    @abstractmethod
+    def change_vlan_name(self, vlan_id: int, new_name: str) -> bool:
+        """Change the name of a VLAN."""
+        pass

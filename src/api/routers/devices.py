@@ -399,6 +399,31 @@ def assign_port_to_vlan(
         raise HTTPException(status_code=500, detail=error_msg)
 
 
+@router.post("/{device_id}/vlans/{vlan_id}/change-name", dependencies=[Depends(require_write_privileges)])
+def change_vlan_name(
+    device_id: int,
+    vlan_id: int,
+    vlan_name_change: schemas.VlanNameChange,
+    db: Session = Depends(get_db),
+):
+    """
+    Change the name of a VLAN.
+    """
+    handler = get_handler_from_device_id(device_id, db)
+    try:
+        with handler:
+            result = handler.vlans.change_vlan_name(vlan_id, vlan_name_change.new_name)
+            return {"result": result}
+    except FutureTimeoutError:
+        error_msg = f"Timeout changing VLAN name for device {device_id}"
+        print(error_msg)
+        raise HTTPException(status_code=504, detail=error_msg)
+    except Exception as e:
+        error_msg = f"Failed to change VLAN name for device {device_id}: {str(e)}"
+        print(error_msg)
+        raise HTTPException(status_code=500, detail=error_msg)
+
+
 @router.post("/{device_id}/interfaces/vlan-config", dependencies=[Depends(require_write_privileges)])
 def configure_interface_vlan(
     device_id: int,

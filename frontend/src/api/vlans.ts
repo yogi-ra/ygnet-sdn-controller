@@ -36,3 +36,34 @@ export const useAssignPortToVlan = (deviceId: string | undefined) => {
     },
   });
 };
+
+export const useChangeVlanName = (deviceId: string | undefined) => {
+  const { token } = useAuth();
+
+  return useMutation({
+    mutationFn: async ({ vlanId, newName }: { vlanId: string; newName: string }) => {
+      if (!token || !deviceId) {
+        throw new Error('Missing token or device ID');
+      }
+
+      const response = await fetch(`/api/devices/${deviceId}/vlans/${vlanId}/change-name`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ new_name: newName }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to change VLAN name');
+      }
+
+      return response.json();
+    },
+    onSuccess: () => {
+      console.log('VLAN name change successful, will re-fetch VLANs later.');
+    },
+  });
+};

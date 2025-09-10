@@ -111,3 +111,18 @@ class CiscoIosVlans(BaseVlans):
             self.device_handler.clear_cache(["device_vlans_brief", "device_interfaces_brief"])
         except Exception as e:
             self.device_handler.logger.error(f"Error clearing interface/VLAN cache: {e}")
+
+    def change_vlan_name(self, vlan_id: int, new_name: str) -> bool:
+        """Change the name of a VLAN."""
+        try:
+            commands = [
+                f"vlan {vlan_id}",
+                f"name {new_name}",
+            ]
+            self.device_handler.send_config_set(commands)
+            # Clear VLAN cache asynchronously
+            threading.Thread(target=self._clear_vlan_cache_async).start()
+            return True
+        except Exception as e:
+            self.device_handler.logger.error(f"Error changing VLAN {vlan_id} name to {new_name}: {e}")
+            return False

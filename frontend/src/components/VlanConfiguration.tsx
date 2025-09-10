@@ -10,7 +10,7 @@ import {
   Col,
   InputGroup,
 } from 'react-bootstrap';
-import { useAssignPortToVlan } from '../api/vlans';
+import { useAssignPortToVlan, useChangeVlanName } from '../api/vlans';
 
 interface InterfaceConfig {
   mode: 'access' | 'trunk';
@@ -48,7 +48,9 @@ const VlanConfiguration: React.FC<VlanConfigurationProps> = ({
 }) => {
   const [selectedPorts, setSelectedPorts] = useState<{ [key: string]: string }>({});
   const [interfaceConfigs, setInterfaceConfigs] = useState<{ [key: string]: InterfaceConfig }>({});
+  const [vlanNameEdits, setVlanNameEdits] = useState<{ [key: string]: string }>({});
   const assignPortToVlan = useAssignPortToVlan(deviceId);
+  const changeVlanName = useChangeVlanName(deviceId);
 
   useEffect(() => {
     if (interfaces && interfaces.length > 0) {
@@ -97,6 +99,31 @@ const VlanConfiguration: React.FC<VlanConfigurationProps> = ({
     }));
   };
 
+  const handleVlanNameChange = (vlanId: string, newName: string) => {
+    setVlanNameEdits(prev => ({
+      ...prev,
+      [vlanId]: newName
+    }));
+  };
+
+  const handleSaveVlanName = async (vlanId: string) => {
+    const newName = vlanNameEdits[vlanId];
+    if (!deviceId || !newName) return;
+
+    try {
+      await changeVlanName.mutateAsync({ vlanId, newName });
+      // Clear the edit field after successful save
+      setVlanNameEdits(prev => {
+        const newState = { ...prev };
+        delete newState[vlanId];
+        return newState;
+      });
+    } catch (err: any) {
+      console.error("Error changing VLAN name:", err);
+      alert(`Error changing VLAN name: ${err.message || "Unknown error"}`);
+    }
+  };
+
   const isLoading = vlanLoading || interfacesLoading;
   const error = vlanError || interfacesError;
 
@@ -129,55 +156,95 @@ const VlanConfiguration: React.FC<VlanConfigurationProps> = ({
                   </tr>
                 </thead>
                 <tbody>
-                  {vlanInfo.map((vlan: any, index: number) => (
-                    <tr key={index}>
-                      <td>{vlan.vlan_id || vlan.id || "N/A"}</td>
-                      <td>{vlan.vlan_name || "N/A"}</td>
-                      <td>{vlan.status || "N/A"}</td>
-                      <td>
-                        {vlan.ports
-                          ? Array.isArray(vlan.ports)
-                            ? vlan.ports.join(', ')
-                            : typeof vlan.ports === 'string'
-                              ? vlan.ports.split(' ').join(', ')
-                              : vlan.ports
-                          : vlan.interfaces
-                            ? Array.isArray(vlan.interfaces)
-                              ? vlan.interfaces.join(', ')
-                              : typeof vlan.interfaces === 'string'
-                                ? vlan.interfaces.split(' ').join(', ')
-                                : vlan.interfaces
-                            : "N/A"}
-                      </td>
-                      <td>
-                        <Form.Group controlId={`vlan-${vlan.vlan_id}-port`}>
-                          <InputGroup>
-                            <Form.Select
-                              aria-label="Select port"
-                              size="sm"
-                              value={selectedPorts[vlan.vlan_id] || ''}
-                              onChange={(e) => handlePortSelection(vlan.vlan_id, e.target.value)}
-                            >
-                              <option value="">Select Port</option>
-                              {interfaces?.map((iface: any, i: number) => (
-                                <option key={i} value={iface.interface || iface.intf}>
-                                  {iface.interface || iface.intf}
-                                </option>
-                              ))}
-                            </Form.Select>
-                            <Button
-                              size="sm"
-                              variant="primary"
-                              onClick={() => handleAssignPort(vlan.vlan_id)}
-                              disabled={!selectedPorts[vlan.vlan_id] || !deviceReachable}
-                            >
-                              +
-                            </Button>
-                          </InputGroup>
-                        </Form.Group>
-                      </td>
-                    </tr>
-                  ))}
+                  {vlanInfo.map((vlan: any, index: number) => {
+                    const vlanId = vlan.vlan_id || vlan.id || "N/A";
+                    const currentName = vlan.vlan_name || "N/A";
+                    const isEditing = vlanNameEdits.hasOwnProperty(vlanId);
+                    const editedName = vlanNameEdits[vlanId] || currentName;
+
+                    return (
+                      <tr key={index}>
+                        <td>{vlanId}</td>
+                        <td>
+                          {isEditing ? (
+                            <InputGroup>
+                              <Form.Control
+                                type="text"
+                                size="sm"
+                                value={editedName}
+                                onChange={(e) => handleVlanNameChange(vlanId, e.target.value)}
+                                disabled={!deviceReachable}
+                              />
+                              <Button
+                                size="sm"
+                                variant="success"
+                                onClick={() => handleSaveVlanName(vlanId)}
+                                disabled={!deviceReachable}
+                              >
+                                Save
+                              </Button>
+                            </InputGroup>
+                          ) : (
+                            <div>
+                              {currentName}
+                              <Button
+                                size="sm"
+                                variant="outline-primary"
+                                className="ms-2"
+                                onClick={() => handleVlanNameChange(vlanId, currentName)}
+                                disabled={!deviceReachable}
+                              >
+                                Edit
+                              </Button>
+                            </div>
+                          )}
+                        </td>
+                        <td>{vlan.status || "N/A"}</td>
+                        <td>
+                          {vlan.ports
+                            ? Array.isArray(vlan.ports)
+                              ? vlan.ports.join(', ')
+                              : typeof vlan.ports === 'string'
+                                ? vlan.ports.split(' ').join(', ')
+                                : vlan.ports
+                            : vlan.interfaces
+                              ? Array.isArray(vlan.interfaces)
+                                ? vlan.interfaces.join(', ')
+                                : typeof vlan.interfaces === 'string'
+                                  ? vlan.interfaces.split(' ').join(', ')
+                                  : vlan.interfaces
+                              : "N/A"}
+                        </td>
+                        <td>
+                          <Form.Group controlId={`vlan-${vlanId}-port`}>
+                            <InputGroup>
+                              <Form.Select
+                                aria-label="Select port"
+                                size="sm"
+                                value={selectedPorts[vlanId] || ''}
+                                onChange={(e) => handlePortSelection(vlanId, e.target.value)}
+                              >
+                                <option value="">Select Port</option>
+                                {interfaces?.map((iface: any, i: number) => (
+                                  <option key={i} value={iface.interface || iface.intf}>
+                                    {iface.interface || iface.intf}
+                                  </option>
+                                ))}
+                              </Form.Select>
+                              <Button
+                                size="sm"
+                                variant="primary"
+                                onClick={() => handleAssignPort(vlanId)}
+                                disabled={!selectedPorts[vlanId] || !deviceReachable}
+                              >
+                                +
+                              </Button>
+                            </InputGroup>
+                          </Form.Group>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </Table>
             ) : (
