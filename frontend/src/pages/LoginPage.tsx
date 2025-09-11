@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Form, Button, Container, Row, Col, Alert } from 'react-bootstrap';
+import { Form, Button, Container, Row, Col, Alert, Spinner } from 'react-bootstrap';
 import { useAuth } from '../hooks/useAuth';
 import { isTokenExpired } from '../utils/authUtils';
 
@@ -8,6 +8,7 @@ const LoginPage = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const { login, token, isLoading } = useAuth();
 
   const navigate = useNavigate();
@@ -33,6 +34,7 @@ const LoginPage = () => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setIsSubmitting(true);
 
     try {
       const response = await fetch('/api/auth/token', {
@@ -60,6 +62,8 @@ const LoginPage = () => {
       }
     } catch (err) {
       setError('Invalid username or password');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -77,6 +81,7 @@ const LoginPage = () => {
                 placeholder="Enter username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
+                disabled={isSubmitting}
               />
             </Form.Group>
 
@@ -87,10 +92,29 @@ const LoginPage = () => {
                 placeholder="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                disabled={isSubmitting}
               />
             </Form.Group>
-            <Button variant="primary" type="submit" className="w-100">
-              Login
+            <Button 
+              variant="primary" 
+              type="submit" 
+              className="w-100" 
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <>
+                  <Spinner
+                    as="span"
+                    animation="border"
+                    size="sm"
+                    role="status"
+                    aria-hidden="true"
+                  />{' '}
+                  Logging in...
+                </>
+              ) : (
+                'Login'
+              )}
             </Button>
           </Form>
         </Col>
