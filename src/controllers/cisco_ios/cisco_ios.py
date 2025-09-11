@@ -5,6 +5,9 @@ from .features.system.cisco_ios import CiscoIosSystem
 from .features.interfaces.cisco_ios import CiscoIosInterfaces
 from .features.vlans.cisco_ios import CiscoIosVlans
 from .features.routing.cisco_ios import CiscoIosRouting
+from ..features.arp.cisco_ios import CiscoIosArp
+from ..features.cdp.cisco_ios import CiscoIosCdp
+from ..features.lldp.cisco_ios import CiscoIosLldp
 
 
 class CiscoIosDevice(BaseDevice):
@@ -21,6 +24,9 @@ class CiscoIosDevice(BaseDevice):
         # Initialize feature modules specific to Cisco IOS
         self.system = CiscoIosSystem(self)
         self.interfaces = CiscoIosInterfaces(self)
+        self.arp = CiscoIosArp(self)
+        self.cdp = CiscoIosCdp(self)
+        self.lldp = CiscoIosLldp(self)
         
     @classmethod
     def get_supported_features(cls) -> Tuple[List[str], List[str]]:
@@ -35,7 +41,10 @@ class CiscoIosDevice(BaseDevice):
             "system_uptime",
             "system_clock",
             "interfaces_brief",
-            "interfaces_status"
+            "interfaces_status",
+            "arp_table",
+            "cdp_neighbors",
+            "lldp_neighbors"
         ]
         
         action_features = [
@@ -56,7 +65,7 @@ class CiscoIosRouter(CiscoIosDevice):
     @classmethod
     def get_supported_features(cls) -> Tuple[List[str], List[str]]:
         """
-        Returns lists of supported view and action features for Cisco IOS Switch devices.
+        Returns lists of supported view and action features for Cisco IOS Router devices.
         This is a simplified version that returns feature names only.
         """
         # Define basic feature names
@@ -67,7 +76,10 @@ class CiscoIosRouter(CiscoIosDevice):
             "system_clock",
             "interfaces_brief",
             "interfaces_status",
-            "routing_ip_route"
+            "routing_ip_route",
+            "arp_table",
+            "cdp_neighbors",
+            "lldp_neighbors"
         ]
         
         action_features = [
@@ -85,7 +97,7 @@ class CiscoIosSwitch(CiscoIosDevice):
         super().__init__(device_info)
         # Initialize VLAN feature for switches
         self.vlans = CiscoIosVlans(self)
-        
+
     @classmethod
     def get_supported_features(cls) -> Tuple[List[str], List[str]]:
         """
@@ -100,7 +112,10 @@ class CiscoIosSwitch(CiscoIosDevice):
             "system_clock",
             "interfaces_brief",
             "interfaces_status",
-            "vlans_brief"
+            "vlans_brief",
+            "arp_table",
+            "cdp_neighbors",
+            "lldp_neighbors"
         ]
         
         action_features = [

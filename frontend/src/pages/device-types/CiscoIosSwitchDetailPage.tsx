@@ -139,6 +139,114 @@ const useVlanInfo = (deviceId: string | undefined, enabled: boolean, isDeviceRea
   });
 };
 
+// Separate hook for ARP table
+const useArpTable = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
+  const { token, logout } = useAuth();
+  const navigate = useNavigate();
+
+  return useQuery<any[], Error>({
+    queryKey: ["arpTable", deviceId],
+    queryFn: async () => {
+      if (!token || !deviceId) {
+        throw new Error("Missing token or device ID");
+      }
+      
+      const response = await fetch(`/api/devices/${deviceId}/arp`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      
+      if (response.status === 401) {
+        logout();
+        navigate("/login");
+        throw new Error("Session expired or unauthorized. Please log in again.");
+      }
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch ARP table: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      // Ensure we return an array
+      return Array.isArray(data) ? data : [];
+    },
+    enabled: enabled && isDeviceReachable, // Controlled by the enabled parameter and device reachability
+  });
+};
+
+// Separate hook for CDP neighbors
+const useCdpNeighbors = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
+  const { token, logout } = useAuth();
+  const navigate = useNavigate();
+
+  return useQuery<any[], Error>({
+    queryKey: ["cdpNeighbors", deviceId],
+    queryFn: async () => {
+      if (!token || !deviceId) {
+        throw new Error("Missing token or device ID");
+      }
+      
+      const response = await fetch(`/api/devices/${deviceId}/cdp`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      
+      if (response.status === 401) {
+        logout();
+        navigate("/login");
+        throw new Error("Session expired or unauthorized. Please log in again.");
+      }
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch CDP neighbors: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      // Ensure we return an array
+      return Array.isArray(data) ? data : [];
+    },
+    enabled: enabled && isDeviceReachable, // Controlled by the enabled parameter and device reachability
+  });
+};
+
+// Separate hook for LLDP neighbors
+const useLldpNeighbors = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
+  const { token, logout } = useAuth();
+  const navigate = useNavigate();
+
+  return useQuery<any[], Error>({
+    queryKey: ["lldpNeighbors", deviceId],
+    queryFn: async () => {
+      if (!token || !deviceId) {
+        throw new Error("Missing token or device ID");
+      }
+      
+      const response = await fetch(`/api/devices/${deviceId}/lldp`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      
+      if (response.status === 401) {
+        logout();
+        navigate("/login");
+        throw new Error("Session expired or unauthorized. Please log in again.");
+      }
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch LLDP neighbors: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      // Ensure we return an array
+      return Array.isArray(data) ? data : [];
+    },
+    enabled: enabled && isDeviceReachable, // Controlled by the enabled parameter and device reachability
+  });
+};
+
 // Helper function to determine if interface is administratively up
 const isInterfaceAdminUp = (status: string) => {
   // Interface is administratively down only if explicitly marked as such
@@ -187,6 +295,9 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
   const { data: systemInfo, isLoading: systemLoading, error: systemError } = useSystemInfo(id, activeTab === "overview", isReachable, device);
   const { data: clockInfo, isLoading: clockLoading, error: clockError } = useClockInfo(id, activeTab === "overview", isReachable);
   const { data: vlanInfo, isLoading: vlanLoading, error: vlanError } = useVlanInfo(id, activeTab === "vlans", isReachable);
+  const { data: arpTable, isLoading: arpLoading, error: arpError } = useArpTable(id, activeTab === "discovery", isReachable);
+  const { data: cdpNeighbors, isLoading: cdpLoading, error: cdpError } = useCdpNeighbors(id, activeTab === "discovery", isReachable);
+  const { data: lldpNeighbors, isLoading: lldpLoading, error: lldpError } = useLldpNeighbors(id, activeTab === "discovery", isReachable);
   
   // Track if we're switching to the overview tab to show loading state properly
   const [isSwitchingToOverview, setIsSwitchingToOverview] = useState(false);
@@ -383,6 +494,9 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
       queryClient.invalidateQueries({ queryKey: ["interfacesBrief", id] });
       queryClient.invalidateQueries({ queryKey: ["vlanInfo", id] });
       queryClient.invalidateQueries({ queryKey: ["deviceReachability", id] });
+      queryClient.invalidateQueries({ queryKey: ["arpTable", id] });
+      queryClient.invalidateQueries({ queryKey: ["cdpNeighbors", id] });
+      queryClient.invalidateQueries({ queryKey: ["lldpNeighbors", id] });
     } catch (err: any) {
       console.error("Error clearing cache:", err);
     }
@@ -557,6 +671,146 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
                 interfacesError={interfacesError}
                 deviceReachable={isReachable}
               />
+            </Col>
+          </Row>
+        </Tab>
+        
+        <Tab eventKey="discovery" title="Network Discovery">
+          <Row className="mb-4">
+            <Col md={12}>
+              <Card>
+                <Card.Body>
+                  <Card.Title as="h2">ARP Table</Card.Title>
+                  {arpError ? (
+                    <Alert variant="danger">
+                      Error: {arpError.message}. Please try again later.
+                    </Alert>
+                  ) : arpLoading ? (
+                    <div className="text-center">
+                      <Spinner animation="border" role="status">
+                        <span className="visually-hidden">Loading...</span>
+                      </Spinner>
+                    </div>
+                  ) : arpTable && arpTable.length > 0 ? (
+                    <Table striped bordered hover responsive>
+                      <thead>
+                        <tr>
+                          <th>Address</th>
+                          <th>MAC Address</th>
+                          <th>Interface</th>
+                          <th>Age</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {arpTable.map((entry: any, index: number) => (
+                          <tr key={index}>
+                            <td>{entry.address || "N/A"}</td>
+                            <td>{entry.mac || entry.hardware || "N/A"}</td>
+                            <td>{entry.interface || entry.port || "N/A"}</td>
+                            <td>{entry.age || "N/A"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </Table>
+                  ) : (
+                    <Alert variant="info">No ARP entries found.</Alert>
+                  )}
+                </Card.Body>
+              </Card>
+            </Col>
+          </Row>
+          
+          <Row className="mb-4">
+            <Col md={6}>
+              <Card>
+                <Card.Body>
+                  <Card.Title as="h2">CDP Neighbors</Card.Title>
+                  {cdpError ? (
+                    <Alert variant="danger">
+                      Error: {cdpError.message}. Please try again later.
+                    </Alert>
+                  ) : cdpLoading ? (
+                    <div className="text-center">
+                      <Spinner animation="border" role="status">
+                        <span className="visually-hidden">Loading...</span>
+                      </Spinner>
+                    </div>
+                  ) : cdpNeighbors && cdpNeighbors.length > 0 ? (
+                    <Table striped bordered hover responsive>
+                      <thead>
+                        <tr>
+                          <th>Device ID</th>
+                          <th>Local Interface</th>
+                          <th>Hold Time</th>
+                          <th>Capability</th>
+                          <th>Platform</th>
+                          <th>Port ID</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {cdpNeighbors.map((neighbor: any, index: number) => (
+                          <tr key={index}>
+                            <td>{neighbor.device_id || "N/A"}</td>
+                            <td>{neighbor.local_interface || "N/A"}</td>
+                            <td>{neighbor.hold_time || "N/A"}</td>
+                            <td>{neighbor.capability || "N/A"}</td>
+                            <td>{neighbor.platform || "N/A"}</td>
+                            <td>{neighbor.port_id || "N/A"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </Table>
+                  ) : (
+                    <Alert variant="info">No CDP neighbors found.</Alert>
+                  )}
+                </Card.Body>
+              </Card>
+            </Col>
+            
+            <Col md={6}>
+              <Card>
+                <Card.Body>
+                  <Card.Title as="h2">LLDP Neighbors</Card.Title>
+                  {lldpError ? (
+                    <Alert variant="danger">
+                      Error: {lldpError.message}. Please try again later.
+                    </Alert>
+                  ) : lldpLoading ? (
+                    <div className="text-center">
+                      <Spinner animation="border" role="status">
+                        <span className="visually-hidden">Loading...</span>
+                      </Spinner>
+                    </div>
+                  ) : lldpNeighbors && lldpNeighbors.length > 0 ? (
+                    <Table striped bordered hover responsive>
+                      <thead>
+                        <tr>
+                          <th>Device ID</th>
+                          <th>Local Interface</th>
+                          <th>Hold Time</th>
+                          <th>Capability</th>
+                          <th>Platform</th>
+                          <th>Port ID</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {lldpNeighbors.map((neighbor: any, index: number) => (
+                          <tr key={index}>
+                            <td>{neighbor.device_id || "N/A"}</td>
+                            <td>{neighbor.local_interface || "N/A"}</td>
+                            <td>{neighbor.hold_time || "N/A"}</td>
+                            <td>{neighbor.capability || "N/A"}</td>
+                            <td>{neighbor.platform || "N/A"}</td>
+                            <td>{neighbor.port_id || "N/A"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </Table>
+                  ) : (
+                    <Alert variant="info">No LLDP neighbors found.</Alert>
+                  )}
+                </Card.Body>
+              </Card>
             </Col>
           </Row>
         </Tab>
