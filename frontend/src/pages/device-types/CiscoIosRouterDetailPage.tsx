@@ -13,6 +13,7 @@ import {
   Table,
   Tabs,
   Tab,
+  Toast,
 } from "react-bootstrap";
 import { useAuth } from "../../hooks/useAuth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -203,6 +204,11 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
   
   // Interface toggle loading states
   const [togglingInterfaces, setTogglingInterfaces] = useState<{ [key: string]: boolean }>({});
+  
+  // Toast state
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastVariant, setToastVariant] = useState<'success' | 'danger'>('success');
 
   // Handle tab changes
   const handleTabSelect = (tabKey: string | null) => {
@@ -253,9 +259,17 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
       
       // Invalidate all relevant queries to force refresh
       queryClient.invalidateQueries({ queryKey: ["interfacesBrief", id] });
+      
+      // Show success toast
+      setToastMessage(`Successfully ${newState ? 'enabled' : 'disabled'} interface ${interfaceName}`);
+      setToastVariant('success');
+      setShowToast(true);
     } catch (err: any) {
       console.error("Error toggling interface:", err);
-      alert(`Error toggling interface: ${err.message || "Unknown error"}`);
+      // Show error toast
+      setToastMessage(`Error toggling interface: ${err.message || "Unknown error"}`);
+      setToastVariant('danger');
+      setShowToast(true);
     } finally {
       // Reset loading state for this interface
       setTogglingInterfaces(prev => {
@@ -621,6 +635,31 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
           </Row>
         </Tab>
       </Tabs>
+      
+      {/* Toast for user feedback */}
+      <Toast 
+        show={showToast} 
+        onClose={() => setShowToast(false)} 
+        delay={3000} 
+        autohide
+        style={{
+          position: 'fixed',
+          top: 20,
+          right: 20,
+          zIndex: 9999,
+        }}
+      >
+        <Toast.Header>
+          <strong className="me-auto">
+            {toastVariant === 'success' ? 'Success' : 'Error'}
+          </strong>
+        </Toast.Header>
+        <Toast.Body 
+          className={toastVariant === 'success' ? 'text-success' : 'text-danger'}
+        >
+          {toastMessage}
+        </Toast.Body>
+      </Toast>
     </Container>
   );
 };

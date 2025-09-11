@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 from sqlalchemy.orm import Session
 
 from .crud import crud
-from . import schemas
+from .schemas import DeviceUpdate
 from .exceptions import (
     DeviceTimeoutError,
     DeviceUnreachableError,
@@ -63,7 +63,7 @@ async def check_device_reachability(device_id: int, db: Session):
         db_device = crud.get_device(db, device_id=device_id)  # Re-fetch to ensure fresh object
         if db_device and db_device.is_reachable != is_reachable:
             # Create a DeviceUpdate object to update the reachability status
-            device_update = schemas.DeviceUpdate(is_reachable=is_reachable)
+            device_update = DeviceUpdate(is_reachable=is_reachable)
             crud.update_device(db, device_id, device_update)
             print(f"Updated reachability for device {device_id} to {is_reachable}")
 

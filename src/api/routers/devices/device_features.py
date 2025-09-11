@@ -10,6 +10,7 @@ from ....device_info import DeviceConnectionInfo
 from ....config import settings
 from ....connection_manager import ConnectionManager
 from ....cache import get_redis_client
+from ....schemas import DeviceUpdate, InterfaceState
 from ....exceptions import DeviceUnreachableError, DeviceConnectionError, DeviceAuthenticationError, DeviceTimeoutError
 from ...decorators import cache_response
 from ...dependencies import (
@@ -117,29 +118,26 @@ def get_interfaces_status(request: Request, device_id: int, db: Session = Depend
         print(error_msg)
         raise HTTPException(status_code=500, detail=error_msg)
 
-@router.post("/{device_id}/interfaces/{interface_name}/state", dependencies=[Depends(require_write_privileges)])
-def toggle_interface_state(device_id: int, interface_name: str, state: Dict[str, bool], db: Session = Depends(get_db)):
+@router.post("/{device_id}/interfaces/state", dependencies=[Depends(require_write_privileges)])
+def set_interface_state(
+    device_id: int,
+    interface_state: InterfaceState,
+    db: Session = Depends(get_db)
+):
     """
-    Toggle interface state (up/down).
+    Set interface state (up/down).
     """
     handler = get_handler_from_device_id(device_id, db)
     try:
         with handler:
-            # Extract the 'up' value from the request body
-            up = state.get("up")
-            if up is None:
-                raise HTTPException(status_code=400, detail="Missing 'up' field in request body")
-            
-            result = handler.interfaces.toggle_interface(interface_name, up)
-            
-            # Clear cache for this device's interface status
-            redis_client = get_redis_client()
-            redis_client.delete(f"device_interfaces_brief:{device_id}")
-            redis_client.delete(f"device_interfaces_status:{device_id}")
-            
-            return result
+            result = handler.interfaces.set_interface_state(interface_state.interface_name, interface_state.state)
+            return {"result": result}
+    except FutureTimeoutError:
+        error_msg = f"Timeout setting interface state for device {device_id}, interface {interface_state.interface_name}"
+        print(error_msg)
+        raise HTTPException(status_code=504, detail=error_msg)
     except Exception as e:
-        error_msg = f"Failed to toggle interface state for device {device_id}: {str(e)}"
+        error_msg = f"Failed to set interface state for device {device_id}, interface {interface_state.interface_name}: {str(e)}"
         print(error_msg)
         raise HTTPException(status_code=500, detail=error_msg)
 
@@ -256,7 +254,7 @@ async def check_device_reachability(
         db_device = crud.get_device(db, device_id=device_id)  # Re-fetch to ensure fresh object
         if db_device and db_device.is_reachable != is_reachable:
             # Create a DeviceUpdate object to update the reachability status
-            device_update = schemas.DeviceUpdate(is_reachable=is_reachable)
+            device_update = DeviceUpdate(is_reachable=is_reachable)
             crud.update_device(db, device_id, device_update)
             print(f"Updated reachability for device {device_id} to {is_reachable}")
 
