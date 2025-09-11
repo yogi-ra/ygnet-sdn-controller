@@ -15,9 +15,9 @@ Base.metadata.create_all(bind=engine)
 scheduler = AsyncIOScheduler()
 
 
-def scheduled_task(trigger):
+def scheduled_task(trigger, **job_kwargs):
     def decorator(func):
-        scheduler.add_job(func, trigger)
+        scheduler.add_job(func, trigger, **job_kwargs)
         return func
     return decorator
 
@@ -27,7 +27,7 @@ async def schedule_check_device_for_changes():
     await check_device_for_changes()
 
 
-@scheduled_task(IntervalTrigger(seconds=5))
+@scheduled_task(IntervalTrigger(seconds=5), coalesce=True, max_instances=1)
 async def schedule_update_device_reachability_status():
     await update_device_reachability_status()
 
