@@ -140,3 +140,15 @@ class CiscoIosVlans(BaseVlans):
         except Exception as e:
             self.device_handler.logger.error(f"Error changing VLAN {vlan_id} name to {new_name}: {e}")
             return False
+
+    def delete_vlan(self, vlan_id: int) -> bool:
+        """Delete a VLAN."""
+        try:
+            commands = [f"no vlan {vlan_id}"]
+            self.device_handler.send_config_set(commands)
+            # Clear VLAN cache asynchronously
+            threading.Thread(target=self._clear_vlan_cache_async).start()
+            return True
+        except Exception as e:
+            self.device_handler.logger.error(f"Error deleting VLAN {vlan_id}: {e}")
+            return False

@@ -192,3 +192,37 @@ def configure_interface_vlan(
         print(error_msg)
         raise HTTPException(status_code=500, detail=error_msg)
 
+
+@router.delete(
+    "/{device_id}/vlans/{vlan_id}",
+    dependencies=[Depends(require_write_privileges)],
+)
+def delete_vlan(
+    device_id: int,
+    vlan_id: int,
+    db: Session = Depends(get_db),
+):
+    """
+    Delete a VLAN from the device.
+    """
+    handler = get_handler_from_device_id(device_id, db)
+    try:
+        with handler:
+            # Check if the device supports VLANs
+            if not hasattr(handler, "vlans"):
+                raise HTTPException(
+                    status_code=400, detail="Device does not support VLANs"
+                )
+
+            result = handler.vlans.delete_vlan(vlan_id)
+
+            # Clear cache for this device's VLAN information
+            redis_client = get_redis_client()
+            redis_client.delete(f"device_vlans_brief:{device_id}")
+
+            return {"result": result}
+    except Exception as e:
+        error_msg = f"Failed to delete VLAN for device {device_id}: {str(e)}"
+        print(error_msg)
+        raise HTTPException(status_code=500, detail=error_msg)
+

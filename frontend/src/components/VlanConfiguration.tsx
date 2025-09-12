@@ -10,8 +10,9 @@ import {
   Col,
   InputGroup,
   Toast,
+  Modal,
 } from 'react-bootstrap';
-import { useAssignPortToVlan, useChangeVlanName, useCreateVlan } from '../api/vlans';
+import { useAssignPortToVlan, useChangeVlanName, useCreateVlan, useDeleteVlan } from '../api/vlans';
 
 interface InterfaceConfig {
   mode: 'access' | 'trunk';
@@ -33,7 +34,7 @@ interface VlanConfigurationProps {
 
 /**
  * VLAN Configuration Component
- * 
+ *
  * This component displays VLAN information and allows configuration of VLANs and interfaces.
  * It receives interface data from its parent component to avoid duplicate API calls.
  */
@@ -55,10 +56,14 @@ const VlanConfiguration: React.FC<VlanConfigurationProps> = ({
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastVariant, setToastVariant] = useState<'success' | 'danger'>('success');
-  
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [vlanToDelete, setVlanToDelete] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const assignPortToVlan = useAssignPortToVlan(deviceId);
   const changeVlanName = useChangeVlanName(deviceId);
   const createVlan = useCreateVlan(deviceId);
+  const deleteVlan = useDeleteVlan(deviceId);
 
   useEffect(() => {
     if (interfaces && interfaces.length > 0) {
@@ -154,8 +159,8 @@ const VlanConfiguration: React.FC<VlanConfigurationProps> = ({
       if (isNaN(vlanId)) {
         throw new Error("VLAN ID must be a number");
       }
-      
-      await createVlan.mutateAsync({ vlan_id: vlanId, name: newVlanName || undefined });
+
+      await createVlan.mutateAsync({ id: vlanId, name: newVlanName || undefined });
       setNewVlanId('');
       setNewVlanName('');
       setToastMessage(`Successfully created VLAN ${vlanId}${newVlanName ? ` with name ${newVlanName}` : ''}`);
@@ -166,6 +171,37 @@ const VlanConfiguration: React.FC<VlanConfigurationProps> = ({
       setToastMessage(`Error creating VLAN: ${err.message || "Unknown error"}`);
       setToastVariant('danger');
       setShowToast(true);
+    }
+  };
+
+  const openDeleteModal = (vlanId: string) => {
+    setVlanToDelete(vlanId);
+    setShowDeleteModal(true);
+  };
+
+  const confirmDeleteVlan = async () => {
+    if (!vlanToDelete) return;
+
+    setIsDeleting(true);
+    try {
+      const result = await deleteVlan.mutateAsync(vlanToDelete);
+      if (result.result) {
+        setToastMessage(`Successfully deleted VLAN ${vlanToDelete}`);
+        setToastVariant('success');
+      } else {
+        setToastMessage(`Failed to delete VLAN ${vlanToDelete}. The device might have rejected the command.`);
+        setToastVariant('danger');
+      }
+      setShowToast(true);
+    } catch (err: any) {
+      console.error("Error deleting VLAN:", err);
+      setToastMessage(`Error deleting VLAN: ${err.message || "Unknown error"}`);
+      setToastVariant('danger');
+      setShowToast(true);
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteModal(false);
+      setVlanToDelete(null);
     }
   };
 
@@ -244,6 +280,7 @@ const VlanConfiguration: React.FC<VlanConfigurationProps> = ({
                         <th>Status</th>
                         <th>Ports</th>
                         <th>Assign Port</th>
+                        <th>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -332,6 +369,16 @@ const VlanConfiguration: React.FC<VlanConfigurationProps> = ({
                                   </Button>
                                 </InputGroup>
                               </Form.Group>
+                            </td>
+                            <td>
+                              <Button
+                                size="sm"
+                                variant="danger"
+                                onClick={() => openDeleteModal(vlanId)}
+                                disabled={!deviceReachable || isDeleting}
+                              >
+                                Delete
+                              </Button>
                             </td>
                           </tr>
                         );
@@ -430,12 +477,12 @@ const VlanConfiguration: React.FC<VlanConfigurationProps> = ({
                 )}
               </Card.Body>
             </Card>
-            
+
             {/* Toast for user feedback */}
-            <Toast 
-              show={showToast} 
-              onClose={() => setShowToast(false)} 
-              delay={3000} 
+            <Toast
+              show={showToast}
+              onClose={() => setShowToast(false)}
+              delay={3000}
               autohide
               style={{
                 position: 'fixed',
@@ -449,12 +496,43 @@ const VlanConfiguration: React.FC<VlanConfigurationProps> = ({
                   {toastVariant === 'success' ? 'Success' : 'Error'}
                 </strong>
               </Toast.Header>
-              <Toast.Body 
+              <Toast.Body
                 className={toastVariant === 'success' ? 'text-success' : 'text-danger'}
               >
                 {toastMessage}
               </Toast.Body>
             </Toast>
+
+            {/* Delete Confirmation Modal */}
+            <Modal show={showDeleteModal} onHide={() => setShowDeleteModal(false)}>
+              <Modal.Header closeButton>
+                <Modal.Title>Confirm VLAN Deletion</Modal.Title>
+              </Modal.Header>
+              <Modal.Body>
+                Are you sure you want to delete VLAN {vlanToDelete}? This action cannot be undone.
+              </Modal.Body>
+              <Modal.Footer>
+                <Button variant="secondary" onClick={() => setShowDeleteModal(false)} disabled={isDeleting}>
+                  Cancel
+                </Button>
+                <Button variant="danger" onClick={confirmDeleteVlan} disabled={isDeleting}>
+                  {isDeleting ? (
+                    <>
+                      <Spinner
+                        as="span"
+                        animation="border"
+                        size="sm"
+                        role="status"
+                        aria-hidden="true"
+                      />
+                      <span className="visually-hidden">Loading...</span>
+                    </>
+                  ) : (
+                    'Proceed'
+                  )}
+                </Button>
+              </Modal.Footer>
+            </Modal>
           </>
         )}
       </Card.Body>
