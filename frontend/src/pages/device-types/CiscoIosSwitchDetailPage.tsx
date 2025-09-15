@@ -14,11 +14,12 @@ import {
   Tabs,
   Tab,
   Toast,
+  InputGroup,
+  Modal,
 } from "react-bootstrap";
 import { useAuth } from "../../hooks/useAuth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useAssignPortToVlan } from '../../api/vlans';
-import VlanConfiguration from '../../components/VlanConfiguration';
+import { useAssignPortToVlan, useChangeVlanName, useCreateVlan, useDeleteVlan } from '../../api/vlans';
 
 // Separate hook for system information with lazy loading
 const useSystemInfo = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean, deviceData: any) => {
@@ -258,10 +259,10 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
   const navigate = useNavigate();
   const { token, logout } = useAuth();
   const queryClient = useQueryClient();
-  const assignPortToVlan = useAssignPortToVlan(id);
   
-  // Tab state
   const [activeTab, setActiveTab] = useState("overview");
+  const [activeDiscoveryTab, setActiveDiscoveryTab] = useState('arp');
+  const [activeVlanTab, setActiveVlanTab] = useState('create-vlan');
   
   // Device reachability (always loaded)
   const { data: isReachable = false } = useQuery<boolean, Error>({
@@ -295,9 +296,9 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
   const { data: systemInfo, isLoading: systemLoading, error: systemError } = useSystemInfo(id, activeTab === "overview", isReachable, device);
   const { data: clockInfo, isFetching: clockLoading, error: clockError } = useClockInfo(id, activeTab === "overview", isReachable);
   const { data: vlanInfo, isFetching: vlanLoading, error: vlanError } = useVlanInfo(id, activeTab === "vlans", isReachable);
-  const { data: arpTable, isFetching: arpLoading, error: arpError } = useArpTable(id, activeTab === "discovery", isReachable);
-  const { data: cdpNeighbors, isFetching: cdpLoading, error: cdpError } = useCdpNeighbors(id, activeTab === "discovery", isReachable);
-  const { data: lldpNeighbors, isFetching: lldpLoading, error: lldpError } = useLldpNeighbors(id, activeTab === "discovery", isReachable);
+  const { data: arpTable, isFetching: arpLoading, error: arpError } = useArpTable(id, activeTab === 'discovery' && activeDiscoveryTab === 'arp', isReachable);
+  const { data: cdpNeighbors, isFetching: cdpLoading, error: cdpError } = useCdpNeighbors(id, activeTab === 'discovery' && activeDiscoveryTab === 'cdp', isReachable);
+  const { data: lldpNeighbors, isFetching: lldpLoading, error: lldpError } = useLldpNeighbors(id, activeTab === 'discovery' && activeDiscoveryTab === 'lldp', isReachable);
   
   // Command execution state
   const [command, setCommand] = useState("");
@@ -316,10 +317,135 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
   const [toastMessage, setToastMessage] = useState('');
   const [toastVariant, setToastVariant] = useState<'success' | 'danger'>('success');
 
+  // VLAN specific state from VlanConfiguration
+  const [interfaceConfigs, setInterfaceConfigs] = useState<{ [key: string]: any }>({});
+  const [vlanNameEdits, setVlanNameEdits] = useState<{ [key: string]: string }>({});
+  const [newVlanId, setNewVlanId] = useState<string>('');
+  const [newVlanName, setNewVlanName] = useState<string>('');
+  const [isCreatingVlan, setIsCreatingVlan] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [vlanToDelete, setVlanToDelete] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // API hooks
+  const assignPortToVlan = useAssignPortToVlan(id);
+  const changeVlanName = useChangeVlanName(id);
+  const createVlan = useCreateVlan(id);
+  const deleteVlan = useDeleteVlan(id);
+
+  useEffect(() => {
+    if (interfaces && interfaces.length > 0) {
+      const initialConfigs: { [key: string]: any } = {};
+      interfaces.forEach(iface => {
+        const ifaceName = iface.interface || iface.intf;
+        if (ifaceName) {
+          initialConfigs[ifaceName] = {
+            mode: 'access', // Default to access mode
+            accessVlan: '',
+            allowedVlans: '',
+            nativeVlan: '',
+          };
+        }
+      });
+      setInterfaceConfigs(initialConfigs);
+    }
+  }, [interfaces]);
+
   // Handle tab changes
   const handleTabSelect = (tabKey: string | null) => {
     if (tabKey) {
       setActiveTab(tabKey);
+    }
+  };
+
+  const handleInterfaceConfigChange = (ifaceName: string, field: string, value: string) => {
+    setInterfaceConfigs(prev => ({
+      ...prev,
+      [ifaceName]: {
+        ...prev[ifaceName],
+        [field]: value,
+      },
+    }));
+  };
+
+  const handleVlanNameChange = (vlanId: string, newName: string) => {
+    setVlanNameEdits(prev => ({
+      ...prev,
+      [vlanId]: newName
+    }));
+  };
+
+  const handleSaveVlanName = async (vlanId: string) => {
+    const newName = vlanNameEdits[vlanId];
+    if (!id || newName === undefined) return;
+
+    try {
+      await changeVlanName.mutateAsync({ vlanId, newName });
+      setVlanNameEdits(prev => {
+        const newState = { ...prev };
+        delete newState[vlanId];
+        return newState;
+      });
+      setToastMessage(`Successfully changed VLAN ${vlanId} name to ${newName || "(empty)"}`);
+      setToastVariant('success');
+      setShowToast(true);
+      queryClient.invalidateQueries({ queryKey: ["vlanInfo", id] });
+    } catch (err: any) {
+      setToastMessage(`Error changing VLAN name: ${err.message || "Unknown error"}`);
+      setToastVariant('danger');
+      setShowToast(true);
+    }
+  };
+
+  const handleCreateVlan = async () => {
+    if (!id || !newVlanId) return;
+
+    setIsCreatingVlan(true);
+    try {
+      const vlanIdNum = parseInt(newVlanId);
+      if (isNaN(vlanIdNum)) {
+        throw new Error("VLAN ID must be a number");
+      }
+
+      await createVlan.mutateAsync({ id: vlanIdNum, name: newVlanName || undefined });
+      setNewVlanId('');
+      setNewVlanName('');
+      setToastMessage(`Successfully created VLAN ${vlanIdNum}${newVlanName ? ' with name ' + newVlanName : ''}`);
+      setToastVariant('success');
+      setShowToast(true);
+      queryClient.invalidateQueries({ queryKey: ["vlanInfo", id] });
+    } catch (err: any) {
+      setToastMessage(`Error creating VLAN: ${err.message || "Unknown error"}`);
+      setToastVariant('danger');
+      setShowToast(true);
+    } finally {
+      setIsCreatingVlan(false);
+    }
+  };
+
+  const openDeleteModal = (vlanId: string) => {
+    setVlanToDelete(vlanId);
+    setShowDeleteModal(true);
+  };
+
+  const confirmDeleteVlan = async () => {
+    if (!vlanToDelete) return;
+
+    setIsDeleting(true);
+    try {
+      await deleteVlan.mutateAsync(vlanToDelete);
+      setToastMessage(`Successfully deleted VLAN ${vlanToDelete}`);
+      setToastVariant('success');
+      setShowToast(true);
+      queryClient.invalidateQueries({ queryKey: ["vlanInfo", id] });
+    } catch (err: any) {
+      setToastMessage(`Error deleting VLAN: ${err.message || "Unknown error"}`);
+      setToastVariant('danger');
+      setShowToast(true);
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteModal(false);
+      setVlanToDelete(null);
     }
   };
 
@@ -399,9 +525,14 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
 
     try {
       await assignPortToVlan.mutateAsync({ vlanId, port });
+	  setToastMessage(`Successfully assigned port ${port} to VLAN ${vlanId}`);
+      setToastVariant('success');
+      setShowToast(true);
     } catch (err: any) {
       console.error("Error assigning port to VLAN:", err);
-      alert(`Error assigning port to VLAN: ${err.message || "Unknown error"}`);
+      setToastMessage(`Error assigning port to VLAN: ${err.message || "Unknown error"}`);
+      setToastVariant('danger');
+      setShowToast(true);
     }
   };
 
@@ -644,160 +775,329 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
         </Tab>
         
         <Tab eventKey="vlans" title="VLANs">
-          <Row className="mb-4">
-            <Col>
-              <VlanConfiguration
-                deviceId={id}
-                vlanInfo={vlanInfo}
-                vlanLoading={vlanLoading}
-                vlanError={vlanError}
-                interfaces={interfaces}
-                interfacesLoading={interfacesLoading}
-                interfacesError={interfacesError}
-                deviceReachable={isReachable}
-              />
-            </Col>
-          </Row>
+          <Tabs
+            activeKey={activeVlanTab}
+            onSelect={(k) => setActiveVlanTab(k || 'create-vlan')}
+            className="mb-3"
+            mountOnEnter
+            unmountOnExit
+          >
+            <Tab eventKey="create-vlan" title="Create VLAN">
+              <Card>
+                <Card.Body>
+                  <Form>
+                    <Row>
+                      <Col md={3}>
+                        <Form.Group controlId="new-vlan-id">
+                          <Form.Label>VLAN ID</Form.Label>
+                          <Form.Control type="text" placeholder="Enter VLAN ID" value={newVlanId} onChange={(e) => setNewVlanId(e.target.value)} disabled={!isReachable} />
+                        </Form.Group>
+                      </Col>
+                      <Col md={4}>
+                        <Form.Group controlId="new-vlan-name">
+                          <Form.Label>VLAN Name (Optional)</Form.Label>
+                          <Form.Control type="text" placeholder="Enter VLAN Name" value={newVlanName} onChange={(e) => setNewVlanName(e.target.value)} disabled={!isReachable} />
+                        </Form.Group>
+                      </Col>
+                      <Col md={2} className="d-flex align-items-end">
+                        <Button variant="primary" onClick={handleCreateVlan} disabled={!newVlanId || !isReachable || isCreatingVlan}>
+                          {isCreatingVlan ? <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" /> : "Create VLAN"}
+                        </Button>
+                      </Col>
+                    </Row>
+                  </Form>
+                </Card.Body>
+              </Card>
+            </Tab>
+            <Tab eventKey="vlan-list" title="VLAN List">
+              <Card>
+                <Card.Body>
+                  {vlanError ? (
+                    <Alert variant="danger">Error: {vlanError.message}</Alert>
+                  ) : vlanLoading ? (
+                    <div className="text-center"><Spinner animation="border" /></div>
+                  ) : vlanInfo && vlanInfo.length > 0 ? (
+                    <Table striped bordered hover responsive>
+                      <thead>
+                        <tr>
+                          <th>VLAN ID</th>
+                          <th>Name</th>
+                          <th>Status</th>
+                          <th>Ports</th>
+                          <th>Assign Port</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {vlanInfo.map((vlan: any) => {
+                          const vlanId = vlan.vlan_id || vlan.id;
+                          const currentName = vlan.vlan_name || "N/A";
+                          const isEditing = vlanNameEdits.hasOwnProperty(vlanId);
+                          const editedName = vlanNameEdits[vlanId] ?? currentName;
+
+                          return (
+                            <tr key={vlanId}>
+                              <td>{vlanId}</td>
+                              <td>
+                                {isEditing ? (
+                                  <InputGroup>
+                                    <Form.Control
+                                      type="text"
+                                      size="sm"
+                                      value={editedName}
+                                      onChange={(e) => handleVlanNameChange(vlanId, e.target.value)}
+                                      disabled={!isReachable}
+                                    />
+                                    <Button size="sm" variant="success" onClick={() => handleSaveVlanName(vlanId)} disabled={!isReachable}>Save</Button>
+                                  </InputGroup>
+                                ) : (
+                                  <div>
+                                    {currentName}
+                                    <Button size="sm" variant="outline-primary" className="ms-2" onClick={() => handleVlanNameChange(vlanId, currentName)} disabled={!isReachable}>Edit</Button>
+                                  </div>
+                                )}
+                              </td>
+                              <td>{vlan.status || "N/A"}</td>
+                              <td>{vlan.interfaces ? (Array.isArray(vlan.interfaces) ? vlan.interfaces.join(', ') : vlan.interfaces) : "N/A"}</td>
+                              <td>
+                                <InputGroup>
+                                  <Form.Select size="sm" value={selectedPorts[vlanId] || ''} onChange={(e) => handlePortSelection(vlanId, e.target.value)} disabled={!isReachable}>
+                                    <option value="">Select Port</option>
+                                    {interfaces?.map((iface: any) => (
+                                      <option key={iface.interface || iface.intf} value={iface.interface || iface.intf}>{iface.interface || iface.intf}</option>
+                                    ))}
+                                  </Form.Select>
+                                  <Button size="sm" variant="primary" onClick={() => handleAssignPort(vlanId)} disabled={!selectedPorts[vlanId] || !isReachable}>+</Button>
+                                </InputGroup>
+                              </td>
+                              <td>
+                                <Button size="sm" variant="danger" onClick={() => openDeleteModal(vlanId)} disabled={!isReachable || isDeleting}>Delete</Button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </Table>
+                  ) : (
+                    <Alert variant="info">No VLAN information available.</Alert>
+                  )}
+                </Card.Body>
+              </Card>
+            </Tab>
+             <Tab eventKey="interface-config" title="Interface Configuration">
+                <Card>
+                  <Card.Body>
+                    {interfacesError ? (
+                      <Alert variant="danger">Error: {interfacesError.message}</Alert>
+                    ) : interfacesLoading ? (
+                      <div className="text-center"><Spinner animation="border" /></div>
+                    ) : interfaces && interfaces.length > 0 ? (
+                      <Table striped bordered hover responsive>
+                        <thead>
+                          <tr>
+                            <th>Interface</th>
+                            <th>Port Mode</th>
+                            <th>VLAN ID (Access) / Allowed VLANs (Trunk)</th>
+                            <th>Native VLAN (Trunk)</th>
+                            <th>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {interfaces.map((iface: any) => {
+                            const ifaceName = iface.interface || iface.intf;
+                            const config = interfaceConfigs[ifaceName];
+                            if (!config) return null;
+
+                            return (
+                              <tr key={ifaceName}>
+                                <td>{ifaceName}</td>
+                                <td>
+                                  <Form.Select size="sm" value={config.mode} onChange={(e) => handleInterfaceConfigChange(ifaceName, 'mode', e.target.value)} disabled={!isReachable}>
+                                    <option value="access">Access</option>
+                                    <option value="trunk">Trunk</option>
+                                  </Form.Select>
+                                </td>
+                                <td>
+                                  {config.mode === 'access' ? (
+                                    <Form.Control type="text" size="sm" placeholder="VLAN ID" value={config.accessVlan} onChange={(e) => handleInterfaceConfigChange(ifaceName, 'accessVlan', e.target.value)} disabled={!isReachable} />
+                                  ) : (
+                                    <Form.Control type="text" size="sm" placeholder="Allowed VLANs (e.g., 10,20,30-40)" value={config.allowedVlans} onChange={(e) => handleInterfaceConfigChange(ifaceName, 'allowedVlans', e.target.value)} disabled={!isReachable} />
+                                  )}
+                                </td>
+                                <td>
+                                  {config.mode === 'trunk' && (
+                                    <Form.Control type="text" size="sm" placeholder="Native VLAN ID" value={config.nativeVlan} onChange={(e) => handleInterfaceConfigChange(ifaceName, 'nativeVlan', e.target.value)} disabled={!isReachable} />
+                                  )}
+                                </td>
+                                <td>
+                                  <Button size="sm" variant="success" disabled={!isReachable}>Apply</Button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </Table>
+                    ) : (
+                      <Alert variant="info">No interfaces available for configuration.</Alert>
+                    )}
+                  </Card.Body>
+                </Card>
+              </Tab>
+          </Tabs>
         </Tab>
         
         <Tab eventKey="discovery" title="Network Discovery">
-          <Row className="mb-4">
-            <Col md={12}>
-              <Card>
-                <Card.Body>
-                  <Card.Title as="h2">ARP Table</Card.Title>
-                  {arpError ? (
-                    <Alert variant="danger">
-                      Error: {arpError.message}. Please try again later.
-                    </Alert>
-                  ) : arpLoading ? (
-                    <div className="text-center">
-                      <Spinner animation="border" role="status">
-                        <span className="visually-hidden">Loading...</span>
-                      </Spinner>
-                    </div>
-                  ) : arpTable && arpTable.length > 0 ? (
-                    <Table striped bordered hover responsive>
-                      <thead>
-                        <tr>
-                          <th>Address</th>
-                          <th>MAC Address</th>
-                          <th>Interface</th>
-                          <th>Age</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {arpTable.map((entry: any, index: number) => (
-                          <tr key={index}>
-                            <td>{entry.address || "N/A"}</td>
-                            <td>{entry.mac || entry.hardware || "N/A"}</td>
-                            <td>{entry.interface || entry.port || "N/A"}</td>
-                            <td>{entry.age || "N/A"}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </Table>
-                  ) : (
-                    <Alert variant="info">No ARP entries found.</Alert>
-                  )}
-                </Card.Body>
-              </Card>
-            </Col>
-          </Row>
-          
-          <Row className="mb-4">
-            <Col md={6}>
-              <Card>
-                <Card.Body>
-                  <Card.Title as="h2">CDP Neighbors</Card.Title>
-                  {cdpError ? (
-                    <Alert variant="danger">
-                      Error: {cdpError.message}. Please try again later.
-                    </Alert>
-                  ) : cdpLoading ? (
-                    <div className="text-center">
-                      <Spinner animation="border" role="status">
-                        <span className="visually-hidden">Loading...</span>
-                      </Spinner>
-                    </div>
-                  ) : cdpNeighbors && cdpNeighbors.length > 0 ? (
-                    <Table striped bordered hover responsive>
-                      <thead>
-                        <tr>
-                          <th>Device ID</th>
-                          <th>Local Interface</th>
-                          <th>Hold Time</th>
-                          <th>Capability</th>
-                          <th>Platform</th>
-                          <th>Port ID</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {cdpNeighbors.map((neighbor: any, index: number) => (
-                          <tr key={index}>
-                            <td>{neighbor.device_id || "N/A"}</td>
-                            <td>{neighbor.local_interface || "N/A"}</td>
-                            <td>{neighbor.hold_time || "N/A"}</td>
-                            <td>{neighbor.capability || "N/A"}</td>
-                            <td>{neighbor.platform || "N/A"}</td>
-                            <td>{neighbor.port_id || "N/A"}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </Table>
-                  ) : (
-                    <Alert variant="info">No CDP neighbors found.</Alert>
-                  )}
-                </Card.Body>
-              </Card>
-            </Col>
-            
-            <Col md={6}>
-              <Card>
-                <Card.Body>
-                  <Card.Title as="h2">LLDP Neighbors</Card.Title>
-                  {lldpError ? (
-                    <Alert variant="danger">
-                      Error: {lldpError.message}. Please try again later.
-                    </Alert>
-                  ) : lldpLoading ? (
-                    <div className="text-center">
-                      <Spinner animation="border" role="status">
-                        <span className="visually-hidden">Loading...</span>
-                      </Spinner>
-                    </div>
-                  ) : lldpNeighbors && lldpNeighbors.length > 0 ? (
-                    <Table striped bordered hover responsive>
-                      <thead>
-                        <tr>
-                          <th>Device ID</th>
-                          <th>Local Interface</th>
-                          <th>Hold Time</th>
-                          <th>Capability</th>
-                          <th>Platform</th>
-                          <th>Port ID</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {lldpNeighbors.map((neighbor: any, index: number) => (
-                          <tr key={index}>
-                            <td>{neighbor.device_id || "N/A"}</td>
-                            <td>{neighbor.local_interface || "N/A"}</td>
-                            <td>{neighbor.hold_time || "N/A"}</td>
-                            <td>{neighbor.capability || "N/A"}</td>
-                            <td>{neighbor.platform || "N/A"}</td>
-                            <td>{neighbor.port_id || "N/A"}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </Table>
-                  ) : (
-                    <Alert variant="info">No LLDP neighbors found.</Alert>
-                  )}
-                </Card.Body>
-              </Card>
-            </Col>
-          </Row>
+          <Tabs
+            activeKey={activeDiscoveryTab}
+            onSelect={(k) => setActiveDiscoveryTab(k || 'arp')}
+            className="mb-3"
+            mountOnEnter={true}
+            unmountOnExit={true}
+          >
+            <Tab eventKey="arp" title="ARP Table">
+              <Row className="mb-4">
+                <Col md={12}>
+                  <Card>
+                    <Card.Body>
+                      <Card.Title as="h2">ARP Table</Card.Title>
+                      {arpError ? (
+                        <Alert variant="danger">
+                          Error: {arpError.message}. Please try again later.
+                        </Alert>
+                      ) : arpLoading ? (
+                        <div className="text-center">
+                          <Spinner animation="border" role="status">
+                            <span className="visually-hidden">Loading...</span>
+                          </Spinner>
+                        </div>
+                      ) : arpTable && arpTable.length > 0 ? (
+                        <Table striped bordered hover responsive>
+                          <thead>
+                            <tr>
+                              <th>Address</th>
+                              <th>MAC Address</th>
+                              <th>Interface</th>
+                              <th>Age</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {arpTable.map((entry: any, index: number) => (
+                              <tr key={index}>
+                                <td>{entry.address || "N/A"}</td>
+                                <td>{entry.mac || entry.hardware || "N/A"}</td>
+                                <td>{entry.interface || entry.port || "N/A"}</td>
+                                <td>{entry.age || "N/A"}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </Table>
+                      ) : (
+                        <Alert variant="info">No ARP entries found.</Alert>
+                      )}
+                    </Card.Body>
+                  </Card>
+                </Col>
+              </Row>
+            </Tab>
+            <Tab eventKey="cdp" title="CDP Neighbors">
+              <Row className="mb-4">
+                <Col md={12}>
+                  <Card>
+                    <Card.Body>
+                      <Card.Title as="h2">CDP Neighbors</Card.Title>
+                      {cdpError ? (
+                        <Alert variant="danger">
+                          Error: {cdpError.message}. Please try again later.
+                        </Alert>
+                      ) : cdpLoading ? (
+                        <div className="text-center">
+                          <Spinner animation="border" role="status">
+                            <span className="visually-hidden">Loading...</span>
+                          </Spinner>
+                        </div>
+                      ) : cdpNeighbors && cdpNeighbors.length > 0 ? (
+                        <Table striped bordered hover responsive>
+                          <thead>
+                            <tr>
+                              <th>Device ID</th>
+                              <th>Local Interface</th>
+                              <th>Hold Time</th>
+                              <th>Capability</th>
+                              <th>Platform</th>
+                              <th>Port ID</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {cdpNeighbors.map((neighbor: any, index: number) => (
+                              <tr key={index}>
+                                <td>{neighbor.device_id || "N/A"}</td>
+                                <td>{neighbor.local_interface || "N/A"}</td>
+                                <td>{neighbor.hold_time || "N/A"}</td>
+                                <td>{neighbor.capability || "N/A"}</td>
+                                <td>{neighbor.platform || "N/A"}</td>
+                                <td>{neighbor.port_id || "N/A"}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </Table>
+                      ) : (
+                        <Alert variant="info">No CDP neighbors found.</Alert>
+                      )}
+                    </Card.Body>
+                  </Card>
+                </Col>
+              </Row>
+            </Tab>
+            <Tab eventKey="lldp" title="LLDP Neighbors">
+              <Row className="mb-4">
+                <Col md={12}>
+                  <Card>
+                    <Card.Body>
+                      <Card.Title as="h2">LLDP Neighbors</Card.Title>
+                      {lldpError ? (
+                        <Alert variant="danger">
+                          Error: {lldpError.message}. Please try again later.
+                        </Alert>
+                      ) : lldpLoading ? (
+                        <div className="text-center">
+                          <Spinner animation="border" role="status">
+                            <span className="visually-hidden">Loading...</span>
+                          </Spinner>
+                        </div>
+                      ) : lldpNeighbors && lldpNeighbors.length > 0 ? (
+                        <Table striped bordered hover responsive>
+                          <thead>
+                            <tr>
+                              <th>Device ID</th>
+                              <th>Local Interface</th>
+                              <th>Hold Time</th>
+                              <th>Capability</th>
+                              <th>Platform</th>
+                              <th>Port ID</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {lldpNeighbors.map((neighbor: any, index: number) => (
+                              <tr key={index}>
+                                <td>{neighbor.device_id || "N/A"}</td>
+                                <td>{neighbor.local_interface || "N/A"}</td>
+                                <td>{neighbor.hold_time || "N/A"}</td>
+                                <td>{neighbor.capability || "N/A"}</td>
+                                <td>{neighbor.platform || "N/A"}</td>
+                                <td>{neighbor.port_id || "N/A"}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </Table>
+                      ) : (
+                        <Alert variant="info">No LLDP neighbors found.</Alert>
+                      )}
+                    </Card.Body>
+                  </Card>
+                </Col>
+              </Row>
+            </Tab>
+          </Tabs>
         </Tab>
         
         <Tab eventKey="commands" title="Commands">
@@ -872,6 +1172,24 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
         </Tab>
       </Tabs>
       
+      {/* Delete Confirmation Modal */}
+      <Modal show={showDeleteModal} onHide={() => setShowDeleteModal(false)}>
+        <Modal.Header closeButton>
+          <Modal.Title>Confirm VLAN Deletion</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          Are you sure you want to delete VLAN {vlanToDelete}? This action cannot be undone.
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowDeleteModal(false)} disabled={isDeleting}>
+            Cancel
+          </Button>
+          <Button variant="danger" onClick={confirmDeleteVlan} disabled={isDeleting}>
+            {isDeleting ? <Spinner as="span" animation="border" size="sm" /> : 'Proceed'}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
       {/* Toast for user feedback */}
       <Toast 
         show={showToast} 
