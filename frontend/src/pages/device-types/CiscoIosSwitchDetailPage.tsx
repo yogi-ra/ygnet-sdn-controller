@@ -289,30 +289,15 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
   });
   
   // Fetch interfaces once for both interfaces and VLANs tabs to avoid duplicate API calls
-  const { data: interfaces, isLoading: interfacesLoading, error: interfacesError, refetch: refetchInterfaces } = useInterfaces(id, activeTab === "interfaces" || activeTab === "vlans", isReachable);
+  const { data: interfaces, isFetching: interfacesLoading, error: interfacesError, refetch: refetchInterfaces } = useInterfaces(id, activeTab === "interfaces" || activeTab === "vlans", isReachable);
   
   // Lazy load data based on active tab
   const { data: systemInfo, isLoading: systemLoading, error: systemError } = useSystemInfo(id, activeTab === "overview", isReachable, device);
-  const { data: clockInfo, isLoading: clockLoading, error: clockError } = useClockInfo(id, activeTab === "overview", isReachable);
-  const { data: vlanInfo, isLoading: vlanLoading, error: vlanError } = useVlanInfo(id, activeTab === "vlans", isReachable);
-  const { data: arpTable, isLoading: arpLoading, error: arpError } = useArpTable(id, activeTab === "discovery", isReachable);
-  const { data: cdpNeighbors, isLoading: cdpLoading, error: cdpError } = useCdpNeighbors(id, activeTab === "discovery", isReachable);
-  const { data: lldpNeighbors, isLoading: lldpLoading, error: lldpError } = useLldpNeighbors(id, activeTab === "discovery", isReachable);
-  
-  // Track if we're switching to the overview tab to show loading state properly
-  const [isSwitchingToOverview, setIsSwitchingToOverview] = useState(false);
-  
-  // When switching to overview tab, set switching state
-  useEffect(() => {
-    if (activeTab === "overview") {
-      setIsSwitchingToOverview(true);
-      // Reset after a short delay to allow data to load
-      const timer = setTimeout(() => {
-        setIsSwitchingToOverview(false);
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [activeTab]);
+  const { data: clockInfo, isFetching: clockLoading, error: clockError } = useClockInfo(id, activeTab === "overview", isReachable);
+  const { data: vlanInfo, isFetching: vlanLoading, error: vlanError } = useVlanInfo(id, activeTab === "vlans", isReachable);
+  const { data: arpTable, isFetching: arpLoading, error: arpError } = useArpTable(id, activeTab === "discovery", isReachable);
+  const { data: cdpNeighbors, isFetching: cdpLoading, error: cdpError } = useCdpNeighbors(id, activeTab === "discovery", isReachable);
+  const { data: lldpNeighbors, isFetching: lldpLoading, error: lldpError } = useLldpNeighbors(id, activeTab === "discovery", isReachable);
   
   // Command execution state
   const [command, setCommand] = useState("");
@@ -551,7 +536,7 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
                     <Alert variant="danger">
                       Error: {systemError.message}. Please try again later.
                     </Alert>
-                  ) : (systemLoading || clockLoading) || isSwitchingToOverview ? (
+                  ) : (systemLoading || clockLoading) ? (
                     <div className="text-center">
                       <Spinner animation="border" role="status">
                         <span className="visually-hidden">Loading...</span>

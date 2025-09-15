@@ -175,24 +175,9 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
   
   // Lazy load data based on active tab
   const { data: systemInfo, isLoading: systemLoading, error: systemError } = useSystemInfo(id, activeTab === "overview", isReachable, device);
-  const { data: clockInfo, isLoading: clockLoading, error: clockError } = useClockInfo(id, activeTab === "overview", isReachable);
-  
-  // Track if we're switching to the overview tab to show loading state properly
-  const [isSwitchingToOverview, setIsSwitchingToOverview] = useState(false);
-  
-  // When switching to overview tab, set switching state
-  useEffect(() => {
-    if (activeTab === "overview") {
-      setIsSwitchingToOverview(true);
-      // Reset after a short delay to allow data to load
-      const timer = setTimeout(() => {
-        setIsSwitchingToOverview(false);
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [activeTab]);
-  const { data: interfaces, isLoading: interfacesLoading, error: interfacesError, refetch: refetchInterfaces } = useInterfaces(id, activeTab === "interfaces", isReachable);
-  const { data: routingInfo, isLoading: routingLoading, error: routingError } = useRoutingInfo(id, activeTab === "routing", isReachable);
+  const { data: clockInfo, isFetching: clockLoading, error: clockError } = useClockInfo(id, activeTab === "overview", isReachable);
+  const { data: interfaces, isFetching: interfacesLoading, error: interfacesError, refetch: refetchInterfaces } = useInterfaces(id, activeTab === "interfaces", isReachable);
+  const { data: routingInfo, isFetching: routingLoading, error: routingError } = useRoutingInfo(id, activeTab === "routing", isReachable);
   
   // Command execution state
   const [command, setCommand] = useState("");
@@ -407,7 +392,7 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
                     <Alert variant="danger">
                       Error: {systemError?.message || clockError?.message}. Please try again later.
                     </Alert>
-                  ) : (systemLoading || clockLoading) || isSwitchingToOverview ? (
+                  ) : (systemLoading || clockLoading) ? (
                     <div className="text-center">
                       <Spinner animation="border" role="status">
                         <span className="visually-hidden">Loading...</span>
