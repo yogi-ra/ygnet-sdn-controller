@@ -51,3 +51,16 @@ class BaseInterfaces(BaseFeature, ABC):
             Output from configuration commands or boolean indicating success
         """
         pass
+
+    @abstractmethod
+    def configure_interface_vlan(self, interface_config: Dict[str, Any]) -> bool:
+        """
+        Configure VLAN settings for an interface (access or trunk mode).
+        
+        Args:
+            interface_config: Dictionary containing interface VLAN configuration parameters
+            
+        Returns:
+            Boolean indicating success or failure
+        """
+        pass

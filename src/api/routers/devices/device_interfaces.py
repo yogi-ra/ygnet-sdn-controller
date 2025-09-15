@@ -2,7 +2,7 @@ from concurrent.futures import TimeoutError as FutureTimeoutError
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from ....database import get_db
-from ....schemas import InterfaceState
+from ....schemas import InterfaceState, InterfaceVlanConfig
 from ...decorators import cache_response
 from ...dependencies import require_read_privileges, require_write_privileges
 from ...utils import get_handler_from_device_id
@@ -77,5 +77,43 @@ def set_interface_state(
         raise HTTPException(status_code=504, detail=error_msg)
     except Exception as e:
         error_msg = f"Failed to set interface state for device {device_id}, interface {interface_state.interface_name}: {str(e)}"
+        print(error_msg)
+        raise HTTPException(status_code=500, detail=error_msg)
+
+
+@router.post(
+    "/{device_id}/interfaces/vlan-config", dependencies=[Depends(require_write_privileges)]
+)
+def configure_interface_vlan(
+    device_id: int, interface_config: InterfaceVlanConfig, db: Session = Depends(get_db)
+):
+    """
+    Configure VLAN settings for a specific interface (access or trunk mode).
+    """
+    handler = get_handler_from_device_id(device_id, db)
+    try:
+        with handler:
+            # Check if the device supports VLAN configuration on interfaces
+            if not hasattr(handler, "interfaces") or not hasattr(handler.interfaces, "configure_interface_vlan"):
+                raise HTTPException(
+                    status_code=400, detail="Device does not support interface VLAN configuration"
+                )
+
+            result = handler.interfaces.configure_interface_vlan(interface_config.dict())
+            
+            # Clear cache for this device's VLAN and interface information
+            from ....cache import get_redis_client
+            redis_client = get_redis_client()
+            redis_client.delete(f"device_vlans_brief:{device_id}")
+            redis_client.delete(f"device_interfaces_brief:{device_id}")
+            redis_client.delete(f"device_interfaces_status:{device_id}")
+
+            return {"result": result}
+    except FutureTimeoutError:
+        error_msg = f"Timeout configuring VLAN for interface {interface_config.interface_name} on device {device_id}"
+        print(error_msg)
+        raise HTTPException(status_code=504, detail=error_msg)
+    except Exception as e:
+        error_msg = f"Failed to configure VLAN for interface {interface_config.interface_name} on device {device_id}: {str(e)}"
         print(error_msg)
         raise HTTPException(status_code=500, detail=error_msg)

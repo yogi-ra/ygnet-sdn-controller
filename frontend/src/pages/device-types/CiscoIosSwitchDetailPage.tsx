@@ -20,6 +20,7 @@ import {
 import { useAuth } from "../../hooks/useAuth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAssignPortToVlan, useChangeVlanName, useCreateVlan, useDeleteVlan } from '../../api/vlans';
+import { useConfigureInterfaceVlan } from '../../api/interfaces';
 
 // Separate hook for system information with lazy loading
 const useSystemInfo = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean, deviceData: any) => {
@@ -326,12 +327,14 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [vlanToDelete, setVlanToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [applyingConfigs, setApplyingConfigs] = useState<{ [key: string]: boolean }>({});
 
   // API hooks
   const assignPortToVlan = useAssignPortToVlan(id);
   const changeVlanName = useChangeVlanName(id);
   const createVlan = useCreateVlan(id);
   const deleteVlan = useDeleteVlan(id);
+  const configureInterfaceVlan = useConfigureInterfaceVlan(id);
 
   useEffect(() => {
     if (interfaces && interfaces.length > 0) {
@@ -391,7 +394,7 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
       setShowToast(true);
       queryClient.invalidateQueries({ queryKey: ["vlanInfo", id] });
     } catch (err: any) {
-      setToastMessage(`Error changing VLAN name: ${err.message || "Unknown error"}`);
+      setToastMessage(`Error changing VLAN name: ${err.message || 'Unknown error'}`);
       setToastVariant('danger');
       setShowToast(true);
     }
@@ -415,7 +418,7 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
       setShowToast(true);
       queryClient.invalidateQueries({ queryKey: ["vlanInfo", id] });
     } catch (err: any) {
-      setToastMessage(`Error creating VLAN: ${err.message || "Unknown error"}`);
+      setToastMessage(`Error creating VLAN: ${err.message || 'Unknown error'}`);
       setToastVariant('danger');
       setShowToast(true);
     } finally {
@@ -439,7 +442,7 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
       setShowToast(true);
       queryClient.invalidateQueries({ queryKey: ["vlanInfo", id] });
     } catch (err: any) {
-      setToastMessage(`Error deleting VLAN: ${err.message || "Unknown error"}`);
+      setToastMessage(`Error deleting VLAN: ${err.message || 'Unknown error'}`);
       setToastVariant('danger');
       setShowToast(true);
     } finally {
@@ -530,9 +533,53 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
       setShowToast(true);
     } catch (err: any) {
       console.error("Error assigning port to VLAN:", err);
-      setToastMessage(`Error assigning port to VLAN: ${err.message || "Unknown error"}`);
+      setToastMessage(`Error assigning port to VLAN: ${err.message || 'Unknown error'}`);
       setToastVariant('danger');
       setShowToast(true);
+    }
+  };
+
+  const handleApplyInterfaceConfig = async (ifaceName: string) => {
+    const config = interfaceConfigs[ifaceName];
+    if (!id || !config) return;
+
+    setApplyingConfigs(prev => ({ ...prev, [ifaceName]: true }));
+
+    try {
+      const vlanConfig: any = {
+        interface_name: ifaceName,
+        mode: config.mode,
+      };
+
+      if (config.mode === 'access') {
+        if (config.accessVlan) {
+          vlanConfig.access_vlan = parseInt(config.accessVlan);
+        }
+      } else if (config.mode === 'trunk') {
+        if (config.allowedVlans) {
+          vlanConfig.allowed_vlans = config.allowedVlans;
+        }
+        if (config.nativeVlan) {
+          vlanConfig.native_vlan = parseInt(config.nativeVlan);
+        }
+      }
+
+      await configureInterfaceVlan.mutateAsync(vlanConfig);
+
+      setToastMessage(`Successfully configured VLAN settings for ${ifaceName}`);
+      setToastVariant('success');
+      setShowToast(true);
+
+    } catch (err: any) {
+      setToastMessage(`Error configuring interface: ${err.message || "Unknown error"}`);
+      setToastVariant('danger');
+      setShowToast(true);
+    } finally {
+      setApplyingConfigs(prev => {
+        const newState = { ...prev };
+        delete newState[ifaceName];
+        return newState;
+      });
     }
   };
 
@@ -930,7 +977,27 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
                                   )}
                                 </td>
                                 <td>
-                                  <Button size="sm" variant="success" disabled={!isReachable}>Apply</Button>
+                                  <Button
+                                    size="sm"
+                                    variant="success"
+                                    onClick={() => handleApplyInterfaceConfig(ifaceName)}
+                                    disabled={!isReachable || applyingConfigs[ifaceName]}
+                                  >
+                                    {applyingConfigs[ifaceName] ? (
+                                      <>
+                                        <Spinner
+                                          as="span"
+                                          animation="border"
+                                          size="sm"
+                                          role="status"
+                                          aria-hidden="true"
+                                        />
+                                        <span className="visually-hidden">Loading...</span>
+                                      </>
+                                    ) : (
+                                      "Apply"
+                                    )}
+                                  </Button>
                                 </td>
                               </tr>
                             );

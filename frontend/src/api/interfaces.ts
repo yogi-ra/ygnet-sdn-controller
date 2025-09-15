@@ -1,20 +1,35 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
+import { useAuth } from '../hooks/useAuth';
 
-const shutdownInterface = async ({ deviceId, interfaceName }: { deviceId: string; interfaceName: string }) => {
-  const response = await axios.post(`/api/devices/${deviceId}/interfaces/${interfaceName}/shutdown`);
-  return response.data;
-};
-
-const noShutdownInterface = async ({ deviceId, interfaceName }: { deviceId: string; interfaceName: string }) => {
-  const response = await axios.post(`/api/devices/${deviceId}/interfaces/${interfaceName}/no-shutdown`);
-  return response.data;
-};
+interface InterfaceVlanConfig {
+  interface_name: string;
+  mode: string;
+  access_vlan?: number;
+  allowed_vlans?: string;
+  native_vlan?: number;
+}
 
 export const useShutdownInterface = (deviceId: string | undefined) => {
+  const { token } = useAuth();
   const queryClient = useQueryClient();
-  return useMutation({ 
-    mutationFn: (interfaceName: string) => shutdownInterface({ deviceId: deviceId!, interfaceName }),
+  return useMutation({
+    mutationFn: async (interfaceName: string) => {
+      if (!token || !deviceId) {
+        throw new Error('Missing token or device ID');
+      }
+      const response = await fetch(`/api/devices/${deviceId}/interfaces/${interfaceName}/shutdown`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to shutdown interface');
+      }
+      return response.json();
+    },
     onSuccess: () => {
       // queryClient.invalidateQueries(['interfaces', deviceId]);
     },
@@ -22,11 +37,62 @@ export const useShutdownInterface = (deviceId: string | undefined) => {
 };
 
 export const useNoShutdownInterface = (deviceId: string | undefined) => {
+  const { token } = useAuth();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (interfaceName: string) => noShutdownInterface({ deviceId: deviceId!, interfaceName }),
+    mutationFn: async (interfaceName: string) => {
+      if (!token || !deviceId) {
+        throw new Error('Missing token or device ID');
+      }
+      const response = await fetch(`/api/devices/${deviceId}/interfaces/${interfaceName}/no-shutdown`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to no shutdown interface');
+      }
+      return response.json();
+    },
     onSuccess: () => {
       // queryClient.invalidateQueries(['interfaces', deviceId]);
+    },
+  });
+};
+
+export const useConfigureInterfaceVlan = (deviceId: string | undefined) => {
+  const { token } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (config: InterfaceVlanConfig) => {
+      if (!token || !deviceId) {
+        throw new Error('Missing token or device ID');
+      }
+
+      const response = await fetch(`/api/devices/${deviceId}/interfaces/vlan-config`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(config),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to configure interface VLAN');
+      }
+
+      return response.json();
+    },
+    onSuccess: () => {
+      // Invalidate relevant queries to refresh data
+      queryClient.invalidateQueries({ queryKey: ['interfacesBrief', deviceId] });
+      queryClient.invalidateQueries({ queryKey: ['vlanInfo', deviceId] });
     },
   });
 };
