@@ -1,4 +1,5 @@
 import asyncio
+import socket
 from sqlalchemy.orm import Session
 from redis import Redis
 
@@ -84,17 +85,29 @@ async def _check_and_update_device_reachability(device_id: int, db: Session):
         print(f"Device with ID {device_id} not found in DB, skipping reachability check.")
         return
 
-    try:
-        handler = get_handler_from_device_id(db_device.id, db)
-        with handler:
-            # If connection is successful, it's reachable
-            is_reachable = True
-    except (DeviceUnreachableError, DeviceTimeoutError, DeviceConnectionError, DeviceAuthenticationError) as e:
-        print(f"Device {db_device.name} (ID: {db_device.id}) is not reachable: {e}")
+    # Fast TCP check to quickly identify offline devices
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(1)  # Short timeout for the check
+    is_port_open = sock.connect_ex((db_device.ip_address, db_device.port)) == 0
+    sock.close()
+
+    if not is_port_open:
+        # If the port is not open, we can be sure it's unreachable
         is_reachable = False
-    except Exception as e:
-        print(f"An unexpected error occurred for device {db_device.name} (ID: {db_device.id}): {e}")
-        is_reachable = False
+        print(f"Device {db_device.name} (ID: {db_device.id}) is not reachable (port closed).")
+    else:
+        # If port is open, proceed with the full connection check
+        try:
+            handler = get_handler_from_device_id(db_device.id, db)
+            with handler:
+                # If connection is successful, it's reachable
+                is_reachable = True
+        except (DeviceUnreachableError, DeviceTimeoutError, DeviceConnectionError, DeviceAuthenticationError) as e:
+            print(f"Device {db_device.name} (ID: {db_device.id}) is not reachable: {e}")
+            is_reachable = False
+        except Exception as e:
+            print(f"An unexpected error occurred for device {db_device.name} (ID: {db_device.id}): {e}")
+            is_reachable = False
     
     # Update the device's reachability status in the database
     try:
@@ -112,5 +125,15 @@ async def _check_and_update_device_reachability(device_id: int, db: Session):
             print(
                 f"Invalidated cache for device {db_device.name} (ID: {db_device.id}) due to reachability status change."
             )
+
+            # Also invalidate the main device list cache
+            list_pattern = "devices_list:*"
+            keys_deleted = 0
+            for key in redis_client.scan_iter(list_pattern):
+                redis_client.delete(key)
+                keys_deleted += 1
+            if keys_deleted > 0:
+                print(f"Invalidated {keys_deleted} devices_list cache(s).")
+
     except Exception as e:
         print(f"Failed to update reachability status for device {device_id}: {str(e)}")
