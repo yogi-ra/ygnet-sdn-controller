@@ -1,4 +1,4 @@
-from ....features.vlans.base import BaseVlans
+from ..vlans.base import BaseVlans
 from typing import List, Dict, Any
 import threading
 

@@ -1,4 +1,4 @@
-from ....features.interfaces.base import BaseInterfaces
+from ..interfaces.base import BaseInterfaces
 from typing import List, Dict, Any, Union
 import threading
 
