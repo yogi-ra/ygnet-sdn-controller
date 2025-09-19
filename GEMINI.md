@@ -195,3 +195,64 @@ To improve maintainability and scalability, we'll refactor both frontend and bac
    - Create reusable hooks for common data fetching patterns
 
 This refactoring will result in a more maintainable, scalable, and performant system that's easier for developers to work with.
+
+## Job-Based API Approach for Concurrent Requests
+
+To address the issue of timeouts when handling concurrent requests to the same device, we'll implement a job-based API approach:
+
+### Concept
+Instead of directly returning results from API endpoints, we'll create a job system where:
+1. API requests create jobs that are queued for processing
+2. Clients receive a job ID immediately
+3. Clients can check the job status using the job ID
+4. Results are returned only when the job is completed
+
+### Implementation Details
+
+1. **Job Creation Endpoint**
+   - When a client requests data (e.g., `/api/devices/{device_id}/system/version`)
+   - Instead of executing the command directly, create a job and return a job ID
+   - Example response: `{"job_id": "abc123", "status": "queued"}`
+
+2. **Job Status Endpoint**
+   - Clients can check job status with `/api/jobs/{job_id}`
+   - Possible statuses: "queued", "processing", "completed", "failed"
+   - When completed, returns the actual result
+
+3. **Job Queue System**
+   - Implement a job queue that processes requests sequentially per device
+   - This prevents concurrent access to the same device which causes timeouts
+   - Jobs are processed in the order they were received
+
+### Benefits
+
+1. **Eliminates Timeouts**: No more timeouts from concurrent requests to the same device
+2. **Better User Experience**: Immediate response with job ID, then polling for results
+3. **Improved Resource Management**: Better control over device connections
+4. **Scalability**: System can handle more concurrent requests across different devices
+
+## Enhanced Device Reachability and Command Execution
+
+To ensure that command execution doesn't fail for devices confirmed to be reachable:
+
+1. **Persistent Connection Validation**
+   - When a device is confirmed reachable, maintain a validated connection state
+   - Periodically verify connection health with lightweight commands
+   - Automatically reconnect if connection becomes stale
+
+2. **Command Retry Mechanism**
+   - If a command fails on a confirmed reachable device, implement automatic retries
+   - Use exponential backoff for retry attempts
+   - Limit retry attempts to prevent indefinite loops
+
+3. **Robust Error Handling**
+   - Distinguish between connection errors and command-specific errors
+   - For command-specific errors, provide detailed error information without marking device as unreachable
+   - Log detailed error information for troubleshooting
+
+4. **Connection Pool Optimization**
+   - Maintain a healthy pool of connections per device
+   - Implement connection reuse strategies to minimize connection overhead
+   - Handle connection limits gracefully with queuing mechanisms
+
+This approach ensures that devices confirmed as reachable continue to function properly, with automatic recovery mechanisms for transient issues.
