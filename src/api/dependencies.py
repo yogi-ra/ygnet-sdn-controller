@@ -13,9 +13,7 @@ from .utils import get_handler_from_device_id
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token")
 
 
-def get_current_user(
-    token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
-) -> models.User:
+def get_current_user(token: str = Depends(oauth2_scheme)) -> models.User:
     """
     Decodes the JWT token to get the current user. This is the base dependency.
     """
@@ -29,13 +27,13 @@ def get_current_user(
             token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
         )
         username: str = payload.get("sub")
+        role: str = payload.get("role")
+        if username is None or role is None:
+            raise credentials_exception
     except PyJWTError:
         raise credentials_exception
 
-    user = crud.crud.get_user_by_username(db, username=username)
-    if user is None:
-        raise credentials_exception
-    return user
+    return models.User(username=username, role=role)
 
 
 def require_read_privileges(

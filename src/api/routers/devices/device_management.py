@@ -34,10 +34,6 @@ def create_device(device: schemas.DeviceCreate, db: Session = Depends(get_db)):
     # Create the device
     created_device = crud.create_device(db=db, device=device)
 
-    # Clear the devices list cache
-    redis_client = get_redis_client()
-    redis_client.delete("devices_list")
-
     return created_device
 
 
@@ -46,7 +42,6 @@ def create_device(device: schemas.DeviceCreate, db: Session = Depends(get_db)):
     response_model=List[schemas.Device],
     dependencies=[Depends(require_read_privileges)],
 )
-@cache_response("devices_list", ttl=60)
 async def read_devices(
     request: Request, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)
 ):
@@ -145,9 +140,6 @@ def update_device(
     if keys_to_delete:
         redis_client.delete(*keys_to_delete)
 
-    # Clear the devices list cache
-    redis_client.delete("devices_list")
-
     return updated_device
 
 
@@ -167,9 +159,6 @@ def delete_device(device_id: int, db: Session = Depends(get_db)):
     keys_to_delete = redis_client.keys(pattern)
     if keys_to_delete:
         redis_client.delete(*keys_to_delete)
-
-    # Clear the devices list cache
-    redis_client.delete("devices_list")
 
     return
 
@@ -281,10 +270,6 @@ async def check_device_reachability(
             if redis_client.exists(cache_key):
                 redis_client.delete(cache_key)
 
-            # Clear devices list cache to ensure device list reflects updated reachability
-            devices_list_cache_key = "devices_list"
-            if redis_client.exists(devices_list_cache_key):
-                redis_client.delete(devices_list_cache_key)
     except Exception as e:
         print(f"Failed to update reachability status for device {device_id}: {str(e)}")
 

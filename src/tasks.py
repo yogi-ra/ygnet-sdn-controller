@@ -126,14 +126,5 @@ async def _check_and_update_device_reachability(device_id: int, db: Session):
                 f"Invalidated cache for device {db_device.name} (ID: {db_device.id}) due to reachability status change."
             )
 
-            # Also invalidate the main device list cache
-            list_pattern = "devices_list:*"
-            keys_deleted = 0
-            for key in redis_client.scan_iter(list_pattern):
-                redis_client.delete(key)
-                keys_deleted += 1
-            if keys_deleted > 0:
-                print(f"Invalidated {keys_deleted} devices_list cache(s).")
-
     except Exception as e:
         print(f"Failed to update reachability status for device {device_id}: {str(e)}")
