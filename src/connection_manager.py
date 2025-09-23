@@ -30,7 +30,7 @@ class ConnectionManager:
                     cls._instance._connection_locks = {}  # device_key -> lock
                     cls._instance._connection_counts = defaultdict(int)  # device_key -> count
                     cls._instance._max_connections_per_device = 2  # Default max connections per device
-                    cls._instance._connection_queues = {}  # device_key -> queue of waiting requests
+                    cls._instance._connection_conditions = {}  # device_key -> threading.Condition
                     cls._instance._executor = ThreadPoolExecutor(max_workers=settings.MAX_WORKER_THREADS)
                     cls._instance._executor_shutdown = False
         return cls._instance
@@ -53,59 +53,57 @@ class ConnectionManager:
         """Establishes a Netmiko connection to the device."""
         device_key = device_info.get_key()
         
-        # Ensure we have a lock and queue for this device
+        # Ensure we have a lock and condition for this device
         if device_key not in self._connection_locks:
             self._connection_locks[device_key] = threading.Lock()
-        if device_key not in self._connection_queues:
-            self._connection_queues[device_key] = queue.Queue()
+        if device_key not in self._connection_conditions:
+            # Use the existing lock for the condition
+            self._connection_conditions[device_key] = threading.Condition(self._connection_locks[device_key])
 
-        # Check if we've reached the maximum connections for this device
-        with self._connection_locks[device_key]:
-            if self._connection_counts[device_key] >= self._max_connections_per_device:
-                # Put the request in the queue and wait for a connection to be released
-                q = self._connection_queues[device_key]
-                # Create an event to signal when a connection is available
-                connection_available = threading.Event()
-                q.put(connection_available)
-                # Wait for a connection to be released
-                connection_available.wait()
-                # After being notified, check again if we can create a connection
-                if self._connection_counts[device_key] >= self._max_connections_per_device:
-                    # If we still can't create a connection, put the event back in the queue
-                    q.put(connection_available)
-                    raise DeviceUnreachableError(f"Maximum connections ({self._max_connections_per_device}) reached for device {device_key}")
+        with self._connection_conditions[device_key]:
+            while self._connection_counts[device_key] >= self._max_connections_per_device:
+                print(f"Max connections reached for {device_key}. Waiting for a connection to be released...")
+                self._connection_conditions[device_key].wait()
 
-        # Try to reuse an existing connection or create a new one
-        with self._connection_locks[device_key]:
-            # Check if we have an existing connection we can reuse
+            # At this point, we have a slot.
+
+            # Clean up stale connections and check for a reusable one
             if device_key in self._connections and self._connections[device_key]:
-                # Try to find a live connection
-                for i, connection in enumerate(self._connections[device_key]):
+                # Iterate over a copy of the list to allow for safe removal
+                for connection in list(self._connections[device_key]):
                     try:
-                        # Attempt a simple command to check if the connection is still live
-                        connection.find_prompt()
-                        print(f"Reusing existing connection to {device_info.ip_address}.")
-                        return connection
+                        if connection.is_alive():
+                            print(f"Reusing existing connection to {device_info.ip_address}.")
+                            return connection
+                        else:
+                            # This connection is stale, remove it from the pool
+                            print(f"Stale connection found for {device_info.ip_address}. Removing...")
+                            try:
+                                connection.disconnect()
+                            except Exception:
+                                pass  # Ignore errors on disconnect
+                            self._connections[device_key].remove(connection)
+                            self._connection_counts[device_key] -= 1
                     except Exception as e:
-                        print(f"Cached connection to {device_info.ip_address} is stale: {e}. Removing...")
-                        # Remove stale connection
+                        # Handle cases where is_alive() itself throws an error
+                        print(f"Error checking stale connection for {device_info.ip_address}: {e}. Removing...")
                         try:
                             connection.disconnect()
-                        except:
-                            pass
-                        finally:
-                            self._connections[device_key].pop(i)
+                        except Exception:
+                            pass  # Ignore errors on disconnect
+                        
+                        # Ensure the connection is removed even if it was already gone
+                        if connection in self._connections[device_key]:
+                            self._connections[device_key].remove(connection)
                             self._connection_counts[device_key] -= 1
 
-            # Establish a new connection
+            # If no reusable connection, establish a new one
+            print(f"Attempting to connect to {device_info.ip_address}...")
             try:
-                # Perform a quick TCP port check before attempting full Netmiko connection
-                print(f"Checking TCP port {device_info.port} on {device_info.ip_address}...")
+                # Perform a quick TCP port check
                 if not self._check_tcp_port_open(device_info.ip_address, device_info.port):
-                    raise DeviceUnreachableError(f"TCP connection to device {device_info.ip_address}:{device_info.port} failed. Port may be closed or device unreachable.")
+                    raise DeviceUnreachableError(f"TCP connection to device {device_info.ip_address}:{device_info.port} failed.")
                 
-                print(f"Attempting to connect to {device_info.ip_address}...")
-                # Use the mapped Netmiko device type
                 netmiko_type = NETMIKO_DEVICE_TYPE_MAP.get(device_info.device_type, device_info.device_type)
                 connection = ConnectHandler(
                     device_type=netmiko_type,
@@ -119,7 +117,6 @@ class ConnectionManager:
                     fast_cli=True,
                 )
                 
-                # Add the new connection to our pool
                 if device_key not in self._connections:
                     self._connections[device_key] = []
                 self._connections[device_key].append(connection)
@@ -137,23 +134,12 @@ class ConnectionManager:
     def _release_connection(self, device_info: DeviceConnectionInfo, connection):
         """Release a connection back to the pool."""
         device_key = device_info.get_key()
-        with self._connection_locks[device_key]:
-            if device_key in self._connections:
-                try:
-                    # Try to find and remove the connection from our pool
-                    if connection in self._connections[device_key]:
-                        self._connections[device_key].remove(connection)
-                        self._connection_counts[device_key] -= 1
-                        
-                        # Notify the next waiting request that a connection is available
-                        if device_key in self._connection_queues and not self._connection_queues[device_key].empty():
-                            try:
-                                next_request = self._connection_queues[device_key].get_nowait()
-                                next_request.set()
-                            except queue.Empty:
-                                pass
-                except Exception as e:
-                    print(f"Error releasing connection for {device_key}: {e}")
+        with self._connection_conditions[device_key]:
+            if device_key in self._connections and connection in self._connections[device_key]:
+                self._connections[device_key].remove(connection)
+                self._connection_counts[device_key] -= 1
+                # Notify one waiting thread that a connection is available
+                self._connection_conditions[device_key].notify()
 
     def get_connection(self, device_info: DeviceConnectionInfo, netmiko_device_type: str):
         """Submits a connection request to the thread pool and returns a Future."""
