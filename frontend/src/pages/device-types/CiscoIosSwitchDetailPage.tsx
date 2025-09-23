@@ -1071,9 +1071,10 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
         setShowToast(true);
       } else if (taskAction === 'executeCommand') {
         // Handle command execution result
-        const result = taskStatus.result;
-        setCommandOutput(result.output);
-        setDeviceLevel(result.device_level || null);
+        // The result can be in either 'result' or 'info' field depending on how the backend formats it
+        const output = taskStatus.result || taskStatus.info || "No output";
+        setCommandOutput(output);
+        setDeviceLevel(null); // Switch commands don't typically have a device level
         setExecutingCommand(false);
         setCommand("");
       }

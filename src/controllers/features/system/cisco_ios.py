@@ -100,3 +100,35 @@ class CiscoIosSystem(BaseSystem):
         except Exception as e:
             self.device_handler.logger.error(f"Error rebooting device: {e}")
             return str(e)
+
+    def execute_command(self, command: str) -> str:
+        """
+        Execute a command on the device.
+        """
+        try:
+            output = self.device_handler.send_command(command)
+            return output
+        except Exception as e:
+            self.device_handler.logger.error(f"Error executing command '{command}': {e}")
+            raise e
+
+    def execute_config_command(self, command: str) -> str:
+        """
+        Execute a configuration command on the device.
+        """
+        try:
+            # Enter configuration mode
+            self.device_handler.connection.config_mode()
+            # Execute the command
+            output = self.device_handler.connection.send_command_timing(command)
+            # Exit configuration mode
+            self.device_handler.connection.exit_config_mode()
+            return output
+        except Exception as e:
+            self.device_handler.logger.error(f"Error executing config command '{command}': {e}")
+            # Make sure to exit config mode even if there's an error
+            try:
+                self.device_handler.connection.exit_config_mode()
+            except:
+                pass
+            raise e

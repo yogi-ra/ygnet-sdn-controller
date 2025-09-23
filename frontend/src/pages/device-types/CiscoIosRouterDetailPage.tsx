@@ -225,17 +225,43 @@ const useInterfaces = (deviceId: string | undefined, enabled: boolean, isDeviceR
   };
 };
 
-// Separate hook for routing information with lazy loading
+// Separate hook for routing information with task-based fetching
 const useRoutingInfo = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
+  const [taskId, setTaskId] = useState<string | null>(null);
+  const [routingData, setRoutingData] = useState<any[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  return useQuery<any[], Error>({
-    queryKey: ["routingInfo", deviceId],
-    queryFn: async () => {
-      if (!token || !deviceId) {
-        throw new Error("Missing token or device ID");
+  const { taskStatus, loading: taskLoading, error: taskError } = useTaskPolling(taskId, {
+    interval: 250,
+    onSuccess: (result) => {
+      // Handle the case where result is an array directly (routing data)
+      if (Array.isArray(result)) {
+        setRoutingData(result);
+      } else {
+        setRoutingData([]);
       }
+      // Clear the task ID to stop polling
+      setTaskId(null);
+      setLoading(false);
+    },
+    onError: (err) => {
+      setError(err);
+      // Clear the task ID to stop polling
+      setTaskId(null);
+      setLoading(false);
+    }
+  });
+
+  const fetchRoutingInfo = useCallback(async () => {
+    if (!token || !deviceId || !enabled || !isDeviceReachable) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+      setTaskId(null); // Reset task ID before new request
       
       const response = await fetch(`/api/devices/${deviceId}/routing`, {
         headers: {
@@ -254,10 +280,46 @@ const useRoutingInfo = (deviceId: string | undefined, enabled: boolean, isDevice
       }
       
       const data = await response.json();
-      return Array.isArray(data) ? data : [];
-    },
-    enabled: enabled && isDeviceReachable, // Controlled by the enabled parameter
-  });
+      
+      // If we get a task_id, start polling
+      if (data && data.task_id) {
+        setTaskId(data.task_id);
+      } else if (Array.isArray(data)) {
+        // If we get direct data, use it
+        setRoutingData(data);
+        setLoading(false);
+      } else {
+        // Handle case where we get an unexpected response
+        setRoutingData([]);
+        setLoading(false);
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to fetch routing information");
+      setLoading(false);
+    }
+  }, [token, deviceId, enabled, isDeviceReachable, logout, navigate]);
+
+  // Reset state when deviceId or enabled changes
+  useEffect(() => {
+    setTaskId(null);
+    setRoutingData(null);
+    setLoading(false);
+    setError(null);
+  }, [deviceId, enabled]);
+
+  // Fetch data when enabled and device is reachable
+  useEffect(() => {
+    if (enabled && isDeviceReachable && deviceId) {
+      fetchRoutingInfo();
+    }
+  }, [enabled, isDeviceReachable, deviceId, fetchRoutingInfo]);
+
+  return {
+    data: routingData,
+    isFetching: loading || taskLoading,
+    error: error || taskError,
+    refetch: fetchRoutingInfo
+  };
 };
 
 // Helper function to determine if interface is administratively up
@@ -492,9 +554,10 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
         setTogglingInterfaces({});
       } else if (taskAction === 'executeCommand') {
         // Handle command execution result
-        const result = taskStatus.result;
-        setCommandOutput(result.output);
-        setDeviceLevel(result.device_level || null);
+        // The result can be in either 'result' or 'info' field depending on how the backend formats it
+        const output = taskStatus.result || taskStatus.info || "No output";
+        setCommandOutput(output);
+        setDeviceLevel(null); // Router commands don't typically have a device level
         setExecutingCommand(false);
         setCommand("");
       }

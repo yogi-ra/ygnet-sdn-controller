@@ -62,13 +62,24 @@ async def read_devices(
     # Update device objects with reachability status
     devices_with_reachability = []
     for i, db_device in enumerate(db_devices):
-        device_dict = db_device.__dict__.copy()
         # Handle potential exceptions in reachability checks
+        is_reachable = False
         if isinstance(reachability_results[i], Exception):
-            device_dict["is_reachable"] = False
+            is_reachable = False
         else:
-            device_dict["is_reachable"] = reachability_results[i]
-        devices_with_reachability.append(schemas.Device(**device_dict))
+            is_reachable = reachability_results[i]
+            
+        # Create Device schema object with required fields
+        device = schemas.Device(
+            id=db_device.id,
+            name=db_device.name,
+            ip_address=db_device.ip_address,
+            port=db_device.port,
+            device_type=db_device.device_type,
+            username=db_device.username,
+            is_reachable=is_reachable
+        )
+        devices_with_reachability.append(device)
 
     return devices_with_reachability
 
@@ -217,60 +228,10 @@ async def check_device_reachability(
     This function is made async to prevent blocking other requests.
     It updates the device's reachability status in the database.
     """
-    is_reachable = False
-    try:
-        db_device = crud.get_device(db, device_id=device_id)
-        if not db_device:
-            raise HTTPException(status_code=404, detail="Device not found")
-
-        handler = get_handler_from_device_id(device_id, db)
-
-        # Use asyncio.wait_for to add a timeout to the connection attempt
-        # The underlying ConnectionManager will use the fast TCP check.
-
-        def connect_handler():
-            with handler:
-                return True
-
-        loop = asyncio.get_event_loop()
-        with ThreadPoolExecutor() as executor:
-            result = await asyncio.wait_for(
-                loop.run_in_executor(executor, connect_handler),
-                timeout=settings.NETMIKO_TIMEOUT,  # Use general Netmiko timeout
-            )
-        is_reachable = result
-    except (asyncio.TimeoutError, DeviceTimeoutError):
-        print(f"Timeout checking reachability for device {device_id}")
-        is_reachable = False
-    except (
-        DeviceUnreachableError,
-        DeviceConnectionError,
-        DeviceAuthenticationError,
-    ) as e:
-        print(f"Error checking reachability for device {device_id}: {str(e)}")
-        is_reachable = False
-    except Exception as e:
-        print(
-            f"An unexpected error occurred during reachability check for device {device_id}: {str(e)}"
-        )
-        is_reachable = False
-
-    try:
-        # Re-fetch to ensure fresh object
-        db_device = crud.get_device(db, device_id=device_id)
-        if db_device and db_device.is_reachable != is_reachable:
-            # Create a DeviceUpdate object to update the reachability status
-            device_update = schemas.DeviceUpdate(is_reachable=is_reachable)
-            crud.update_device(db, device_id, device_update)
-            print(f"Updated reachability for device {device_id} to {is_reachable}")
-
-            redis_client = get_redis_client()
-            # Clear device detail cache
-            cache_key = f"device_detail:{device_id}"
-            if redis_client.exists(cache_key):
-                redis_client.delete(cache_key)
-
-    except Exception as e:
-        print(f"Failed to update reachability status for device {device_id}: {str(e)}")
-
+    # Import the function from device_reachability module
+    from ....device_reachability import check_device_reachability as check_reachability
+    
+    # Call the function from device_reachability module which directly updates the database
+    is_reachable = await check_reachability(device_id, db)
+    
     return is_reachable

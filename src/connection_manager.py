@@ -7,6 +7,10 @@ from netmiko import ConnectHandler, NetmikoTimeoutException, NetmikoAuthenticati
 from src.config import settings
 from src.device_info import DeviceConnectionInfo
 from src.exceptions import DeviceUnreachableError
+from src.database import SessionLocal
+from src.crud import crud
+from src.schemas import DeviceUpdate
+from src.cache import clear_device_cache, clear_devices_list_cache
 
 # Mapping from our internal device types to Netmiko device types
 NETMIKO_DEVICE_TYPE_MAP = {
@@ -68,22 +72,36 @@ class ConnectionManager:
             # At this point, we have a slot.
 
             # Clean up stale connections and check for a reusable one
+            # Always perform a TCP port check before reusing a connection
             if device_key in self._connections and self._connections[device_key]:
                 # Iterate over a copy of the list to allow for safe removal
                 for connection in list(self._connections[device_key]):
                     try:
-                        if connection.is_alive():
-                            print(f"Reusing existing connection to {device_info.ip_address}.")
-                            return connection
+                        # Perform a TCP port check before considering the connection alive
+                        if self._check_tcp_port_open(device_info.ip_address, device_info.port):
+                            if connection.is_alive():
+                                print(f"Reusing existing connection to {device_info.ip_address}.")
+                                return connection
+                            else:
+                                # This connection is stale, remove it from the pool
+                                print(f"Stale connection found for {device_info.ip_address}. Removing...")
+                                try:
+                                    connection.disconnect()
+                                except Exception:
+                                    pass  # Ignore errors on disconnect
+                                self._connections[device_key].remove(connection)
+                                self._connection_counts[device_key] -= 1
                         else:
-                            # This connection is stale, remove it from the pool
-                            print(f"Stale connection found for {device_info.ip_address}. Removing...")
+                            # Port is closed, mark device as unreachable and remove connection
+                            print(f"Device {device_info.ip_address} port is closed. Removing connection.")
                             try:
                                 connection.disconnect()
                             except Exception:
                                 pass  # Ignore errors on disconnect
                             self._connections[device_key].remove(connection)
                             self._connection_counts[device_key] -= 1
+                            # Update database and invalidate cache when device is unreachable
+                            self._update_device_reachability(device_info, False)
                     except Exception as e:
                         # Handle cases where is_alive() itself throws an error
                         print(f"Error checking stale connection for {device_info.ip_address}: {e}. Removing...")
@@ -102,6 +120,8 @@ class ConnectionManager:
             try:
                 # Perform a quick TCP port check
                 if not self._check_tcp_port_open(device_info.ip_address, device_info.port):
+                    # Update database and invalidate cache when device is unreachable
+                    self._update_device_reachability(device_info, False)
                     raise DeviceUnreachableError(f"TCP connection to device {device_info.ip_address}:{device_info.port} failed.")
                 
                 netmiko_type = NETMIKO_DEVICE_TYPE_MAP.get(device_info.device_type, device_info.device_type)
@@ -122,13 +142,32 @@ class ConnectionManager:
                 self._connections[device_key].append(connection)
                 self._connection_counts[device_key] += 1
                 
+                # Update database and invalidate cache when device is reachable
+                is_reachable = self._update_device_reachability(device_info, True)
+                if not is_reachable:
+                    # If update failed, raise an exception
+                    raise DeviceUnreachableError(f"Failed to update reachability for device {device_info.ip_address}")
+                
                 print(f"Successfully connected to {device_info.ip_address}.")
                 return connection
             except (NetmikoTimeoutException, NetmikoAuthenticationException) as e:
                 print(f"Connection failed for {device_info.ip_address}: {e}")
+                # Update database and invalidate cache when device is unreachable
+                is_reachable = self._update_device_reachability(device_info, False)
+                if is_reachable:
+                    # If update failed, raise an exception
+                    raise DeviceUnreachableError(f"Failed to update reachability for device {device_info.ip_address}")
+                raise
+            except DeviceUnreachableError:
+                # Already updated in the TCP port check, just re-raise
                 raise
             except Exception as e:
                 print(f"An unexpected error occurred during connection to {device_info.ip_address}: {e}")
+                # Update database and invalidate cache when device is unreachable
+                is_reachable = self._update_device_reachability(device_info, False)
+                if is_reachable:
+                    # If update failed, raise an exception
+                    raise DeviceUnreachableError(f"Failed to update reachability for device {device_info.ip_address}")
                 raise
 
     def _release_connection(self, device_info: DeviceConnectionInfo, connection):
@@ -230,6 +269,40 @@ class ConnectionManager:
                     self._release_connection(device_info, connection)
 
         return self._executor.submit(_execute_multiline_commands)
+
+    def _update_device_reachability(self, device_info: DeviceConnectionInfo, is_reachable: bool):
+        """
+        Update the device's reachability status in the database and invalidate cache.
+        """
+        if device_info.id is None:
+            # If device ID is not available, we can't update the database
+            return
+            
+        db = None
+        try:
+            db = SessionLocal()
+            db_device = crud.get_device(db, device_id=device_info.id)
+            
+            if db_device and db_device.is_reachable != is_reachable:
+                # Create a DeviceUpdate object to update the reachability status
+                device_update = DeviceUpdate(is_reachable=is_reachable)
+                crud.update_device(db, device_info.id, device_update)
+                print(f"Updated reachability for device {device_info.id} to {is_reachable}")
+
+                # Use the cache utility functions to clear device cache
+                from src.cache import clear_device_cache, clear_devices_list_cache
+                clear_device_cache(device_info.id)
+                clear_devices_list_cache()
+                
+                # Return the updated status directly from the database
+                return crud.get_device(db, device_id=device_info.id).is_reachable
+        except Exception as e:
+            print(f"Failed to update reachability status for device {device_info.id}: {str(e)}")
+        finally:
+            if db:
+                db.close()
+                
+        return is_reachable
 
     def set_max_connections_per_device(self, max_connections: int):
         """Set the maximum number of concurrent connections per device."""

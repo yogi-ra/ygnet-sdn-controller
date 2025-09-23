@@ -14,7 +14,6 @@ from .exceptions import (
     DeviceAuthenticationError
 )
 from .config import settings
-from .cache import get_redis_client
 from .api.utils import get_handler_from_device_id
 
 
@@ -64,14 +63,11 @@ async def check_device_reachability(device_id: int, db: Session):
         if db_device and db_device.is_reachable != is_reachable:
             # Create a DeviceUpdate object to update the reachability status
             device_update = DeviceUpdate(is_reachable=is_reachable)
-            crud.update_device(db, device_id, device_update)
+            updated_device = crud.update_device(db, device_id, device_update)
             print(f"Updated reachability for device {device_id} to {is_reachable}")
-
-            redis_client = get_redis_client()
-            # Clear device detail cache
-            cache_key = f"device_detail:{device_id}"
-            if redis_client.exists(cache_key):
-                redis_client.delete(cache_key)
+            
+            # Return the updated status directly from the database
+            return updated_device.is_reachable if updated_device else is_reachable
 
     except Exception as e:
         print(f"Failed to update reachability status for device {device_id}: {str(e)}")
