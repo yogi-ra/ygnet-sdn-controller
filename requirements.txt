@@ -14,3 +14,4 @@ ttp
 APScheduler
 pydantic_settings
 passlib
+celery

@@ -1,36 +1,25 @@
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from typing import Any, Dict
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 from ....cache import get_redis_client
 from ....database import get_db
 from ...decorators import cache_response
 from ...dependencies import require_read_privileges, require_write_privileges
 from ...utils import get_handler_from_device_id
+from ....tasks import execute_netmiko_command_task
 
 router = APIRouter(tags=["Device VLANs"])
 
-@router.get("/{device_id}/vlans/brief", dependencies=[Depends(require_read_privileges)])
-@cache_response("device_vlans_brief", ttl=300)
+@router.get("/{device_id}/vlans/brief", 
+            status_code=status.HTTP_202_ACCEPTED,
+            dependencies=[Depends(require_read_privileges)])
 def get_vlans_brief(request: Request, device_id: int, db: Session = Depends(get_db)):
     """
     Get brief VLAN information.
     """
-    handler = get_handler_from_device_id(device_id, db)
-    try:
-        with handler:
-            # Check if the device supports VLANs
-            if not hasattr(handler, "vlans"):
-                raise HTTPException(
-                    status_code=400, detail="Device does not support VLANs"
-                )
-
-            vlans = handler.vlans.get_vlan_brief()
-            return vlans
-    except Exception as e:
-        error_msg = f"Failed to get VLAN information for device {device_id}: {str(e)}"
-        print(error_msg)
-        raise HTTPException(status_code=500, detail=error_msg)
+    task = execute_netmiko_command_task.delay(device_id, "vlans.get_vlan_brief")
+    return {"task_id": task.id}
 
 
 @router.post("/{device_id}/vlans", dependencies=[Depends(require_write_privileges)])

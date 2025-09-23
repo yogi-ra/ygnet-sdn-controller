@@ -4,7 +4,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
 from .database import engine, Base
-from .api.routers import auth
+from .api.routers import auth, tasks
 from .api.routers.devices import router as devices_router
 from .tasks import check_device_for_changes, update_device_reachability_status # Import new task
 
@@ -51,6 +51,7 @@ app = FastAPI(
 # Include the API routers
 app.include_router(auth.router, prefix="/api")
 app.include_router(devices_router, prefix="/api")
+app.include_router(tasks.router, prefix="/api")
 
 
 @app.get("/")

@@ -4,11 +4,17 @@ import { useDevices } from "../hooks/useDevices";
 import { useConfig } from "../context/ConfigContext";
 import { toast } from "react-hot-toast";
 import { findDeviceTypeDisplayName } from "../utils/deviceTypes";
+import { useDeviceReachability } from "../hooks/useDeviceReachability";
 
 const DeviceListPage = () => {
   const navigate = useNavigate();
   const { devices, isLoading, isError, error, deleteDevice } = useDevices();
   const { deviceTypes } = useConfig();
+  const {
+    triggerReachabilityCheck,
+    isCheckingReachability,
+    reachabilityCheckError,
+  } = useDeviceReachability();
 
   const handleAddDevice = () => {
     navigate("/devices/add");
@@ -16,7 +22,7 @@ const DeviceListPage = () => {
 
   const handleDeleteDevice = (deviceId: string) => {
     if (window.confirm("Are you sure you want to delete this device?")) {
-      deleteDevice(deviceId, {
+      deleteDevice(Number(deviceId), {
         onSuccess: () => {
           toast.success("Device deleted successfully!");
         },
@@ -28,6 +34,10 @@ const DeviceListPage = () => {
     }
   };
 
+  const handleRefreshStatus = () => {
+    triggerReachabilityCheck();
+  };
+
   return (
     <Container fluid className="mt-4">
       <h1 className="mb-4">Devices</h1>
@@ -35,16 +45,33 @@ const DeviceListPage = () => {
         <Button variant="primary" onClick={handleAddDevice} disabled={isLoading}>
           Add New Device
         </Button>
-        {isLoading && (
-          <div className="d-flex align-items-center">
-            <Spinner animation="border" size="sm" role="status" className="me-2">
-              <span className="visually-hidden">Loading...</span>
-            </Spinner>
-            <span>Loading devices...</span>
-          </div>
-        )}
+        <Button
+          variant="secondary"
+          onClick={handleRefreshStatus}
+          disabled={isCheckingReachability}
+        >
+          {isCheckingReachability ? (
+            <>
+              <Spinner
+                as="span"
+                animation="border"
+                size="sm"
+                role="status"
+                aria-hidden="true"
+              />
+              <span className="ms-2">Checking Status...</span>
+            </>
+          ) : (
+            "Refresh Status"
+          )}
+        </Button>
       </div>
-      {isError && <Alert variant="danger">Failed to load devices.</Alert>}
+      {isError && <Alert variant="danger">Failed to load devices: {error?.message}</Alert>}
+      {reachabilityCheckError && (
+        <Alert variant="danger">
+          Failed to check device reachability: {reachabilityCheckError.message}
+        </Alert>
+      )}
       {!isLoading && !isError && devices && devices.length === 0 && (
         <Alert variant="info">
           No devices found. Click "Add New Device" to add one.
@@ -65,57 +92,88 @@ const DeviceListPage = () => {
               </tr>
             </thead>
             <tbody>
-              {Array.isArray(devices) && devices.map((device) => (
-                <tr key={device.id}>
-                  <td>{device.name}</td>
-                  <td>{findDeviceTypeDisplayName(deviceTypes || [], device.device_type)}</td>
-                  <td>{device.ip_address}</td>
-                  <td>{device.port}</td>
-                  <td>{device.username}</td>
-                  <td>
-                    {device.is_reachable === true ? (
-                      <span style={{ color: 'green', fontWeight: 'bold' }}>Online</span>
-                    ) : (
-                      <span style={{ color: 'red', fontWeight: 'bold' }}>Offline</span>
-                    )}
-                  </td>
-                  <td>
-                    <Button
-                      variant="info"
-                      size="sm"
-                      className="me-2"
-                      onClick={() => {
-                        if (device.is_reachable === false) {
-                          toast.error("Cannot view details for an offline device.");
-                        } else {
-                          navigate(`/devices/${device.id}`, { state: { device } });
+              {Array.isArray(devices) &&
+                devices.map((device) => (
+                  <tr key={device.id}>
+                    <td>{device.name}</td>
+                    <td>
+                      {findDeviceTypeDisplayName(
+                        deviceTypes || [],
+                        device.device_type
+                      )}
+                    </td>
+                    <td>{device.ip_address}</td>
+                    <td>{device.port}</td>
+                    <td>{device.username}</td>
+                    <td>
+                      {device.is_reachable === true ? (
+                        <span style={{ color: "green", fontWeight: "bold" }}>
+                          Online
+                        </span>
+                      ) : device.is_reachable === false ? (
+                        <span style={{ color: "red", fontWeight: "bold" }}>
+                          Offline
+                        </span>
+                      ) : (
+                        <span style={{ color: "gray", fontStyle: "italic" }}>
+                          Checking...
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      <Button
+                        variant="info"
+                        size="sm"
+                        className="me-2"
+                        onClick={() => {
+                          if (device.is_reachable === false) {
+                            toast.error(
+                              "Cannot view details for an offline device."
+                            );
+                          } else {
+                            navigate(`/devices/${device.id}`, {
+                              state: { device },
+                            });
+                          }
+                        }}
+                        disabled={device.is_reachable === false}
+                        style={
+                          device.is_reachable === false
+                            ? { opacity: 0.5, cursor: "not-allowed" }
+                            : {}
                         }
-                      }}
-                      disabled={device.is_reachable === false}
-                      style={device.is_reachable === false ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
-                      title={device.is_reachable === false ? "Device is offline" : "View device details"}
-                    >
-                      View
-                    </Button>
-                    <Button
-                      variant="warning"
-                      size="sm"
-                      className="me-2"
-                      onClick={() => navigate(`/devices/edit/${device.id}`, { state: { device: { ...device, id: Number(device.id) } } })}
-                    >
-                      Edit
-                    </Button>
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      onClick={() => handleDeleteDevice(device.id)}
-                    >
-                      Delete
-                    </Button>
-                    
-                  </td>
-                </tr>
-              ))}
+                        title={
+                          device.is_reachable === false
+                            ? "Device is offline"
+                            : "View device details"
+                        }
+                      >
+                        View
+                      </Button>
+                      <Button
+                        variant="warning"
+                        size="sm"
+                        className="me-2"
+                        onClick={() =>
+                          navigate(`/devices/edit/${device.id}`, {
+                            state: {
+                              device: { ...device, id: Number(device.id) },
+                            },
+                          })
+                        }
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        onClick={() => handleDeleteDevice(device.id.toString())}
+                      >
+                        Delete
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
             </tbody>
           </Table>
         </div>

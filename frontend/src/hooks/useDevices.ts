@@ -14,6 +14,7 @@ export const useDevices = () => {
   } = useQuery<Device[], Error>({
     queryKey: ["devices"],
     queryFn: () => fetchDevices(token),
+    refetchOnWindowFocus: false,
   });
 
   const deleteDeviceMutation = useMutation({

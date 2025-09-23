@@ -5,7 +5,7 @@ from ...decorators import cache_response
 from ...dependencies import (
     require_read_privileges,
 )
-from ...utils import get_handler_from_device_id
+from ....tasks import execute_netmiko_command_task
 
 router = APIRouter(tags=["Device Discovery"])
 
@@ -18,16 +18,8 @@ def get_arp_table(request: Request, device_id: int, db: Session = Depends(get_db
     """
     Get ARP table information.
     """
-    handler = get_handler_from_device_id(device_id, db)
-    try:
-        with handler:
-            arp_table = handler.arp.get_arp_interface()
-            return arp_table
-    except Exception as e:
-        error_msg = f"Failed to get ARP table for device {device_id}: {str(e)}"
-        print(error_msg)
-        raise HTTPException(status_code=500, detail=error_msg)
-
+    task = execute_netmiko_command_task.delay(device_id, "arp.get_arp_interface")
+    return {"task_id": task.id}
 
 @router.get("/{device_id}/cdp", dependencies=[Depends(require_read_privileges)])
 @cache_response("device_cdp_neighbors", ttl=300)
@@ -35,16 +27,8 @@ def get_cdp_neighbors(request: Request, device_id: int, db: Session = Depends(ge
     """
     Get CDP neighbors information.
     """
-    handler = get_handler_from_device_id(device_id, db)
-    try:
-        with handler:
-            cdp_neighbors = handler.cdp.get_cdp_neighbors()
-            return cdp_neighbors
-    except Exception as e:
-        error_msg = f"Failed to get CDP neighbors for device {device_id}: {str(e)}"
-        print(error_msg)
-        raise HTTPException(status_code=500, detail=error_msg)
-
+    task = execute_netmiko_command_task.delay(device_id, "cdp.get_cdp_neighbors")
+    return {"task_id": task.id}
 
 @router.get("/{device_id}/lldp", dependencies=[Depends(require_read_privileges)])
 @cache_response("device_lldp_neighbors", ttl=300)
@@ -52,13 +36,5 @@ def get_lldp_neighbors(request: Request, device_id: int, db: Session = Depends(g
     """
     Get LLDP neighbors information.
     """
-    handler = get_handler_from_device_id(device_id, db)
-    try:
-        with handler:
-            lldp_neighbors = handler.lldp.get_lldp_neighbors()
-            return lldp_neighbors
-    except Exception as e:
-        error_msg = f"Failed to get LLDP neighbors for device {device_id}: {str(e)}"
-        print(error_msg)
-        raise HTTPException(status_code=500, detail=error_msg)
-
+    task = execute_netmiko_command_task.delay(device_id, "lldp.get_lldp_neighbors")
+    return {"task_id": task.id}

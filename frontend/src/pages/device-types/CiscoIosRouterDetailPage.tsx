@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   Container,
@@ -17,6 +17,7 @@ import {
 } from "react-bootstrap";
 import { useAuth } from "../../hooks/useAuth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTaskPolling } from "../../hooks/useTaskPolling";
 
 const useSystemInfo = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean, deviceData: any) => {
   // Return the version information from the passed device data instead of making another request
@@ -27,18 +28,47 @@ const useSystemInfo = (deviceId: string | undefined, enabled: boolean, isDeviceR
   };
 };
 
-// Separate hook for clock information
+// Separate hook for clock information with task-based fetching
 const useClockInfo = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
+  const [taskId, setTaskId] = useState<string | null>(null);
+  const [clockData, setClockData] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  return useQuery<string, Error>({
-    queryKey: ["clockInfo", deviceId],
-    queryFn: async () => {
-      if (!token || !deviceId) {
-        throw new Error("Missing token or device ID");
+  const { taskStatus, loading: taskLoading, error: taskError } = useTaskPolling(taskId, {
+    interval: 250,
+    onSuccess: (result) => {
+      // Handle the case where result is a string directly (clock data)
+      if (typeof result === 'string') {
+        setClockData(result || "N/A");
+      } else if (result && typeof result === 'object' && result.clock) {
+        // Handle the case where result is an object with a clock property
+        setClockData(result.clock || "N/A");
+      } else {
+        setClockData("N/A");
       }
+      // Clear the task ID to stop polling
+      setTaskId(null);
+      setLoading(false);
+    },
+    onError: (err) => {
+      setError(err);
+      // Clear the task ID to stop polling
+      setTaskId(null);
+      setLoading(false);
+    }
+  });
 
+  const fetchClockInfo = useCallback(async () => {
+    if (!token || !deviceId || !enabled || !isDeviceReachable) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+      setTaskId(null); // Reset task ID before new request
+      
       const response = await fetch(`/api/devices/${deviceId}/system/clock`, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -56,23 +86,85 @@ const useClockInfo = (deviceId: string | undefined, enabled: boolean, isDeviceRe
       }
       
       const data = await response.json();
-      return data.clock || "N/A";
-    },
-    enabled: enabled && isDeviceReachable, // Controlled by the enabled parameter
-  });
+      
+      // If we get a task_id, start polling
+      if (data && data.task_id) {
+        setTaskId(data.task_id);
+      } else if (data && data.clock) {
+        // If we get direct data, use it
+        setClockData(data.clock || "N/A");
+        setLoading(false);
+      } else {
+        // Handle case where we get an unexpected response
+        setClockData("N/A");
+        setLoading(false);
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to fetch clock information");
+      setLoading(false);
+    }
+  }, [token, deviceId, enabled, isDeviceReachable, logout, navigate]);
+
+  // Reset state when deviceId or enabled changes
+  useEffect(() => {
+    setTaskId(null);
+    setClockData(null);
+    setLoading(false);
+    setError(null);
+  }, [deviceId, enabled]);
+
+  // Fetch data when enabled and device is reachable
+  useEffect(() => {
+    if (enabled && isDeviceReachable && deviceId) {
+      fetchClockInfo();
+    }
+  }, [enabled, isDeviceReachable, deviceId, fetchClockInfo]);
+
+  return {
+    data: clockData,
+    isFetching: loading || taskLoading,
+    error: error || taskError,
+    refetch: fetchClockInfo
+  };
 };
 
-// Separate hook for interfaces with lazy loading
+// Separate hook for interfaces with task-based fetching
 const useInterfaces = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
+  const [taskId, setTaskId] = useState<string | null>(null);
+  const [interfacesData, setInterfacesData] = useState<any[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  return useQuery<any[], Error>({
-    queryKey: ["interfacesBrief", deviceId],
-    queryFn: async () => {
-      if (!token || !deviceId) {
-        throw new Error("Missing token or device ID");
+  const { taskStatus, loading: taskLoading, error: taskError } = useTaskPolling(taskId, {
+    interval: 250,
+    onSuccess: (result) => {
+      // Handle the case where result is an array directly (interfaces data)
+      if (Array.isArray(result)) {
+        setInterfacesData(result);
+      } else {
+        setInterfacesData([]);
       }
+      // Clear the task ID to stop polling
+      setTaskId(null);
+      setLoading(false);
+    },
+    onError: (err) => {
+      setError(err);
+      // Clear the task ID to stop polling
+      setTaskId(null);
+      setLoading(false);
+    }
+  });
+
+  const fetchInterfaces = useCallback(async () => {
+    if (!token || !deviceId || !enabled || !isDeviceReachable) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+      setTaskId(null); // Reset task ID before new request
       
       const response = await fetch(`/api/devices/${deviceId}/interfaces/brief`, {
         headers: {
@@ -91,11 +183,46 @@ const useInterfaces = (deviceId: string | undefined, enabled: boolean, isDeviceR
       }
       
       const data = await response.json();
-      // Ensure we return an array
-      return Array.isArray(data) ? data : [];
-    },
-    enabled: enabled && isDeviceReachable, // Controlled by the enabled parameter
-  });
+      
+      // If we get a task_id, start polling
+      if (data && data.task_id) {
+        setTaskId(data.task_id);
+      } else if (Array.isArray(data)) {
+        // If we get direct data, use it
+        setInterfacesData(data);
+        setLoading(false);
+      } else {
+        // Handle case where we get an unexpected response
+        setInterfacesData([]);
+        setLoading(false);
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to fetch interfaces");
+      setLoading(false);
+    }
+  }, [token, deviceId, enabled, isDeviceReachable, logout, navigate]);
+
+  // Reset state when deviceId or enabled changes
+  useEffect(() => {
+    setTaskId(null);
+    setInterfacesData(null);
+    setLoading(false);
+    setError(null);
+  }, [deviceId, enabled]);
+
+  // Fetch data when enabled and device is reachable
+  useEffect(() => {
+    if (enabled && isDeviceReachable && deviceId) {
+      fetchInterfaces();
+    }
+  }, [enabled, isDeviceReachable, deviceId, fetchInterfaces]);
+
+  return {
+    data: interfacesData,
+    isFetching: loading || taskLoading,
+    error: error || taskError,
+    refetch: fetchInterfaces
+  };
 };
 
 // Separate hook for routing information with lazy loading
@@ -173,9 +300,24 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
     refetchInterval: 5000, // Poll reachability every 5 seconds
   });
   
+  // Task state
+  const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
+  const [taskAction, setTaskAction] = useState<string | null>(null);
+  
+  // Use task polling hook
+  const { taskStatus, loading: taskLoading, error: taskError } = useTaskPolling(currentTaskId, {
+    interval: 1000,
+    onSuccess: () => {
+      // Invalidate relevant queries to refresh data after task completion
+      if (taskAction === 'toggleInterface') {
+        queryClient.invalidateQueries({ queryKey: ["interfacesBrief", id] });
+      }
+    }
+  });
+  
   // Lazy load data based on active tab
   const { data: systemInfo, isLoading: systemLoading, error: systemError } = useSystemInfo(id, activeTab === "overview", isReachable, device);
-  const { data: clockInfo, isFetching: clockLoading, error: clockError } = useClockInfo(id, activeTab === "overview", isReachable);
+  const { data: clockInfo, isFetching: clockLoading, error: clockError, refetch: refetchClock } = useClockInfo(id, activeTab === "overview", isReachable);
   const { data: interfaces, isFetching: interfacesLoading, error: interfacesError, refetch: refetchInterfaces } = useInterfaces(id, activeTab === "interfaces", isReachable);
   const { data: routingInfo, isFetching: routingLoading, error: routingError } = useRoutingInfo(id, activeTab === "routing", isReachable);
   
@@ -208,6 +350,7 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
     
     // Set loading state for this interface
     setTogglingInterfaces(prev => ({ ...prev, [interfaceName]: true }));
+    setTaskAction('toggleInterface');
     
     // Toggle based on administrative state, not operational state
     const newState = !isInterfaceAdminUp(currentState);
@@ -233,6 +376,9 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
         throw new Error(errorData.detail || "Failed to toggle interface");
       }
       
+      const data = await response.json();
+      setCurrentTaskId(data.task_id);
+      
       // Clear device cache to ensure we get fresh data from the device
       await fetch(`/api/devices/${id}/cache/clear`, {
         method: "POST",
@@ -241,21 +387,12 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
           Authorization: `Bearer ${token}`,
         },
       });
-      
-      // Invalidate all relevant queries to force refresh
-      queryClient.invalidateQueries({ queryKey: ["interfacesBrief", id] });
-      
-      // Show success toast
-      setToastMessage(`Successfully ${newState ? 'enabled' : 'disabled'} interface ${interfaceName}`);
-      setToastVariant('success');
-      setShowToast(true);
     } catch (err: any) {
       console.error("Error toggling interface:", err);
       // Show error toast
       setToastMessage(`Error toggling interface: ${err.message || "Unknown error"}`);
       setToastVariant('danger');
       setShowToast(true);
-    } finally {
       // Reset loading state for this interface
       setTogglingInterfaces(prev => {
         const newState = { ...prev };
@@ -270,6 +407,7 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
     setExecutingCommand(true);
     setCommandOutput(null);
     setCommandError(null);
+    setTaskAction('executeCommand');
 
     const endpoint = `/api/devices/${id}/execute-command`;
     const payload = { command, is_config: isConfigCommand };
@@ -290,17 +428,15 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
         return;
       }
 
-      const data = await response.json();
-
       if (!response.ok) {
+        const data = await response.json();
         throw new Error(data.detail || "Failed to execute command");
       }
 
-      setCommandOutput(data.output);
-      setDeviceLevel(data.device_level || null);
+      const data = await response.json();
+      setCurrentTaskId(data.task_id);
     } catch (err: any) {
       setCommandError(err.message || "An unknown error occurred.");
-    } finally {
       setExecutingCommand(false);
       setCommand("");
     }
@@ -343,6 +479,50 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
     }
   };
 
+  // Handle task completion
+  useEffect(() => {
+    if (taskStatus?.status === 'SUCCESS') {
+      if (taskAction === 'toggleInterface') {
+        // Show success toast
+        setToastMessage('Interface toggled successfully');
+        setToastVariant('success');
+        setShowToast(true);
+        
+        // Reset interface loading states
+        setTogglingInterfaces({});
+      } else if (taskAction === 'executeCommand') {
+        // Handle command execution result
+        const result = taskStatus.result;
+        setCommandOutput(result.output);
+        setDeviceLevel(result.device_level || null);
+        setExecutingCommand(false);
+        setCommand("");
+      }
+      
+      // Reset task state
+      setCurrentTaskId(null);
+      setTaskAction(null);
+    } else if (taskStatus?.status === 'FAILURE') {
+      // Handle task failure
+      const errorMessage = taskStatus.error || 'Task failed';
+      
+      if (taskAction === 'toggleInterface') {
+        setToastMessage(`Error toggling interface: ${errorMessage}`);
+        setToastVariant('danger');
+        setShowToast(true);
+        setTogglingInterfaces({});
+      } else if (taskAction === 'executeCommand') {
+        setCommandError(errorMessage);
+        setExecutingCommand(false);
+        setCommand("");
+      }
+      
+      // Reset task state
+      setCurrentTaskId(null);
+      setTaskAction(null);
+    }
+  }, [taskStatus, taskAction]);
+
   return (
     <Container fluid className="mt-4">
       <Row className="mb-4">
@@ -374,6 +554,29 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
           </Card>
         </Col>
       </Row>
+
+      {(taskLoading || currentTaskId) && (
+        <Row className="mb-3">
+          <Col>
+            <Alert variant="info">
+              <div className="d-flex align-items-center">
+                <Spinner animation="border" size="sm" className="me-2" />
+                <span>Processing task: {taskAction === 'toggleInterface' ? 'Toggling interface' : 'Executing command'}...</span>
+              </div>
+            </Alert>
+          </Col>
+        </Row>
+      )}
+
+      {taskError && (
+        <Row className="mb-3">
+          <Col>
+            <Alert variant="danger">
+              Error processing task: {taskError}
+            </Alert>
+          </Col>
+        </Row>
+      )}
 
       <Tabs
         activeKey={activeTab}
@@ -415,7 +618,15 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
                         </tr>
                         <tr>
                           <td><strong>Clock:</strong></td>
-                          <td>{clockInfo || "N/A"}</td>
+                          <td>
+                            {clockLoading ? (
+                              <Spinner animation="border" size="sm" />
+                            ) : clockError ? (
+                              <span className="text-danger">Error: {clockError}</span>
+                            ) : (
+                              clockInfo || "N/A"
+                            )}
+                          </td>
                         </tr>
                       </tbody>
                     </Table>
@@ -470,9 +681,10 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
                                   iface.interface || iface.intf || "",
                                   iface.status || ""
                                 )}
-                                disabled={!device?.is_reachable || togglingInterfaces[iface.interface || iface.intf || ""]}
+                                disabled={!device?.is_reachable || togglingInterfaces[iface.interface || iface.intf || ""] || !!currentTaskId}
                               >
-                                {togglingInterfaces[iface.interface || iface.intf || ""] ? (
+                                {(togglingInterfaces[iface.interface || iface.intf || ""] || 
+                                  (currentTaskId && taskAction === 'toggleInterface')) ? (
                                   <>
                                     <Spinner
                                       as="span"
@@ -565,6 +777,7 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
                         value={command}
                         onChange={(e) => setCommand(e.target.value)}
                         required
+                        disabled={executingCommand || !!currentTaskId}
                       />
                     </Form.Group>
                     <Form.Group
@@ -576,14 +789,15 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
                         label="Configuration Command"
                         checked={isConfigCommand}
                         onChange={(e) => setIsConfigCommand(e.target.checked)}
+                        disabled={executingCommand || !!currentTaskId}
                       />
                     </Form.Group>
                     <Button
                       variant="primary"
                       type="submit"
-                      disabled={executingCommand}
+                      disabled={executingCommand || !!currentTaskId}
                     >
-                      {executingCommand ? (
+                      {(executingCommand || (currentTaskId && taskAction === 'executeCommand')) ? (
                         <Spinner as="span" animation="border" size="sm" />
                       ) : (
                         "Execute"

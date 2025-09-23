@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     NETMIKO_TIMEOUT: int = int(os.getenv("NETMIKO_TIMEOUT", 60))
     NETMIKO_READ_TIMEOUT: int = int(os.getenv("NETMIKO_READ_TIMEOUT", 60))
     MAX_WORKER_THREADS: int = int(os.getenv("MAX_WORKER_THREADS", 10)) # Added this line
+    CELERY_BROKER_URL: str = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
+    CELERY_RESULT_BACKEND: str = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
 
 
 settings = Settings()

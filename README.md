@@ -17,6 +17,7 @@ It provides a RESTful interface to manage and interact with network devices from
 - **Caching:** Redis
 - **Authentication:** JWT
 - **Testing:** Pytest
+- **Asynchronous Processing:** Celery, Redis
 
 ## Architecture
 
@@ -30,6 +31,8 @@ It provides a RESTful interface to manage and interact with network devices from
 - **`src/security.py`**: Authentication + password hashing.
 - **`src/tasks.py`**: Scheduler for unknown device update.
 - **`src/config.py`**: Application settings and environment.
+- **`src/celery_app.py`**: Celery application configuration.
+- **`src/tasks.py`**: Celery tasks for asynchronous device command execution.
 
 ## Supported Device Types
 
@@ -45,6 +48,34 @@ It provides a RESTful interface to manage and interact with network devices from
 
 - **`GET /api/devices/supported-features`**: Returns a mapping of device types to their supported features. This endpoint helps frontend developers understand what features are available for each device type.
 - **Device-type specific views**: The frontend implements static views for specific device types (e.g., Cisco IOS Router, Cisco IOS Switch) to improve performance and maintainability.
+
+## Asynchronous Architecture
+
+To improve scalability and prevent API timeouts from long-running device commands, the backend uses a job queue system with Celery and Redis. This changes the command execution from a synchronous (blocking) model to an asynchronous (non-blocking) one.
+
+### How It Works
+
+1. **Job Creation**: When a client requests data (e.g., `GET /api/devices/{device_id}/system/version`), instead of executing the command directly, the API creates a job and returns a job ID immediately.
+2. **Job Processing**: The job is added to a queue and processed by a Celery worker.
+3. **Job Status Checking**: The client can check the job status using `GET /api/tasks/{task_id}`.
+4. **Results Retrieval**: When the job is completed, the client receives the actual result.
+
+### API Flow
+
+1. **Initial Request**: The client makes a request to an existing endpoint (e.g., `GET /api/devices/{device_id}/system/version`).
+2. **Job Creation**: The backend creates a job for the command and adds it to the queue.
+3. **Immediate Response**: The backend immediately responds with `{"task_id": "some-unique-id"}`.
+4. **Polling**: The frontend polls the `/api/tasks/{task_id}` endpoint periodically.
+5. **Result Retrieval**: When the status is `SUCCESS`, the frontend updates the UI with the received result.
+6. **Error Handling**: If the status is `FAILURE`, the frontend displays an error message.
+
+### Running the Celery Worker
+
+To process the queued jobs, you need to run the Celery worker:
+
+```bash
+celery -A src.celery_app worker --loglevel=info
+```
 
 ## Building and Running
 

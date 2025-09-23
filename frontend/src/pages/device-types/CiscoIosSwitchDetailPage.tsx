@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   Container,
@@ -21,6 +21,7 @@ import { useAuth } from "../../hooks/useAuth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAssignPortToVlan, useChangeVlanName, useCreateVlan, useDeleteVlan } from '../../api/vlans';
 import { useConfigureInterfaceVlan } from '../../api/interfaces';
+import { useTaskPolling } from "../../hooks/useTaskPolling";
 
 // Separate hook for system information with lazy loading
 const useSystemInfo = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean, deviceData: any) => {
@@ -32,18 +33,47 @@ const useSystemInfo = (deviceId: string | undefined, enabled: boolean, isDeviceR
   };
 };
 
-// Separate hook for clock information
+// Separate hook for clock information with task-based fetching
 const useClockInfo = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
+  const [taskId, setTaskId] = useState<string | null>(null);
+  const [clockData, setClockData] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  return useQuery<string, Error>({
-    queryKey: ["clockInfo", deviceId],
-    queryFn: async () => {
-      if (!token || !deviceId) {
-        throw new Error("Missing token or device ID");
+  const { taskStatus, loading: taskLoading, error: taskError } = useTaskPolling(taskId, {
+    interval: 250,
+    onSuccess: (result) => {
+      // Handle the case where result is a string directly (clock data)
+      if (typeof result === 'string') {
+        setClockData(result || "N/A");
+      } else if (result && typeof result === 'object' && result.clock) {
+        // Handle the case where result is an object with a clock property
+        setClockData(result.clock || "N/A");
+      } else {
+        setClockData("N/A");
       }
+      // Clear the task ID to stop polling
+      setTaskId(null);
+      setLoading(false);
+    },
+    onError: (err) => {
+      setError(err);
+      // Clear the task ID to stop polling
+      setTaskId(null);
+      setLoading(false);
+    }
+  });
 
+  const fetchClockInfo = useCallback(async () => {
+    if (!token || !deviceId || !enabled || !isDeviceReachable) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+      setTaskId(null); // Reset task ID before new request
+      
       const response = await fetch(`/api/devices/${deviceId}/system/clock`, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -61,24 +91,85 @@ const useClockInfo = (deviceId: string | undefined, enabled: boolean, isDeviceRe
       }
       
       const data = await response.json();
-      return data.clock || "N/A";
-    },
-    enabled: enabled && isDeviceReachable, // Controlled by the enabled parameter and device reachability
-  });
+      
+      // If we get a task_id, start polling
+      if (data && data.task_id) {
+        setTaskId(data.task_id);
+      } else if (data && data.clock) {
+        // If we get direct data, use it
+        setClockData(data.clock || "N/A");
+        setLoading(false);
+      } else {
+        // Handle case where we get an unexpected response
+        setClockData("N/A");
+        setLoading(false);
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to fetch clock information");
+      setLoading(false);
+    }
+  }, [token, deviceId, enabled, isDeviceReachable, logout, navigate]);
+
+  // Reset state when deviceId or enabled changes
+  useEffect(() => {
+    setTaskId(null);
+    setClockData(null);
+    setLoading(false);
+    setError(null);
+  }, [deviceId, enabled]);
+
+  // Fetch data when enabled and device is reachable
+  useEffect(() => {
+    if (enabled && isDeviceReachable && deviceId) {
+      fetchClockInfo();
+    }
+  }, [enabled, isDeviceReachable, deviceId, fetchClockInfo]);
+
+  return {
+    data: clockData,
+    isFetching: loading || taskLoading,
+    error: error || taskError,
+    refetch: fetchClockInfo
+  };
 };
 
-// Separate hook for interfaces with lazy loading - fetch once for both interfaces and VLANs tabs
-// to avoid duplicate API calls to the same endpoint
+// Separate hook for interfaces with task-based fetching
 const useInterfaces = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
+  const [taskId, setTaskId] = useState<string | null>(null);
+  const [interfacesData, setInterfacesData] = useState<any[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  return useQuery<any[], Error>({
-    queryKey: ["interfacesBrief", deviceId],
-    queryFn: async () => {
-      if (!token || !deviceId) {
-        throw new Error("Missing token or device ID");
+  const { taskStatus, loading: taskLoading, error: taskError } = useTaskPolling(taskId, {
+    interval: 250,
+    onSuccess: (result) => {
+      // Handle the case where result is an array directly (interfaces data)
+      if (Array.isArray(result)) {
+        setInterfacesData(result);
+      } else {
+        setInterfacesData([]);
       }
+      // Clear the task ID to stop polling
+      setTaskId(null);
+      setLoading(false);
+    },
+    onError: (err) => {
+      setError(err);
+      // Clear the task ID to stop polling
+      setTaskId(null);
+      setLoading(false);
+    }
+  });
+
+  const fetchInterfaces = useCallback(async () => {
+    if (!token || !deviceId || !enabled || !isDeviceReachable) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+      setTaskId(null); // Reset task ID before new request
       
       const response = await fetch(`/api/devices/${deviceId}/interfaces/brief`, {
         headers: {
@@ -97,25 +188,85 @@ const useInterfaces = (deviceId: string | undefined, enabled: boolean, isDeviceR
       }
       
       const data = await response.json();
-      // Ensure we return an array
-      return Array.isArray(data) ? data : [];
-    },
-    enabled: enabled && isDeviceReachable, // Controlled by the enabled parameter and device reachability
-    staleTime: 1000 * 60 * 5, // Keep data fresh for 5 minutes
-  });
+      
+      // If we get a task_id, start polling
+      if (data && data.task_id) {
+        setTaskId(data.task_id);
+      } else if (Array.isArray(data)) {
+        // If we get direct data, use it
+        setInterfacesData(data);
+        setLoading(false);
+      } else {
+        // Handle case where we get an unexpected response
+        setInterfacesData([]);
+        setLoading(false);
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to fetch interfaces");
+      setLoading(false);
+    }
+  }, [token, deviceId, enabled, isDeviceReachable, logout, navigate]);
+
+  // Reset state when deviceId or enabled changes
+  useEffect(() => {
+    setTaskId(null);
+    setInterfacesData(null);
+    setLoading(false);
+    setError(null);
+  }, [deviceId, enabled]);
+
+  // Fetch data when enabled and device is reachable
+  useEffect(() => {
+    if (enabled && isDeviceReachable && deviceId) {
+      fetchInterfaces();
+    }
+  }, [enabled, isDeviceReachable, deviceId, fetchInterfaces]);
+
+  return {
+    data: interfacesData,
+    isFetching: loading || taskLoading,
+    error: error || taskError,
+    refetch: fetchInterfaces
+  };
 };
 
-// Separate hook for VLAN information with lazy loading
+// Separate hook for VLAN information with task-based fetching
 const useVlanInfo = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
+  const [taskId, setTaskId] = useState<string | null>(null);
+  const [vlanData, setVlanData] = useState<any[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  return useQuery<any[], Error>({
-    queryKey: ["vlanInfo", deviceId],
-    queryFn: async () => {
-      if (!token || !deviceId) {
-        throw new Error("Missing token or device ID");
+  const { taskStatus, loading: taskLoading, error: taskError } = useTaskPolling(taskId, {
+    interval: 250,
+    onSuccess: (result) => {
+      // Handle the case where result is an array directly (VLAN data)
+      if (Array.isArray(result)) {
+        setVlanData(result);
+      } else {
+        setVlanData([]);
       }
+      // Clear the task ID to stop polling
+      setTaskId(null);
+      setLoading(false);
+    },
+    onError: (err) => {
+      setError(err);
+      // Clear the task ID to stop polling
+      setTaskId(null);
+      setLoading(false);
+    }
+  });
+
+  const fetchVlanInfo = useCallback(async () => {
+    if (!token || !deviceId || !enabled || !isDeviceReachable) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+      setTaskId(null); // Reset task ID before new request
       
       const response = await fetch(`/api/devices/${deviceId}/vlans/brief`, {
         headers: {
@@ -134,24 +285,85 @@ const useVlanInfo = (deviceId: string | undefined, enabled: boolean, isDeviceRea
       }
       
       const data = await response.json();
-      // Ensure we return an array
-      return Array.isArray(data) ? data : [];
-    },
-    enabled: enabled && isDeviceReachable, // Controlled by the enabled parameter and device reachability
-  });
+      
+      // If we get a task_id, start polling
+      if (data && data.task_id) {
+        setTaskId(data.task_id);
+      } else if (Array.isArray(data)) {
+        // If we get direct data, use it
+        setVlanData(data);
+        setLoading(false);
+      } else {
+        // Handle case where we get an unexpected response
+        setVlanData([]);
+        setLoading(false);
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to fetch VLANs");
+      setLoading(false);
+    }
+  }, [token, deviceId, enabled, isDeviceReachable, logout, navigate]);
+
+  // Reset state when deviceId or enabled changes
+  useEffect(() => {
+    setTaskId(null);
+    setVlanData(null);
+    setLoading(false);
+    setError(null);
+  }, [deviceId, enabled]);
+
+  // Fetch data when enabled and device is reachable
+  useEffect(() => {
+    if (enabled && isDeviceReachable && deviceId) {
+      fetchVlanInfo();
+    }
+  }, [enabled, isDeviceReachable, deviceId, fetchVlanInfo]);
+
+  return {
+    data: vlanData,
+    isFetching: loading || taskLoading,
+    error: error || taskError,
+    refetch: fetchVlanInfo
+  };
 };
 
-// Separate hook for ARP table
+// Separate hook for ARP table with task-based fetching
 const useArpTable = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
+  const [taskId, setTaskId] = useState<string | null>(null);
+  const [arpData, setArpData] = useState<any[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  return useQuery<any[], Error>({
-    queryKey: ["arpTable", deviceId],
-    queryFn: async () => {
-      if (!token || !deviceId) {
-        throw new Error("Missing token or device ID");
+  const { taskStatus, loading: taskLoading, error: taskError } = useTaskPolling(taskId, {
+    interval: 250,
+    onSuccess: (result) => {
+      // Handle the case where result is an array directly (ARP data)
+      if (Array.isArray(result)) {
+        setArpData(result);
+      } else {
+        setArpData([]);
       }
+      // Clear the task ID to stop polling
+      setTaskId(null);
+      setLoading(false);
+    },
+    onError: (err) => {
+      setError(err);
+      // Clear the task ID to stop polling
+      setTaskId(null);
+      setLoading(false);
+    }
+  });
+
+  const fetchArpTable = useCallback(async () => {
+    if (!token || !deviceId || !enabled || !isDeviceReachable) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+      setTaskId(null); // Reset task ID before new request
       
       const response = await fetch(`/api/devices/${deviceId}/arp`, {
         headers: {
@@ -170,24 +382,85 @@ const useArpTable = (deviceId: string | undefined, enabled: boolean, isDeviceRea
       }
       
       const data = await response.json();
-      // Ensure we return an array
-      return Array.isArray(data) ? data : [];
-    },
-    enabled: enabled && isDeviceReachable, // Controlled by the enabled parameter and device reachability
-  });
+      
+      // If we get a task_id, start polling
+      if (data && data.task_id) {
+        setTaskId(data.task_id);
+      } else if (Array.isArray(data)) {
+        // If we get direct data, use it
+        setArpData(data);
+        setLoading(false);
+      } else {
+        // Handle case where we get an unexpected response
+        setArpData([]);
+        setLoading(false);
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to fetch ARP table");
+      setLoading(false);
+    }
+  }, [token, deviceId, enabled, isDeviceReachable, logout, navigate]);
+
+  // Reset state when deviceId or enabled changes
+  useEffect(() => {
+    setTaskId(null);
+    setArpData(null);
+    setLoading(false);
+    setError(null);
+  }, [deviceId, enabled]);
+
+  // Fetch data when enabled and device is reachable
+  useEffect(() => {
+    if (enabled && isDeviceReachable && deviceId) {
+      fetchArpTable();
+    }
+  }, [enabled, isDeviceReachable, deviceId, fetchArpTable]);
+
+  return {
+    data: arpData,
+    isFetching: loading || taskLoading,
+    error: error || taskError,
+    refetch: fetchArpTable
+  };
 };
 
-// Separate hook for CDP neighbors
+// Separate hook for CDP neighbors with task-based fetching
 const useCdpNeighbors = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
+  const [taskId, setTaskId] = useState<string | null>(null);
+  const [cdpData, setCdpData] = useState<any[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  return useQuery<any[], Error>({
-    queryKey: ["cdpNeighbors", deviceId],
-    queryFn: async () => {
-      if (!token || !deviceId) {
-        throw new Error("Missing token or device ID");
+  const { taskStatus, loading: taskLoading, error: taskError } = useTaskPolling(taskId, {
+    interval: 250,
+    onSuccess: (result) => {
+      // Handle the case where result is an array directly (CDP data)
+      if (Array.isArray(result)) {
+        setCdpData(result);
+      } else {
+        setCdpData([]);
       }
+      // Clear the task ID to stop polling
+      setTaskId(null);
+      setLoading(false);
+    },
+    onError: (err) => {
+      setError(err);
+      // Clear the task ID to stop polling
+      setTaskId(null);
+      setLoading(false);
+    }
+  });
+
+  const fetchCdpNeighbors = useCallback(async () => {
+    if (!token || !deviceId || !enabled || !isDeviceReachable) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+      setTaskId(null); // Reset task ID before new request
       
       const response = await fetch(`/api/devices/${deviceId}/cdp`, {
         headers: {
@@ -206,24 +479,85 @@ const useCdpNeighbors = (deviceId: string | undefined, enabled: boolean, isDevic
       }
       
       const data = await response.json();
-      // Ensure we return an array
-      return Array.isArray(data) ? data : [];
-    },
-    enabled: enabled && isDeviceReachable, // Controlled by the enabled parameter and device reachability
-  });
+      
+      // If we get a task_id, start polling
+      if (data && data.task_id) {
+        setTaskId(data.task_id);
+      } else if (Array.isArray(data)) {
+        // If we get direct data, use it
+        setCdpData(data);
+        setLoading(false);
+      } else {
+        // Handle case where we get an unexpected response
+        setCdpData([]);
+        setLoading(false);
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to fetch CDP neighbors");
+      setLoading(false);
+    }
+  }, [token, deviceId, enabled, isDeviceReachable, logout, navigate]);
+
+  // Reset state when deviceId or enabled changes
+  useEffect(() => {
+    setTaskId(null);
+    setCdpData(null);
+    setLoading(false);
+    setError(null);
+  }, [deviceId, enabled]);
+
+  // Fetch data when enabled and device is reachable
+  useEffect(() => {
+    if (enabled && isDeviceReachable && deviceId) {
+      fetchCdpNeighbors();
+    }
+  }, [enabled, isDeviceReachable, deviceId, fetchCdpNeighbors]);
+
+  return {
+    data: cdpData,
+    isFetching: loading || taskLoading,
+    error: error || taskError,
+    refetch: fetchCdpNeighbors
+  };
 };
 
-// Separate hook for LLDP neighbors
+// Separate hook for LLDP neighbors with task-based fetching
 const useLldpNeighbors = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
+  const [taskId, setTaskId] = useState<string | null>(null);
+  const [lldpData, setLldpData] = useState<any[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  return useQuery<any[], Error>({
-    queryKey: ["lldpNeighbors", deviceId],
-    queryFn: async () => {
-      if (!token || !deviceId) {
-        throw new Error("Missing token or device ID");
+  const { taskStatus, loading: taskLoading, error: taskError } = useTaskPolling(taskId, {
+    interval: 250,
+    onSuccess: (result) => {
+      // Handle the case where result is an array directly (LLDP data)
+      if (Array.isArray(result)) {
+        setLldpData(result);
+      } else {
+        setLldpData([]);
       }
+      // Clear the task ID to stop polling
+      setTaskId(null);
+      setLoading(false);
+    },
+    onError: (err) => {
+      setError(err);
+      // Clear the task ID to stop polling
+      setTaskId(null);
+      setLoading(false);
+    }
+  });
+
+  const fetchLldpNeighbors = useCallback(async () => {
+    if (!token || !deviceId || !enabled || !isDeviceReachable) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+      setTaskId(null); // Reset task ID before new request
       
       const response = await fetch(`/api/devices/${deviceId}/lldp`, {
         headers: {
@@ -242,11 +576,46 @@ const useLldpNeighbors = (deviceId: string | undefined, enabled: boolean, isDevi
       }
       
       const data = await response.json();
-      // Ensure we return an array
-      return Array.isArray(data) ? data : [];
-    },
-    enabled: enabled && isDeviceReachable, // Controlled by the enabled parameter and device reachability
-  });
+      
+      // If we get a task_id, start polling
+      if (data && data.task_id) {
+        setTaskId(data.task_id);
+      } else if (Array.isArray(data)) {
+        // If we get direct data, use it
+        setLldpData(data);
+        setLoading(false);
+      } else {
+        // Handle case where we get an unexpected response
+        setLldpData([]);
+        setLoading(false);
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to fetch LLDP neighbors");
+      setLoading(false);
+    }
+  }, [token, deviceId, enabled, isDeviceReachable, logout, navigate]);
+
+  // Reset state when deviceId or enabled changes
+  useEffect(() => {
+    setTaskId(null);
+    setLldpData(null);
+    setLoading(false);
+    setError(null);
+  }, [deviceId, enabled]);
+
+  // Fetch data when enabled and device is reachable
+  useEffect(() => {
+    if (enabled && isDeviceReachable && deviceId) {
+      fetchLldpNeighbors();
+    }
+  }, [enabled, isDeviceReachable, deviceId, fetchLldpNeighbors]);
+
+  return {
+    data: lldpData,
+    isFetching: loading || taskLoading,
+    error: error || taskError,
+    refetch: fetchLldpNeighbors
+  };
 };
 
 // Helper function to determine if interface is administratively up
@@ -290,16 +659,37 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
     refetchInterval: 5000, // Poll reachability every 5 seconds
   });
   
+  // Task state
+  const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
+  const [taskAction, setTaskAction] = useState<string | null>(null);
+  
+  // Use task polling hook
+  const { taskStatus, loading: taskLoading, error: taskError } = useTaskPolling(currentTaskId, {
+    interval: 1000,
+    onSuccess: () => {
+      // Invalidate relevant queries to refresh data after task completion
+      if (taskAction === 'toggleInterface') {
+        queryClient.invalidateQueries({ queryKey: ["interfacesBrief", id] });
+      } else if (taskAction === 'assignPortToVlan' || taskAction === 'changeVlanName' || 
+                 taskAction === 'createVlan' || taskAction === 'deleteVlan' || 
+                 taskAction === 'configureInterfaceVlan') {
+        queryClient.invalidateQueries({ queryKey: ["vlanInfo", id] });
+      } else if (taskAction === 'executeCommand') {
+        // No specific invalidation needed for command execution
+      }
+    }
+  });
+  
   // Fetch interfaces once for both interfaces and VLANs tabs to avoid duplicate API calls
   const { data: interfaces, isFetching: interfacesLoading, error: interfacesError, refetch: refetchInterfaces } = useInterfaces(id, activeTab === "interfaces" || activeTab === "vlans", isReachable);
   
   // Lazy load data based on active tab
   const { data: systemInfo, isLoading: systemLoading, error: systemError } = useSystemInfo(id, activeTab === "overview", isReachable, device);
   const { data: clockInfo, isFetching: clockLoading, error: clockError } = useClockInfo(id, activeTab === "overview", isReachable);
-  const { data: vlanInfo, isFetching: vlanLoading, error: vlanError } = useVlanInfo(id, activeTab === "vlans", isReachable);
-  const { data: arpTable, isFetching: arpLoading, error: arpError } = useArpTable(id, activeTab === 'discovery' && activeDiscoveryTab === 'arp', isReachable);
-  const { data: cdpNeighbors, isFetching: cdpLoading, error: cdpError } = useCdpNeighbors(id, activeTab === 'discovery' && activeDiscoveryTab === 'cdp', isReachable);
-  const { data: lldpNeighbors, isFetching: lldpLoading, error: lldpError } = useLldpNeighbors(id, activeTab === 'discovery' && activeDiscoveryTab === 'lldp', isReachable);
+  const { data: vlanInfo, isFetching: vlanLoading, error: vlanError, refetch: refetchVlanInfo } = useVlanInfo(id, activeTab === "vlans", isReachable);
+  const { data: arpTable, isFetching: arpLoading, error: arpError, refetch: refetchArpTable } = useArpTable(id, activeTab === 'discovery' && activeDiscoveryTab === 'arp', isReachable);
+  const { data: cdpNeighbors, isFetching: cdpLoading, error: cdpError, refetch: refetchCdpNeighbors } = useCdpNeighbors(id, activeTab === 'discovery' && activeDiscoveryTab === 'cdp', isReachable);
+  const { data: lldpNeighbors, isFetching: lldpLoading, error: lldpError, refetch: refetchLldpNeighbors } = useLldpNeighbors(id, activeTab === 'discovery' && activeDiscoveryTab === 'lldp', isReachable);
   
   // Command execution state
   const [command, setCommand] = useState("");
@@ -383,16 +773,9 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
     if (!id || newName === undefined) return;
 
     try {
-      await changeVlanName.mutateAsync({ vlanId, newName });
-      setVlanNameEdits(prev => {
-        const newState = { ...prev };
-        delete newState[vlanId];
-        return newState;
-      });
-      setToastMessage(`Successfully changed VLAN ${vlanId} name to ${newName || "(empty)"}`);
-      setToastVariant('success');
-      setShowToast(true);
-      queryClient.invalidateQueries({ queryKey: ["vlanInfo", id] });
+      setTaskAction('changeVlanName');
+      const response = await changeVlanName.mutateAsync({ vlanId, newName });
+      setCurrentTaskId(response.task_id);
     } catch (err: any) {
       setToastMessage(`Error changing VLAN name: ${err.message || 'Unknown error'}`);
       setToastVariant('danger');
@@ -410,13 +793,9 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
         throw new Error("VLAN ID must be a number");
       }
 
-      await createVlan.mutateAsync({ id: vlanIdNum, name: newVlanName || undefined });
-      setNewVlanId('');
-      setNewVlanName('');
-      setToastMessage(`Successfully created VLAN ${vlanIdNum}${newVlanName ? ' with name ' + newVlanName : ''}`);
-      setToastVariant('success');
-      setShowToast(true);
-      queryClient.invalidateQueries({ queryKey: ["vlanInfo", id] });
+      setTaskAction('createVlan');
+      const response = await createVlan.mutateAsync({ id: vlanIdNum, name: newVlanName || undefined });
+      setCurrentTaskId(response.task_id);
     } catch (err: any) {
       setToastMessage(`Error creating VLAN: ${err.message || 'Unknown error'}`);
       setToastVariant('danger');
@@ -436,11 +815,9 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
 
     setIsDeleting(true);
     try {
-      await deleteVlan.mutateAsync(vlanToDelete);
-      setToastMessage(`Successfully deleted VLAN ${vlanToDelete}`);
-      setToastVariant('success');
-      setShowToast(true);
-      queryClient.invalidateQueries({ queryKey: ["vlanInfo", id] });
+      setTaskAction('deleteVlan');
+      const response = await deleteVlan.mutateAsync(vlanToDelete);
+      setCurrentTaskId(response.task_id);
     } catch (err: any) {
       setToastMessage(`Error deleting VLAN: ${err.message || 'Unknown error'}`);
       setToastVariant('danger');
@@ -458,6 +835,7 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
     
     // Set loading state for this interface
     setTogglingInterfaces(prev => ({ ...prev, [interfaceName]: true }));
+    setTaskAction('toggleInterface');
     
     // Toggle based on administrative state, not operational state
     const newState = !isInterfaceAdminUp(currentState);
@@ -483,6 +861,9 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
         throw new Error(errorData.detail || "Failed to toggle interface");
       }
       
+      const data = await response.json();
+      setCurrentTaskId(data.task_id);
+      
       // Clear device cache to ensure we get fresh data from the device
       await fetch(`/api/devices/${id}/cache/clear`, {
         method: "POST",
@@ -491,21 +872,12 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
           Authorization: `Bearer ${token}`,
         },
       });
-      
-      // Invalidate all relevant queries to force refresh
-      queryClient.invalidateQueries({ queryKey: ["interfacesBrief", id] });
-      
-      // Show success toast
-      setToastMessage(`Successfully ${newState ? 'enabled' : 'disabled'} interface ${interfaceName}`);
-      setToastVariant('success');
-      setShowToast(true);
     } catch (err: any) {
       console.error("Error toggling interface:", err);
       // Show error toast
       setToastMessage(`Error toggling interface: ${err.message || "Unknown error"}`);
       setToastVariant('danger');
       setShowToast(true);
-    } finally {
       // Reset loading state for this interface
       setTogglingInterfaces(prev => {
         const newState = { ...prev };
@@ -527,10 +899,9 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
     if (!id || !port) return;
 
     try {
-      await assignPortToVlan.mutateAsync({ vlanId, port });
-	  setToastMessage(`Successfully assigned port ${port} to VLAN ${vlanId}`);
-      setToastVariant('success');
-      setShowToast(true);
+      setTaskAction('assignPortToVlan');
+      const response = await assignPortToVlan.mutateAsync({ vlanId, port });
+      setCurrentTaskId(response.task_id);
     } catch (err: any) {
       console.error("Error assigning port to VLAN:", err);
       setToastMessage(`Error assigning port to VLAN: ${err.message || 'Unknown error'}`);
@@ -564,12 +935,9 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
         }
       }
 
-      await configureInterfaceVlan.mutateAsync(vlanConfig);
-
-      setToastMessage(`Successfully configured VLAN settings for ${ifaceName}`);
-      setToastVariant('success');
-      setShowToast(true);
-
+      setTaskAction('configureInterfaceVlan');
+      const response = await configureInterfaceVlan.mutateAsync(vlanConfig);
+      setCurrentTaskId(response.task_id);
     } catch (err: any) {
       setToastMessage(`Error configuring interface: ${err.message || "Unknown error"}`);
       setToastVariant('danger');
@@ -588,6 +956,7 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
     setExecutingCommand(true);
     setCommandOutput(null);
     setCommandError(null);
+    setTaskAction('executeCommand');
 
     const endpoint = `/api/devices/${id}/execute-command`;
     const payload = { command, is_config: isConfigCommand };
@@ -614,12 +983,9 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
         throw new Error(data.detail || "Failed to execute command");
       }
 
-      setCommandOutput(data.output);
-      setDeviceLevel(data.device_level || null);
+      setCurrentTaskId(data.task_id);
     } catch (err: any) {
       setCommandError(err.message || "An unknown error occurred.");
-    }
-    finally {
       setExecutingCommand(false);
       setCommand("");
     }
@@ -665,6 +1031,97 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
     }
   };
 
+  // Handle task completion
+  useEffect(() => {
+    if (taskStatus?.status === 'SUCCESS') {
+      if (taskAction === 'toggleInterface') {
+        // Show success toast
+        setToastMessage('Interface toggled successfully');
+        setToastVariant('success');
+        setShowToast(true);
+        
+        // Reset interface loading states
+        setTogglingInterfaces({});
+      } else if (taskAction === 'assignPortToVlan') {
+        setToastMessage('Successfully assigned port to VLAN');
+        setToastVariant('success');
+        setShowToast(true);
+      } else if (taskAction === 'changeVlanName') {
+        setToastMessage('Successfully changed VLAN name');
+        setToastVariant('success');
+        setShowToast(true);
+        setVlanNameEdits(prev => {
+          const newState = { ...prev };
+          delete newState[vlanToDelete || ''];
+          return newState;
+        });
+      } else if (taskAction === 'createVlan') {
+        setToastMessage('Successfully created VLAN');
+        setToastVariant('success');
+        setShowToast(true);
+        setNewVlanId('');
+        setNewVlanName('');
+      } else if (taskAction === 'deleteVlan') {
+        setToastMessage('Successfully deleted VLAN');
+        setToastVariant('success');
+        setShowToast(true);
+      } else if (taskAction === 'configureInterfaceVlan') {
+        setToastMessage('Successfully configured VLAN settings for interface');
+        setToastVariant('success');
+        setShowToast(true);
+      } else if (taskAction === 'executeCommand') {
+        // Handle command execution result
+        const result = taskStatus.result;
+        setCommandOutput(result.output);
+        setDeviceLevel(result.device_level || null);
+        setExecutingCommand(false);
+        setCommand("");
+      }
+      
+      // Reset task state
+      setCurrentTaskId(null);
+      setTaskAction(null);
+    } else if (taskStatus?.status === 'FAILURE') {
+      // Handle task failure
+      const errorMessage = taskStatus.error || 'Task failed';
+      
+      if (taskAction === 'toggleInterface') {
+        setToastMessage(`Error toggling interface: ${errorMessage}`);
+        setToastVariant('danger');
+        setShowToast(true);
+        setTogglingInterfaces({});
+      } else if (taskAction === 'assignPortToVlan') {
+        setToastMessage(`Error assigning port to VLAN: ${errorMessage}`);
+        setToastVariant('danger');
+        setShowToast(true);
+      } else if (taskAction === 'changeVlanName') {
+        setToastMessage(`Error changing VLAN name: ${errorMessage}`);
+        setToastVariant('danger');
+        setShowToast(true);
+      } else if (taskAction === 'createVlan') {
+        setToastMessage(`Error creating VLAN: ${errorMessage}`);
+        setToastVariant('danger');
+        setShowToast(true);
+      } else if (taskAction === 'deleteVlan') {
+        setToastMessage(`Error deleting VLAN: ${errorMessage}`);
+        setToastVariant('danger');
+        setShowToast(true);
+      } else if (taskAction === 'configureInterfaceVlan') {
+        setToastMessage(`Error configuring interface VLAN: ${errorMessage}`);
+        setToastVariant('danger');
+        setShowToast(true);
+      } else if (taskAction === 'executeCommand') {
+        setCommandError(errorMessage);
+        setExecutingCommand(false);
+        setCommand("");
+      }
+      
+      // Reset task state
+      setCurrentTaskId(null);
+      setTaskAction(null);
+    }
+  }, [taskStatus, taskAction, vlanToDelete]);
+
   return (
     <Container fluid className="mt-4">
       <Row className="mb-4">
@@ -696,6 +1153,29 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
           </Card>
         </Col>
       </Row>
+
+      {(taskLoading || currentTaskId) && (
+        <Row className="mb-3">
+          <Col>
+            <Alert variant="info">
+              <div className="d-flex align-items-center">
+                <Spinner animation="border" size="sm" className="me-2" />
+                <span>Processing task: {taskAction}...</span>
+              </div>
+            </Alert>
+          </Col>
+        </Row>
+      )}
+
+      {taskError && (
+        <Row className="mb-3">
+          <Col>
+            <Alert variant="danger">
+              Error processing task: {taskError}
+            </Alert>
+          </Col>
+        </Row>
+      )}
 
       <Tabs
         activeKey={activeTab}
@@ -792,9 +1272,10 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
                                   iface.interface || iface.intf || "",
                                   iface.status || ""
                                 )}
-                                disabled={!device?.is_reachable || togglingInterfaces[iface.interface || iface.intf || ""]}
+                                disabled={!device?.is_reachable || togglingInterfaces[iface.interface || iface.intf || ""] || !!currentTaskId}
                               >
-                                {togglingInterfaces[iface.interface || iface.intf || ""] ? (
+                                {(togglingInterfaces[iface.interface || iface.intf || ""] || 
+                                  (currentTaskId && taskAction === 'toggleInterface')) ? (
                                   <>
                                     <Spinner
                                       as="span"
@@ -837,18 +1318,18 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
                       <Col md={3}>
                         <Form.Group controlId="new-vlan-id">
                           <Form.Label>VLAN ID</Form.Label>
-                          <Form.Control type="text" placeholder="Enter VLAN ID" value={newVlanId} onChange={(e) => setNewVlanId(e.target.value)} disabled={!isReachable} />
+                          <Form.Control type="text" placeholder="Enter VLAN ID" value={newVlanId} onChange={(e) => setNewVlanId(e.target.value)} disabled={!isReachable || !!currentTaskId} />
                         </Form.Group>
                       </Col>
                       <Col md={4}>
                         <Form.Group controlId="new-vlan-name">
                           <Form.Label>VLAN Name (Optional)</Form.Label>
-                          <Form.Control type="text" placeholder="Enter VLAN Name" value={newVlanName} onChange={(e) => setNewVlanName(e.target.value)} disabled={!isReachable} />
+                          <Form.Control type="text" placeholder="Enter VLAN Name" value={newVlanName} onChange={(e) => setNewVlanName(e.target.value)} disabled={!isReachable || !!currentTaskId} />
                         </Form.Group>
                       </Col>
                       <Col md={2} className="d-flex align-items-end">
-                        <Button variant="primary" onClick={handleCreateVlan} disabled={!newVlanId || !isReachable || isCreatingVlan}>
-                          {isCreatingVlan ? <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" /> : "Create VLAN"}
+                        <Button variant="primary" onClick={handleCreateVlan} disabled={!newVlanId || !isReachable || isCreatingVlan || !!currentTaskId}>
+                          {isCreatingVlan || (currentTaskId && taskAction === 'createVlan') ? <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" /> : "Create VLAN"}
                         </Button>
                       </Col>
                     </Row>
@@ -893,14 +1374,21 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
                                       size="sm"
                                       value={editedName}
                                       onChange={(e) => handleVlanNameChange(vlanId, e.target.value)}
-                                      disabled={!isReachable}
+                                      disabled={!isReachable || !!currentTaskId}
                                     />
-                                    <Button size="sm" variant="success" onClick={() => handleSaveVlanName(vlanId)} disabled={!isReachable}>Save</Button>
+                                    <Button 
+                                      size="sm" 
+                                      variant="success" 
+                                      onClick={() => handleSaveVlanName(vlanId)} 
+                                      disabled={!isReachable || !!currentTaskId || (currentTaskId && taskAction === 'changeVlanName')}
+                                    >
+                                      {currentTaskId && taskAction === 'changeVlanName' ? <Spinner as="span" animation="border" size="sm" /> : "Save"}
+                                    </Button>
                                   </InputGroup>
                                 ) : (
                                   <div>
                                     {currentName}
-                                    <Button size="sm" variant="outline-primary" className="ms-2" onClick={() => handleVlanNameChange(vlanId, currentName)} disabled={!isReachable}>Edit</Button>
+                                    <Button size="sm" variant="outline-primary" className="ms-2" onClick={() => handleVlanNameChange(vlanId, currentName)} disabled={!isReachable || !!currentTaskId}>Edit</Button>
                                   </div>
                                 )}
                               </td>
@@ -908,17 +1396,31 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
                               <td>{vlan.interfaces ? (Array.isArray(vlan.interfaces) ? vlan.interfaces.join(', ') : vlan.interfaces) : "N/A"}</td>
                               <td>
                                 <InputGroup>
-                                  <Form.Select size="sm" value={selectedPorts[vlanId] || ''} onChange={(e) => handlePortSelection(vlanId, e.target.value)} disabled={!isReachable}>
+                                  <Form.Select size="sm" value={selectedPorts[vlanId] || ''} onChange={(e) => handlePortSelection(vlanId, e.target.value)} disabled={!isReachable || !!currentTaskId}>
                                     <option value="">Select Port</option>
                                     {interfaces?.map((iface: any) => (
                                       <option key={iface.interface || iface.intf} value={iface.interface || iface.intf}>{iface.interface || iface.intf}</option>
                                     ))}
                                   </Form.Select>
-                                  <Button size="sm" variant="primary" onClick={() => handleAssignPort(vlanId)} disabled={!selectedPorts[vlanId] || !isReachable}>+</Button>
+                                  <Button 
+                                    size="sm" 
+                                    variant="primary" 
+                                    onClick={() => handleAssignPort(vlanId)} 
+                                    disabled={!selectedPorts[vlanId] || !isReachable || !!currentTaskId || (currentTaskId && taskAction === 'assignPortToVlan')}
+                                  >
+                                    {currentTaskId && taskAction === 'assignPortToVlan' ? <Spinner as="span" animation="border" size="sm" /> : "+"}
+                                  </Button>
                                 </InputGroup>
                               </td>
                               <td>
-                                <Button size="sm" variant="danger" onClick={() => openDeleteModal(vlanId)} disabled={!isReachable || isDeleting}>Delete</Button>
+                                <Button 
+                                  size="sm" 
+                                  variant="danger" 
+                                  onClick={() => openDeleteModal(vlanId)} 
+                                  disabled={!isReachable || isDeleting || !!currentTaskId || (currentTaskId && taskAction === 'deleteVlan')}
+                                >
+                                  {isDeleting && vlanToDelete === vlanId ? <Spinner as="span" animation="border" size="sm" /> : "Delete"}
+                                </Button>
                               </td>
                             </tr>
                           );
@@ -959,21 +1461,21 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
                               <tr key={ifaceName}>
                                 <td>{ifaceName}</td>
                                 <td>
-                                  <Form.Select size="sm" value={config.mode} onChange={(e) => handleInterfaceConfigChange(ifaceName, 'mode', e.target.value)} disabled={!isReachable}>
+                                  <Form.Select size="sm" value={config.mode} onChange={(e) => handleInterfaceConfigChange(ifaceName, 'mode', e.target.value)} disabled={!isReachable || !!currentTaskId}>
                                     <option value="access">Access</option>
                                     <option value="trunk">Trunk</option>
                                   </Form.Select>
                                 </td>
                                 <td>
                                   {config.mode === 'access' ? (
-                                    <Form.Control type="text" size="sm" placeholder="VLAN ID" value={config.accessVlan} onChange={(e) => handleInterfaceConfigChange(ifaceName, 'accessVlan', e.target.value)} disabled={!isReachable} />
+                                    <Form.Control type="text" size="sm" placeholder="VLAN ID" value={config.accessVlan} onChange={(e) => handleInterfaceConfigChange(ifaceName, 'accessVlan', e.target.value)} disabled={!isReachable || !!currentTaskId} />
                                   ) : (
-                                    <Form.Control type="text" size="sm" placeholder="Allowed VLANs (e.g., 10,20,30-40)" value={config.allowedVlans} onChange={(e) => handleInterfaceConfigChange(ifaceName, 'allowedVlans', e.target.value)} disabled={!isReachable} />
+                                    <Form.Control type="text" size="sm" placeholder="Allowed VLANs (e.g., 10,20,30-40)" value={config.allowedVlans} onChange={(e) => handleInterfaceConfigChange(ifaceName, 'allowedVlans', e.target.value)} disabled={!isReachable || !!currentTaskId} />
                                   )}
                                 </td>
                                 <td>
                                   {config.mode === 'trunk' && (
-                                    <Form.Control type="text" size="sm" placeholder="Native VLAN ID" value={config.nativeVlan} onChange={(e) => handleInterfaceConfigChange(ifaceName, 'nativeVlan', e.target.value)} disabled={!isReachable} />
+                                    <Form.Control type="text" size="sm" placeholder="Native VLAN ID" value={config.nativeVlan} onChange={(e) => handleInterfaceConfigChange(ifaceName, 'nativeVlan', e.target.value)} disabled={!isReachable || !!currentTaskId} />
                                   )}
                                 </td>
                                 <td>
@@ -981,9 +1483,9 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
                                     size="sm"
                                     variant="success"
                                     onClick={() => handleApplyInterfaceConfig(ifaceName)}
-                                    disabled={!isReachable || applyingConfigs[ifaceName]}
+                                    disabled={!isReachable || applyingConfigs[ifaceName] || !!currentTaskId || (currentTaskId && taskAction === 'configureInterfaceVlan')}
                                   >
-                                    {applyingConfigs[ifaceName] ? (
+                                    {applyingConfigs[ifaceName] || (currentTaskId && taskAction === 'configureInterfaceVlan') ? (
                                       <>
                                         <Spinner
                                           as="span"
@@ -1183,6 +1685,7 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
                         value={command}
                         onChange={(e) => setCommand(e.target.value)}
                         required
+                        disabled={executingCommand || !!currentTaskId}
                       />
                     </Form.Group>
                     <Form.Group
@@ -1194,14 +1697,15 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
                         label="Configuration Command"
                         checked={isConfigCommand}
                         onChange={(e) => setIsConfigCommand(e.target.checked)}
+                        disabled={executingCommand || !!currentTaskId}
                       />
                     </Form.Group>
                     <Button
                       variant="primary"
                       type="submit"
-                      disabled={executingCommand}
+                      disabled={executingCommand || !!currentTaskId}
                     >
-                      {executingCommand ? (
+                      {(executingCommand || (currentTaskId && taskAction === 'executeCommand')) ? (
                         <Spinner as="span" animation="border" size="sm" />
                       ) : (
                         "Execute"
@@ -1248,11 +1752,11 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
           Are you sure you want to delete VLAN {vlanToDelete}? This action cannot be undone.
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowDeleteModal(false)} disabled={isDeleting}>
+          <Button variant="secondary" onClick={() => setShowDeleteModal(false)} disabled={isDeleting || !!currentTaskId}>
             Cancel
           </Button>
-          <Button variant="danger" onClick={confirmDeleteVlan} disabled={isDeleting}>
-            {isDeleting ? <Spinner as="span" animation="border" size="sm" /> : 'Proceed'}
+          <Button variant="danger" onClick={confirmDeleteVlan} disabled={isDeleting || !!currentTaskId}>
+            {isDeleting || (currentTaskId && taskAction === 'deleteVlan') ? <Spinner as="span" animation="border" size="sm" /> : 'Proceed'}
           </Button>
         </Modal.Footer>
       </Modal>
