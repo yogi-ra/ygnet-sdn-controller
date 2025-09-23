@@ -256,3 +256,62 @@ To ensure that command execution doesn't fail for devices confirmed to be reacha
    - Handle connection limits gracefully with queuing mechanisms
 
 This approach ensures that devices confirmed as reachable continue to function properly, with automatic recovery mechanisms for transient issues.
+
+## Refactoring Plan: Asynchronous Netmiko Operations with a Job Queue
+
+To improve scalability and prevent API timeouts from long-running device commands, the backend will be refactored to use a job queue. This will change the command execution from a synchronous (blocking) model to an asynchronous (non-blocking) one.
+
+The existing API endpoint naming and structure will be preserved as requested.
+
+### Phase 1: Core Infrastructure Setup
+
+1.  **Add Dependencies:**
+    *   Update `requirements.txt` to include `celery` for task queuing and `redis` as the message broker.
+2.  **Configure Celery:**
+    *   Create a new file `src/celery_app.py` to initialize the Celery application.
+    *   Configure Celery to use Redis as both the message broker (to receive tasks) and the result backend (to store task results).
+    *   Update `src/config.py` and `.env.sample` to manage Redis/Celery connection URLs and settings.
+
+### Phase 2: Create Asynchronous Task
+
+1.  **Define Celery Task:**
+    *   In `src/tasks.py`, create a new Celery task function, e.g., `execute_netmiko_command_task`.
+    *   This function will encapsulate the logic for running a Netmiko command. It will accept parameters like `device_info`, `command`, `netmiko_device_type`, etc.
+    *   The task will leverage the existing `ConnectionManager` to execute the command, thereby reusing the established connection pooling and management logic.
+
+### Phase 3: Adapt API Endpoints
+
+1.  **Modify API Endpoints to Dispatch Jobs:**
+    *   The existing API endpoints in `src/api/routers/devices/` that execute device commands will be modified.
+    *   Instead of executing the command synchronously and returning the result, the endpoint will now dispatch the `execute_netmiko_command_task` to the Celery queue.
+    *   The endpoint will immediately return a `202 Accepted` HTTP status, and the response body will contain a `task_id` for the client to track the job.
+    *   **Example Flow:**
+        *   Client sends a request to an existing endpoint (e.g., `GET /api/devices/{device_id}/system/version`).
+        *   The backend creates a job for the `show version` command and adds it to the queue.
+        *   The backend immediately responds with `{"task_id": "some-unique-id"}`.
+
+2.  **Implement a Task Status & Result Endpoint:**
+    *   Create a single new endpoint, `GET /api/tasks/{task_id}`.
+    *   This endpoint will be used by the client to poll for the job's status and result.
+    *   **Response States:**
+        *   **In Progress:** `{"task_id": "...", "status": "PENDING"}` or `{"task_id": "...", "status": "PROCESSING"}`.
+        *   **Completed:** `{"task_id": "...", "status": "SUCCESS", "result": { ... }}` where `result` contains the parsed Netmiko output.
+        *   **Failed:** `{"task_id": "...", "status": "FAILURE", "error": "..."}`.
+
+### Phase 4: Frontend Changes
+
+1.  **Implement Asynchronous Workflow:**
+    *   The frontend logic for interacting with device command endpoints must be updated.
+    *   **New Interaction Model:**
+        1.  Make the initial API call as before.
+        2.  Instead of data, receive the `task_id`.
+        3.  Display a loading/processing indicator in the UI.
+        4.  Begin polling the `/api/tasks/{task_id}` endpoint periodically.
+        5.  When the status is `SUCCESS`, update the UI with the received `result`.
+        6.  If the status is `FAILURE`, display an error message.
+
+### Phase 5: Documentation
+
+1.  **Update `README.md`:**
+    *   Add a new section explaining the asynchronous architecture.
+    *   Provide clear instructions on how to run the Celery worker process: `celery -A src.celery_app worker --loglevel=info`.
