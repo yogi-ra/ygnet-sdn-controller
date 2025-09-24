@@ -380,14 +380,7 @@ const UbiquitiEdgeRouterDetailPage = ({ device }: { device: any }) => {
       const data = await response.json();
       setCurrentTaskId(data.task_id);
       
-      // Clear device cache to ensure we get fresh data from the device
-      await fetch(`/api/devices/${id}/cache/clear`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      
     } catch (err: any) {
       console.error("Error toggling interface:", err);
       // Show error toast
@@ -443,42 +436,7 @@ const UbiquitiEdgeRouterDetailPage = ({ device }: { device: any }) => {
     }
   };
 
-  const handleClearCache = async () => {
-    if (!id) return;
-
-    const endpoint = `/api/devices/${id}/cache/clear`;
-
-    try {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (response.status === 401) {
-        logout();
-        navigate("/login");
-        return;
-      }
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || "Failed to clear cache");
-      }
-
-      // Invalidate all queries for this device to force refresh
-      queryClient.invalidateQueries({ queryKey: ["deviceDetail", id] });
-      queryClient.invalidateQueries({ queryKey: ["systemInfo", id] });
-      queryClient.invalidateQueries({ queryKey: ["clockInfo", id] });
-      queryClient.invalidateQueries({ queryKey: ["interfacesBrief", id] });
-      queryClient.invalidateQueries({ queryKey: ["routingInfo", id] });
-      queryClient.invalidateQueries({ queryKey: ["deviceReachability", id] });
-    } catch (err: any) {
-      console.error("Error clearing cache:", err);
-    }
-  };
+  
 
   // Handle task completion
   useEffect(() => {
@@ -543,7 +501,7 @@ const UbiquitiEdgeRouterDetailPage = ({ device }: { device: any }) => {
                   </Card.Subtitle>
                 </div>
                 <div>
-                  <Button variant="outline-primary" onClick={handleClearCache}>
+                  <Button variant="outline-primary" onClick={() => window.location.reload()}>
                     Refresh
                   </Button>
                   <Button variant="secondary" onClick={() => navigate(-1)} className="ms-2">

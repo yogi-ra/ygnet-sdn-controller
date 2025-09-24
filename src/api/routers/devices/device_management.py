@@ -4,7 +4,6 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from .... import schemas
-from ....cache import get_redis_client
 from ....config import settings
 from ....crud import crud
 from ....database import get_db
@@ -15,7 +14,6 @@ from ....exceptions import (
     DeviceAuthenticationError,
     DeviceTimeoutError
 )
-from ...decorators import cache_response
 from ...dependencies import require_read_privileges, require_write_privileges
 from ...utils import get_handler_from_device_id
 
@@ -89,7 +87,6 @@ async def read_devices(
     response_model=schemas.DeviceDetail,
     dependencies=[Depends(require_read_privileges)],
 )
-@cache_response("device_detail", ttl=60)
 async def read_device(request: Request, device_id: int, db: Session = Depends(get_db)):
     """
     Retrieve a single network device by its ID with detailed information.
@@ -144,13 +141,6 @@ def update_device(
 
     updated_device = crud.update_device(db=db, device_id=device_id, device=device)
 
-    # Clear Redis cache entries for this device
-    redis_client = get_redis_client()
-    pattern = f"device:{device_id}:*"
-    keys_to_delete = redis_client.keys(pattern)
-    if keys_to_delete:
-        redis_client.delete(*keys_to_delete)
-
     return updated_device
 
 
@@ -164,56 +154,10 @@ def delete_device(device_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Device not found")
     crud.delete_device(db, device_id=device_id)
 
-    # Clear Redis cache entries for this device
-    redis_client = get_redis_client()
-    pattern = f"device:{device_id}:*"
-    keys_to_delete = redis_client.keys(pattern)
-    if keys_to_delete:
-        redis_client.delete(*keys_to_delete)
-
     return
 
 
-@router.post(
-    "/{device_id}/cache/clear", dependencies=[Depends(require_write_privileges)]
-)
-def clear_device_cache(device_id: int, db: Session = Depends(get_db)):
-    """
-    Clears the Redis cache for a specific device.
-    """
-    db_device = crud.get_device(db, device_id=device_id)
-    if db_device is None:
-        raise HTTPException(status_code=404, detail="Device not found")
 
-    # Clear Redis cache entries for this device
-    redis_client = get_redis_client()
-
-    # List of cache prefixes used in device endpoints
-    cache_prefixes = [
-        "device_detail",
-        "device_system_version",
-        "device_system_hostname",
-        "device_system_uptime",
-        "device_system_clock",
-        "device_interfaces_brief",
-        "device_interfaces_status",
-        "device_vlans_brief",
-        "device_arp_table",
-        "device_cdp_neighbors",
-        "device_lldp_neighbors",
-    ]
-
-    # Delete cache entries for each prefix with the device_id
-    deleted_count = 0
-    for prefix in cache_prefixes:
-        cache_key = f"{prefix}:{device_id}"
-        if redis_client.exists(cache_key):
-            redis_client.delete(cache_key)
-            deleted_count += 1
-
-    return {
-        "message": f"Cache cleared for device {device_id}. {deleted_count} cache entries removed."
-    }
 
 
 @router.get(

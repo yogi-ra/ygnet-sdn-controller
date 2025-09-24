@@ -6,7 +6,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from .database import engine, Base
 from .api.routers import auth, tasks
 from .api.routers.devices import router as devices_router
-from .tasks import check_device_for_changes, update_device_reachability_status # Import new task
+from .tasks import update_device_reachability_status # Import new task
 
 # Create all database tables
 Base.metadata.create_all(bind=engine)
@@ -22,9 +22,7 @@ def scheduled_task(trigger, **job_kwargs):
     return decorator
 
 
-@scheduled_task(IntervalTrigger(minutes=5))
-async def schedule_check_device_for_changes():
-    await check_device_for_changes()
+
 
 
 @scheduled_task(IntervalTrigger(seconds=5), coalesce=True, max_instances=1)

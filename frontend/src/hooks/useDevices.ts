@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchDevices, deleteDevice, clearDeviceCache, type Device } from "../api";
+import { fetchDevices, deleteDevice, type Device } from "../api";
 import { useAuth } from "./useAuth";
 
 export const useDevices = () => {
@@ -24,13 +24,6 @@ export const useDevices = () => {
     },
   });
 
-  const clearDeviceCacheMutation = useMutation({
-    mutationFn: (deviceId: number) => clearDeviceCache(deviceId.toString(), token),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["devices"] });
-    },
-  });
-
   const refreshDevices = () => {
     queryClient.invalidateQueries({ queryKey: ["devices"] });
   };
@@ -41,7 +34,6 @@ export const useDevices = () => {
     isError,
     error,
     deleteDevice: deleteDeviceMutation.mutate,
-    clearDeviceCache: clearDeviceCacheMutation.mutate,
     refreshDevices,
   };
 };

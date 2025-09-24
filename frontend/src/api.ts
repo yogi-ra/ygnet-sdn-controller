@@ -88,20 +88,7 @@ export const deleteDevice = async (
   }
 };
 
-export const clearDeviceCache = async (deviceId: string, token: string | null): Promise<void> => {
-  const headers = getAuthHeaders(token);
-  const response = await fetch(`/api/devices/${deviceId}/cache/clear`, {
-    method: "POST",
-    headers,
-  });
 
-  if (!response.ok) {
-    if (response.status === 401) {
-      throw new UnauthorizedError("Unauthorized");
-    }
-    throw new Error(`Failed to clear device cache: ${response.statusText}`);
-  }
-};
 
 export const checkDevicesReachability = async (token: string | null): Promise<{ task_id: string }> => {
   const headers = getAuthHeaders(token);

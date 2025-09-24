@@ -10,7 +10,6 @@ from src.exceptions import DeviceUnreachableError
 from src.database import SessionLocal
 from src.crud import crud
 from src.schemas import DeviceUpdate
-from src.cache import clear_device_cache, clear_devices_list_cache
 
 # Mapping from our internal device types to Netmiko device types
 NETMIKO_DEVICE_TYPE_MAP = {
@@ -289,10 +288,7 @@ class ConnectionManager:
                 crud.update_device(db, device_info.id, device_update)
                 print(f"Updated reachability for device {device_info.id} to {is_reachable}")
 
-                # Use the cache utility functions to clear device cache
-                from src.cache import clear_device_cache, clear_devices_list_cache
-                clear_device_cache(device_info.id)
-                clear_devices_list_cache()
+                
                 
                 # Return the updated status directly from the database
                 return crud.get_device(db, device_id=device_info.id).is_reachable

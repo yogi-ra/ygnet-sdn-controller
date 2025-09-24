@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, Request
 from ....controllers.cisco_ios.cisco_ios_handler import CiscoIosDeviceHandler
-from ...decorators import cache_response
 from ...dependencies import require_read_privileges
 
 router = APIRouter(tags=["Device Types"])
@@ -12,7 +11,6 @@ DEVICE_TYPE_DISPLAY_NAMES = {
 }
 
 @router.get("/device-types", dependencies=[Depends(require_read_privileges)])
-@cache_response("device_types", ttl=300)
 def get_device_types(request: Request):
     """
     Returns a list of supported device types with their display names.
@@ -35,7 +33,6 @@ def get_device_types(request: Request):
 
 
 @router.get("/supported-features", dependencies=[Depends(require_read_privileges)])
-@cache_response("supported_features", ttl=300)
 def get_supported_features(request: Request):
     """
     Returns a dictionary mapping device types to their supported features.

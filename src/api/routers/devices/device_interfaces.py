@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 from ....database import get_db
 from ....schemas import InterfaceState, InterfaceVlanConfig
-from ...decorators import cache_response
+
 from ...dependencies import require_read_privileges, require_write_privileges
 from ....tasks import execute_netmiko_command_task
 

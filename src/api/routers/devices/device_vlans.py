@@ -2,9 +2,9 @@ from concurrent.futures import TimeoutError as FutureTimeoutError
 from typing import Any, Dict
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
-from ....cache import get_redis_client
+
 from ....database import get_db
-from ...decorators import cache_response
+
 from ...dependencies import require_read_privileges, require_write_privileges
 from ...utils import get_handler_from_device_id
 from ....tasks import execute_netmiko_command_task
@@ -47,10 +47,6 @@ def create_vlan(
 
             result = handler.vlans.create_vlan(vlan_id, vlan_name)
 
-            # Clear cache for this device's VLAN information
-            redis_client = get_redis_client()
-            redis_client.delete(f"device_vlans_brief:{device_id}")
-
             return result
     except Exception as e:
         error_msg = f"Failed to create VLAN for device {device_id}: {str(e)}"
@@ -82,10 +78,6 @@ def assign_port_to_vlan(
                 )
 
             result = handler.vlans.assign_port_to_vlan(vlan_id, port)
-
-            # Clear cache for this device's VLAN information
-            redis_client = get_redis_client()
-            redis_client.delete(f"device_vlans_brief:{device_id}")
 
             return {"result": result}
     except FutureTimeoutError:
@@ -122,10 +114,6 @@ def change_vlan_name(
                 )
 
             result = handler.vlans.change_vlan_name(vlan_id, new_name)
-
-            # Clear cache for this device's VLAN information
-            redis_client = get_redis_client()
-            redis_client.delete(f"device_vlans_brief:{device_id}")
 
             return {"result": result}
     except FutureTimeoutError:
@@ -165,12 +153,6 @@ def configure_interface_vlan(
 
             result = handler.vlans.configure_interface_vlan(interface_config)
 
-            # Clear cache for this device's VLAN and interface information
-            redis_client = get_redis_client()
-            redis_client.delete(f"device_vlans_brief:{device_id}")
-            redis_client.delete(f"device_interfaces_brief:{device_id}")
-            redis_client.delete(f"device_interfaces_status:{device_id}")
-
             return {"result": result}
     except FutureTimeoutError:
         error_msg = f"Timeout configuring VLAN for interface {interface_config.get('interface_name')} on device {device_id}"
@@ -204,10 +186,6 @@ def delete_vlan(
                 )
 
             result = handler.vlans.delete_vlan(vlan_id)
-
-            # Clear cache for this device's VLAN information
-            redis_client = get_redis_client()
-            redis_client.delete(f"device_vlans_brief:{device_id}")
 
             return {"result": result}
     except Exception as e:

@@ -15,7 +15,7 @@ from ..exceptions import (
     DeviceAuthenticationError,
     DeviceError,
 )
-from ..cache import get_redis_client
+
 
 logger = logging.getLogger(__name__)
 
@@ -197,19 +197,4 @@ class BaseDevice(ABC):
             self.netmiko_device_type,
         )
      
-    def invalidate_feature_cache(self, feature_name: str) -> None:
-        """
-        Invalidates the cache for a specific feature by calling the API endpoint.
-        This method should be called after configuration changes to ensure fresh data.
-        """
-        try:
-            # Clear Redis cache entries for this device and feature
-            redis_client = get_redis_client()
-            pattern = f"device:{self.device_info.id}:features:{feature_name}"
-            keys_to_delete = redis_client.keys(pattern)
-            if keys_to_delete:
-                redis_client.delete(*keys_to_delete)
-                
-            self.logger.info(f"Successfully invalidated cache for feature: {feature_name}")
-        except Exception as e:
-            self.logger.error(f"Error invalidating cache for feature {feature_name}: {e}")
+    

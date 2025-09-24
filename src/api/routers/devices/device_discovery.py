@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from ....database import get_db
-from ...decorators import cache_response
 from ...dependencies import (
     require_read_privileges,
 )
@@ -13,7 +12,6 @@ router = APIRouter(tags=["Device Discovery"])
 
 
 @router.get("/{device_id}/arp", dependencies=[Depends(require_read_privileges)])
-@cache_response("device_arp_table", ttl=300)
 def get_arp_table(request: Request, device_id: int, db: Session = Depends(get_db)):
     """
     Get ARP table information.
@@ -22,7 +20,6 @@ def get_arp_table(request: Request, device_id: int, db: Session = Depends(get_db
     return {"task_id": task.id}
 
 @router.get("/{device_id}/cdp", dependencies=[Depends(require_read_privileges)])
-@cache_response("device_cdp_neighbors", ttl=300)
 def get_cdp_neighbors(request: Request, device_id: int, db: Session = Depends(get_db)):
     """
     Get CDP neighbors information.
@@ -31,7 +28,6 @@ def get_cdp_neighbors(request: Request, device_id: int, db: Session = Depends(ge
     return {"task_id": task.id}
 
 @router.get("/{device_id}/lldp", dependencies=[Depends(require_read_privileges)])
-@cache_response("device_lldp_neighbors", ttl=300)
 def get_lldp_neighbors(request: Request, device_id: int, db: Session = Depends(get_db)):
     """
     Get LLDP neighbors information.

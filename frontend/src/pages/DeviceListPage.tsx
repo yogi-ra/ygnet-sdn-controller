@@ -10,11 +10,7 @@ const DeviceListPage = () => {
   const navigate = useNavigate();
   const { devices, isLoading, isError, error, deleteDevice } = useDevices();
   const { deviceTypes } = useConfig();
-  const {
-    triggerReachabilityCheck,
-    isCheckingReachability,
-    reachabilityCheckError,
-  } = useDeviceReachability();
+  
 
   const handleAddDevice = () => {
     navigate("/devices/add");
@@ -35,7 +31,7 @@ const DeviceListPage = () => {
   };
 
   const handleRefreshStatus = () => {
-    triggerReachabilityCheck();
+    window.location.reload();
   };
 
   return (
@@ -48,30 +44,12 @@ const DeviceListPage = () => {
         <Button
           variant="secondary"
           onClick={handleRefreshStatus}
-          disabled={isCheckingReachability}
         >
-          {isCheckingReachability ? (
-            <>
-              <Spinner
-                as="span"
-                animation="border"
-                size="sm"
-                role="status"
-                aria-hidden="true"
-              />
-              <span className="ms-2">Checking Status...</span>
-            </>
-          ) : (
-            "Refresh Status"
-          )}
+          Refresh
         </Button>
       </div>
       {isError && <Alert variant="danger">Failed to load devices: {error?.message}</Alert>}
-      {reachabilityCheckError && (
-        <Alert variant="danger">
-          Failed to check device reachability: {reachabilityCheckError.message}
-        </Alert>
-      )}
+      
       {!isLoading && !isError && devices && devices.length === 0 && (
         <Alert variant="info">
           No devices found. Click "Add New Device" to add one.
