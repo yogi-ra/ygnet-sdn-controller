@@ -16,7 +16,7 @@ def get_arp_table(request: Request, device_id: int, db: Session = Depends(get_db
     """
     Get ARP table information.
     """
-    task = execute_netmiko_command_task.delay(device_id, "arp.get_arp_interface")
+    task = execute_netmiko_command_task.delay(device_id, "arp.get_ip_arp")
     return {"task_id": task.id}
 
 @router.get("/{device_id}/cdp", dependencies=[Depends(require_read_privileges)])

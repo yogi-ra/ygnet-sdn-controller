@@ -28,7 +28,7 @@ const useSystemInfo = (deviceId: string | undefined, enabled: boolean, isDeviceR
   };
 };
 
-// Separate hook for clock information with task-based fetching
+// Separate hook for clock information with task-based fetching and localStorage caching
 const useClockInfo = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
@@ -37,15 +37,23 @@ const useClockInfo = (deviceId: string | undefined, enabled: boolean, isDeviceRe
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const cacheKey = deviceId ? `clock_${deviceId}` : null;
+
   const { taskStatus, loading: taskLoading, error: taskError } = useTaskPolling(taskId, {
     interval: 250,
     onSuccess: (result) => {
       // Handle the case where result is a string directly (clock data)
       if (typeof result === 'string') {
         setClockData(result || "N/A");
+        if (cacheKey) {
+            localStorage.setItem(cacheKey, result || "N/A");
+        }
       } else if (result && typeof result === 'object' && result.clock) {
         // Handle the case where result is an object with a clock property
         setClockData(result.clock || "N/A");
+        if (cacheKey) {
+            localStorage.setItem(cacheKey, result.clock || "N/A");
+        }
       } else {
         setClockData("N/A");
       }
@@ -68,6 +76,15 @@ const useClockInfo = (deviceId: string | undefined, enabled: boolean, isDeviceRe
       setLoading(true);
       setError(null);
       setTaskId(null); // Reset task ID before new request
+
+      if (cacheKey) {
+        const cachedData = localStorage.getItem(cacheKey);
+        if (cachedData) {
+            setClockData(cachedData);
+            setLoading(false);
+            return;
+        }
+      }
       
       const response = await fetch(`/api/devices/${deviceId}/system/clock`, {
         headers: {
@@ -93,6 +110,9 @@ const useClockInfo = (deviceId: string | undefined, enabled: boolean, isDeviceRe
       } else if (data && data.clock) {
         // If we get direct data, use it
         setClockData(data.clock || "N/A");
+        if (cacheKey) {
+            localStorage.setItem(cacheKey, data.clock || "N/A");
+        }
         setLoading(false);
       } else {
         // Handle case where we get an unexpected response
@@ -103,15 +123,24 @@ const useClockInfo = (deviceId: string | undefined, enabled: boolean, isDeviceRe
       setError(err.message || "Failed to fetch clock information");
       setLoading(false);
     }
-  }, [token, deviceId, enabled, isDeviceReachable, logout, navigate]);
+  }, [token, deviceId, enabled, isDeviceReachable, logout, navigate, cacheKey]);
 
   // Reset state when deviceId or enabled changes
   useEffect(() => {
     setTaskId(null);
-    setClockData(null);
+    if (cacheKey) {
+        const cachedData = localStorage.getItem(cacheKey);
+        if (cachedData) {
+            setClockData(cachedData);
+        } else {
+            setClockData(null);
+        }
+    } else {
+        setClockData(null);
+    }
     setLoading(false);
     setError(null);
-  }, [deviceId, enabled]);
+  }, [deviceId, enabled, cacheKey]);
 
   // Fetch data when enabled and device is reachable
   useEffect(() => {
@@ -120,15 +149,23 @@ const useClockInfo = (deviceId: string | undefined, enabled: boolean, isDeviceRe
     }
   }, [enabled, isDeviceReachable, deviceId, fetchClockInfo]);
 
+  const clearCache = useCallback(() => {
+    if (cacheKey) {
+        localStorage.removeItem(cacheKey);
+        setClockData(null);
+    }
+  }, [cacheKey]);
+
   return {
     data: clockData,
     isFetching: loading || taskLoading,
     error: error || taskError,
-    refetch: fetchClockInfo
+    refetch: fetchClockInfo,
+    clearCache
   };
 };
 
-// Separate hook for interfaces with task-based fetching
+// Separate hook for interfaces with task-based fetching and localStorage caching
 const useInterfaces = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
@@ -137,12 +174,18 @@ const useInterfaces = (deviceId: string | undefined, enabled: boolean, isDeviceR
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const cacheKey = deviceId ? `interfaces_${deviceId}` : null;
+
   const { taskStatus, loading: taskLoading, error: taskError } = useTaskPolling(taskId, {
     interval: 250,
     onSuccess: (result) => {
       // Handle the case where result is an array directly (interfaces data)
       if (Array.isArray(result)) {
         setInterfacesData(result);
+        // Cache the result in localStorage
+        if (cacheKey) {
+          localStorage.setItem(cacheKey, JSON.stringify(result));
+        }
       } else {
         setInterfacesData([]);
       }
@@ -165,6 +208,17 @@ const useInterfaces = (deviceId: string | undefined, enabled: boolean, isDeviceR
       setLoading(true);
       setError(null);
       setTaskId(null); // Reset task ID before new request
+
+      // Check if data exists in localStorage cache
+      if (cacheKey) {
+        const cachedData = localStorage.getItem(cacheKey);
+        if (cachedData) {
+          const parsedData = JSON.parse(cachedData);
+          setInterfacesData(parsedData);
+          setLoading(false);
+          return;
+        }
+      }
       
       const response = await fetch(`/api/devices/${deviceId}/interfaces/brief`, {
         headers: {
@@ -190,6 +244,10 @@ const useInterfaces = (deviceId: string | undefined, enabled: boolean, isDeviceR
       } else if (Array.isArray(data)) {
         // If we get direct data, use it
         setInterfacesData(data);
+        // Cache the result in localStorage
+        if (cacheKey) {
+          localStorage.setItem(cacheKey, JSON.stringify(data));
+        }
         setLoading(false);
       } else {
         // Handle case where we get an unexpected response
@@ -200,15 +258,25 @@ const useInterfaces = (deviceId: string | undefined, enabled: boolean, isDeviceR
       setError(err.message || "Failed to fetch interfaces");
       setLoading(false);
     }
-  }, [token, deviceId, enabled, isDeviceReachable, logout, navigate]);
+  }, [token, deviceId, enabled, isDeviceReachable, logout, navigate, cacheKey]);
 
   // Reset state when deviceId or enabled changes
   useEffect(() => {
     setTaskId(null);
-    setInterfacesData(null);
+    // Check for cached data when component mounts
+    if (cacheKey) {
+      const cachedData = localStorage.getItem(cacheKey);
+      if (cachedData) {
+        setInterfacesData(JSON.parse(cachedData));
+      } else {
+        setInterfacesData(null);
+      }
+    } else {
+      setInterfacesData(null);
+    }
     setLoading(false);
     setError(null);
-  }, [deviceId, enabled]);
+  }, [deviceId, enabled, cacheKey]);
 
   // Fetch data when enabled and device is reachable
   useEffect(() => {
@@ -217,15 +285,24 @@ const useInterfaces = (deviceId: string | undefined, enabled: boolean, isDeviceR
     }
   }, [enabled, isDeviceReachable, deviceId, fetchInterfaces]);
 
+  // Function to clear cache
+  const clearCache = useCallback(() => {
+    if (cacheKey) {
+      localStorage.removeItem(cacheKey);
+      setInterfacesData(null); // Reset to null to trigger a refetch
+    }
+  }, [cacheKey]);
+
   return {
     data: interfacesData,
     isFetching: loading || taskLoading,
     error: error || taskError,
-    refetch: fetchInterfaces
+    refetch: fetchInterfaces,
+    clearCache
   };
 };
 
-// Separate hook for routing information with task-based fetching
+// Separate hook for routing information with task-based fetching and localStorage caching
 const useRoutingInfo = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
@@ -234,12 +311,17 @@ const useRoutingInfo = (deviceId: string | undefined, enabled: boolean, isDevice
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const cacheKey = deviceId ? `routing_${deviceId}` : null;
+
   const { taskStatus, loading: taskLoading, error: taskError } = useTaskPolling(taskId, {
     interval: 250,
     onSuccess: (result) => {
       // Handle the case where result is an array directly (routing data)
       if (Array.isArray(result)) {
         setRoutingData(result);
+        if (cacheKey) {
+          localStorage.setItem(cacheKey, JSON.stringify(result));
+        }
       } else {
         setRoutingData([]);
       }
@@ -262,6 +344,17 @@ const useRoutingInfo = (deviceId: string | undefined, enabled: boolean, isDevice
       setLoading(true);
       setError(null);
       setTaskId(null); // Reset task ID before new request
+
+      // Check if data exists in localStorage cache
+      if (cacheKey) {
+        const cachedData = localStorage.getItem(cacheKey);
+        if (cachedData) {
+          const parsedData = JSON.parse(cachedData);
+          setRoutingData(parsedData);
+          setLoading(false);
+          return;
+        }
+      }
       
       const response = await fetch(`/api/devices/${deviceId}/routing`, {
         headers: {
@@ -287,6 +380,10 @@ const useRoutingInfo = (deviceId: string | undefined, enabled: boolean, isDevice
       } else if (Array.isArray(data)) {
         // If we get direct data, use it
         setRoutingData(data);
+        // Cache the result in localStorage
+        if (cacheKey) {
+          localStorage.setItem(cacheKey, JSON.stringify(data));
+        }
         setLoading(false);
       } else {
         // Handle case where we get an unexpected response
@@ -297,15 +394,25 @@ const useRoutingInfo = (deviceId: string | undefined, enabled: boolean, isDevice
       setError(err.message || "Failed to fetch routing information");
       setLoading(false);
     }
-  }, [token, deviceId, enabled, isDeviceReachable, logout, navigate]);
+  }, [token, deviceId, enabled, isDeviceReachable, logout, navigate, cacheKey]);
 
   // Reset state when deviceId or enabled changes
   useEffect(() => {
     setTaskId(null);
-    setRoutingData(null);
+    // Check for cached data when component mounts
+    if (cacheKey) {
+      const cachedData = localStorage.getItem(cacheKey);
+      if (cachedData) {
+        setRoutingData(JSON.parse(cachedData));
+      } else {
+        setRoutingData(null);
+      }
+    } else {
+      setRoutingData(null);
+    }
     setLoading(false);
     setError(null);
-  }, [deviceId, enabled]);
+  }, [deviceId, enabled, cacheKey]);
 
   // Fetch data when enabled and device is reachable
   useEffect(() => {
@@ -314,11 +421,403 @@ const useRoutingInfo = (deviceId: string | undefined, enabled: boolean, isDevice
     }
   }, [enabled, isDeviceReachable, deviceId, fetchRoutingInfo]);
 
+  // Function to clear cache
+  const clearCache = useCallback(() => {
+    if (cacheKey) {
+      localStorage.removeItem(cacheKey);
+      setRoutingData(null); // Reset to null to trigger a refetch
+    }
+  }, [cacheKey]);
+
   return {
     data: routingData,
     isFetching: loading || taskLoading,
     error: error || taskError,
-    refetch: fetchRoutingInfo
+    refetch: fetchRoutingInfo,
+    clearCache
+  };
+};
+
+// Separate hook for ARP table with task-based fetching and localStorage caching
+const useArpTable = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
+  const { token, logout } = useAuth();
+  const navigate = useNavigate();
+  const [taskId, setTaskId] = useState<string | null>(null);
+  const [arpData, setArpData] = useState<any[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const cacheKey = deviceId ? `arp_${deviceId}` : null;
+
+  const { taskStatus, loading: taskLoading, error: taskError } = useTaskPolling(taskId, {
+    interval: 250,
+    onSuccess: (result) => {
+      // Handle the case where result is an array directly (ARP data)
+      if (Array.isArray(result)) {
+        setArpData(result);
+        // Cache the result in localStorage
+        if (cacheKey) {
+          localStorage.setItem(cacheKey, JSON.stringify(result));
+        }
+      } else {
+        setArpData([]);
+      }
+      // Clear the task ID to stop polling
+      setTaskId(null);
+      setLoading(false);
+    },
+    onError: (err) => {
+      setError(err);
+      // Clear the task ID to stop polling
+      setTaskId(null);
+      setLoading(false);
+    }
+  });
+
+  const fetchArpTable = useCallback(async () => {
+    if (!token || !deviceId || !enabled || !isDeviceReachable) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+      setTaskId(null); // Reset task ID before new request
+
+      // Check if data exists in localStorage cache
+      if (cacheKey) {
+        const cachedData = localStorage.getItem(cacheKey);
+        if (cachedData) {
+          const parsedData = JSON.parse(cachedData);
+          setArpData(parsedData);
+          setLoading(false);
+          return;
+        }
+      }
+      
+      const response = await fetch(`/api/devices/${deviceId}/arp`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      
+      if (response.status === 401) {
+        logout();
+        navigate("/login");
+        throw new Error("Session expired or unauthorized. Please log in again.");
+      }
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch ARP table: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      
+      // If we get a task_id, start polling
+      if (data && data.task_id) {
+        setTaskId(data.task_id);
+      } else if (Array.isArray(data)) {
+        // If we get direct data, use it
+        setArpData(data);
+        // Cache the result in localStorage
+        if (cacheKey) {
+          localStorage.setItem(cacheKey, JSON.stringify(data));
+        }
+        setLoading(false);
+      } else {
+        // Handle case where we get an unexpected response
+        setArpData([]);
+        setLoading(false);
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to fetch ARP table");
+      setLoading(false);
+    }
+  }, [token, deviceId, enabled, isDeviceReachable, logout, navigate, cacheKey]);
+
+  // Reset state when deviceId or enabled changes
+  useEffect(() => {
+    setTaskId(null);
+    // Check for cached data when component mounts
+    if (cacheKey) {
+      const cachedData = localStorage.getItem(cacheKey);
+      if (cachedData) {
+        setArpData(JSON.parse(cachedData));
+      } else {
+        setArpData(null);
+      }
+    } else {
+      setArpData(null);
+    }
+    setLoading(false);
+    setError(null);
+  }, [deviceId, enabled, cacheKey]);
+
+  // Fetch data when enabled and device is reachable
+  useEffect(() => {
+    if (enabled && isDeviceReachable && deviceId) {
+      fetchArpTable();
+    }
+  }, [enabled, isDeviceReachable, deviceId, fetchArpTable]);
+
+  // Function to clear cache
+  const clearCache = useCallback(() => {
+    if (cacheKey) {
+      localStorage.removeItem(cacheKey);
+      setArpData(null); // Reset to null to trigger a refetch
+    }
+  }, [cacheKey]);
+
+  return {
+    data: arpData,
+    isFetching: loading || taskLoading,
+    error: error || taskError,
+    refetch: fetchArpTable,
+    clearCache
+  };
+};
+
+// Separate hook for CDP neighbors with task-based fetching and localStorage caching
+const useCdpNeighbors = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
+  const { token, logout } = useAuth();
+  const navigate = useNavigate();
+  const [taskId, setTaskId] = useState<string | null>(null);
+  const [cdpData, setCdpData] = useState<any[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const cacheKey = deviceId ? `cdp_${deviceId}` : null;
+
+  const { taskStatus, loading: taskLoading, error: taskError } = useTaskPolling(taskId, {
+    interval: 250,
+    onSuccess: (result) => {
+      if (Array.isArray(result)) {
+        setCdpData(result);
+        if (cacheKey) {
+          localStorage.setItem(cacheKey, JSON.stringify(result));
+        }
+      } else {
+        setCdpData([]);
+      }
+      setTaskId(null);
+      setLoading(false);
+    },
+    onError: (err) => {
+      setError(err);
+      setTaskId(null);
+      setLoading(false);
+    }
+  });
+
+  const fetchCdpNeighbors = useCallback(async () => {
+    if (!token || !deviceId || !enabled || !isDeviceReachable) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+      setTaskId(null);
+
+      if (cacheKey) {
+        const cachedData = localStorage.getItem(cacheKey);
+        if (cachedData) {
+          setCdpData(JSON.parse(cachedData));
+          setLoading(false);
+          return;
+        }
+      }
+      
+      const response = await fetch(`/api/devices/${deviceId}/cdp`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      
+      if (response.status === 401) {
+        logout();
+        navigate("/login");
+        throw new Error("Session expired or unauthorized. Please log in again.");
+      }
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch CDP neighbors: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      
+      if (data && data.task_id) {
+        setTaskId(data.task_id);
+      } else if (Array.isArray(data)) {
+        setCdpData(data);
+        if (cacheKey) {
+          localStorage.setItem(cacheKey, JSON.stringify(data));
+        }
+        setLoading(false);
+      } else {
+        setCdpData([]);
+        setLoading(false);
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to fetch CDP neighbors");
+      setLoading(false);
+    }
+  }, [token, deviceId, enabled, isDeviceReachable, logout, navigate, cacheKey]);
+
+  useEffect(() => {
+    setTaskId(null);
+    if (cacheKey) {
+      const cachedData = localStorage.getItem(cacheKey);
+      if (cachedData) {
+        setCdpData(JSON.parse(cachedData));
+      } else {
+        setCdpData(null);
+      }
+    } else {
+      setCdpData(null);
+    }
+    setLoading(false);
+    setError(null);
+  }, [deviceId, enabled, cacheKey]);
+
+  useEffect(() => {
+    if (enabled && isDeviceReachable && deviceId) {
+      fetchCdpNeighbors();
+    }
+  }, [enabled, isDeviceReachable, deviceId, fetchCdpNeighbors]);
+
+  const clearCache = useCallback(() => {
+    if (cacheKey) {
+      localStorage.removeItem(cacheKey);
+      setCdpData(null);
+    }
+  }, [cacheKey]);
+
+  return {
+    data: cdpData,
+    isFetching: loading || taskLoading,
+    error: error || taskError,
+    refetch: fetchCdpNeighbors,
+    clearCache
+  };
+};
+
+// Separate hook for LLDP neighbors with task-based fetching and localStorage caching
+const useLldpNeighbors = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
+  const { token, logout } = useAuth();
+  const navigate = useNavigate();
+  const [taskId, setTaskId] = useState<string | null>(null);
+  const [lldpData, setLldpData] = useState<any[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const cacheKey = deviceId ? `lldp_${deviceId}` : null;
+
+  const { taskStatus, loading: taskLoading, error: taskError } = useTaskPolling(taskId, {
+    interval: 250,
+    onSuccess: (result) => {
+      if (Array.isArray(result)) {
+        setLldpData(result);
+        if (cacheKey) {
+          localStorage.setItem(cacheKey, JSON.stringify(result));
+        }
+      } else {
+        setLldpData([]);
+      }
+      setTaskId(null);
+      setLoading(false);
+    },
+    onError: (err) => {
+      setError(err);
+      setTaskId(null);
+      setLoading(false);
+    }
+  });
+
+  const fetchLldpNeighbors = useCallback(async () => {
+    if (!token || !deviceId || !enabled || !isDeviceReachable) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+      setTaskId(null);
+
+      if (cacheKey) {
+        const cachedData = localStorage.getItem(cacheKey);
+        if (cachedData) {
+          setLldpData(JSON.parse(cachedData));
+          setLoading(false);
+          return;
+        }
+      }
+      
+      const response = await fetch(`/api/devices/${deviceId}/lldp`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      
+      if (response.status === 401) {
+        logout();
+        navigate("/login");
+        throw new Error("Session expired or unauthorized. Please log in again.");
+      }
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch LLDP neighbors: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      
+      if (data && data.task_id) {
+        setTaskId(data.task_id);
+      } else if (Array.isArray(data)) {
+        setLldpData(data);
+        if (cacheKey) {
+          localStorage.setItem(cacheKey, JSON.stringify(data));
+        }
+        setLoading(false);
+      } else {
+        setLldpData([]);
+        setLoading(false);
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to fetch LLDP neighbors");
+      setLoading(false);
+    }
+  }, [token, deviceId, enabled, isDeviceReachable, logout, navigate, cacheKey]);
+
+  useEffect(() => {
+    setTaskId(null);
+    if (cacheKey) {
+      const cachedData = localStorage.getItem(cacheKey);
+      if (cachedData) {
+        setLldpData(JSON.parse(cachedData));
+      } else {
+        setLldpData(null);
+      }
+    } else {
+      setLldpData(null);
+    }
+    setLoading(false);
+    setError(null);
+  }, [deviceId, enabled, cacheKey]);
+
+  useEffect(() => {
+    if (enabled && isDeviceReachable && deviceId) {
+      fetchLldpNeighbors();
+    }
+  }, [enabled, isDeviceReachable, deviceId, fetchLldpNeighbors]);
+
+  const clearCache = useCallback(() => {
+    if (cacheKey) {
+      localStorage.removeItem(cacheKey);
+      setLldpData(null);
+    }
+  }, [cacheKey]);
+
+  return {
+    data: lldpData,
+    isFetching: loading || taskLoading,
+    error: error || taskError,
+    refetch: fetchLldpNeighbors,
+    clearCache
   };
 };
 
@@ -336,6 +835,7 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
 
   // Tab state
   const [activeTab, setActiveTab] = useState("overview");
+  const [activeDiscoveryTab, setActiveDiscoveryTab] = useState('arp');
   
   // Device reachability (always loaded)
   const { data: isReachable = false } = useQuery<boolean, Error>({
@@ -372,16 +872,19 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
     onSuccess: () => {
       // Invalidate relevant queries to refresh data after task completion
       if (taskAction === 'toggleInterface') {
-        queryClient.invalidateQueries({ queryKey: ["interfacesBrief", id] });
+        refetchInterfaces();
       }
     }
   });
   
   // Lazy load data based on active tab
   const { data: systemInfo, isLoading: systemLoading, error: systemError } = useSystemInfo(id, activeTab === "overview", isReachable, device);
-  const { data: clockInfo, isFetching: clockLoading, error: clockError, refetch: refetchClock } = useClockInfo(id, activeTab === "overview", isReachable);
-  const { data: interfaces, isFetching: interfacesLoading, error: interfacesError, refetch: refetchInterfaces } = useInterfaces(id, activeTab === "interfaces", isReachable);
-  const { data: routingInfo, isFetching: routingLoading, error: routingError } = useRoutingInfo(id, activeTab === "routing", isReachable);
+  const { data: clockInfo, isFetching: clockLoading, error: clockError, refetch: refetchClock, clearCache: clearClockCache } = useClockInfo(id, activeTab === "overview", isReachable);
+  const { data: interfaces, isFetching: interfacesLoading, error: interfacesError, refetch: refetchInterfaces, clearCache: clearInterfacesCache } = useInterfaces(id, activeTab === "interfaces", isReachable);
+  const { data: routingInfo, isFetching: routingLoading, error: routingError, refetch: refetchRoutingInfo, clearCache: clearRoutingInfoCache } = useRoutingInfo(id, activeTab === "routing", isReachable);
+  const { data: arpTable, isFetching: arpLoading, error: arpError, refetch: refetchArpTable, clearCache: clearArpTableCache } = useArpTable(id, activeTab === 'discovery' && activeDiscoveryTab === 'arp', isReachable);
+  const { data: cdpNeighbors, isFetching: cdpLoading, error: cdpError, refetch: refetchCdpNeighbors, clearCache: clearCdpCache } = useCdpNeighbors(id, activeTab === 'discovery' && activeDiscoveryTab === 'cdp', isReachable);
+  const { data: lldpNeighbors, isFetching: lldpLoading, error: lldpError, refetch: refetchLldpNeighbors, clearCache: clearLldpCache } = useLldpNeighbors(id, activeTab === 'discovery' && activeDiscoveryTab === 'lldp', isReachable);
   
   // Command execution state
   const [command, setCommand] = useState("");
@@ -398,6 +901,21 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastVariant, setToastVariant] = useState<'success' | 'danger'>('success');
+
+  const handleRefresh = () => {
+    clearInterfacesCache();
+    clearRoutingInfoCache();
+    clearArpTableCache();
+    clearCdpCache();
+    clearLldpCache();
+    clearClockCache();
+    refetchInterfaces();
+    refetchRoutingInfo();
+    refetchArpTable();
+    refetchCdpNeighbors();
+    refetchLldpNeighbors();
+    refetchClock();
+  };
 
   // Handle tab changes
   const handleTabSelect = (tabKey: string | null) => {
@@ -483,12 +1001,12 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
         return;
       }
 
+      const data = await response.json();
+
       if (!response.ok) {
-        const data = await response.json();
         throw new Error(data.detail || "Failed to execute command");
       }
 
-      const data = await response.json();
       setCurrentTaskId(data.task_id);
     } catch (err: any) {
       setCommandError(err.message || "An unknown error occurred.");
@@ -554,8 +1072,8 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
                 <div>
                   <Card.Title as="h1" className="mb-3">
                     {device?.name || "Unknown Device"} ({device?.ip_address || "Unknown IP"})
-                    <Badge bg={device?.is_reachable ? "success" : "danger"} className="ms-2">
-                      {device?.is_reachable ? "Online" : "Offline"}
+                    <Badge bg={isReachable ? "success" : "danger"} className="ms-2">
+                      {isReachable ? "Online" : "Offline"}
                     </Badge>
                   </Card.Title>
                   <Card.Subtitle className="mb-2 text-muted">
@@ -563,7 +1081,7 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
                   </Card.Subtitle>
                 </div>
                 <div>
-                  <Button variant="outline-primary" onClick={() => window.location.reload()}>
+                  <Button variant="outline-primary" onClick={handleRefresh}>
                     Refresh
                   </Button>
                   <Button variant="secondary" onClick={() => navigate(-1)} className="ms-2">
@@ -582,7 +1100,7 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
             <Alert variant="info">
               <div className="d-flex align-items-center">
                 <Spinner animation="border" size="sm" className="me-2" />
-                <span>Processing task: {taskAction === 'toggleInterface' ? 'Toggling interface' : 'Executing command'}...</span>
+                <span>Processing task: {taskAction}...</span>
               </div>
             </Alert>
           </Col>
@@ -614,7 +1132,7 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
                   <Card.Title as="h2">System Information</Card.Title>
                   {systemError || clockError ? (
                     <Alert variant="danger">
-                      Error: {systemError?.message || clockError?.message}. Please try again later.
+                      Error: {systemError?.message || clockError}. Please try again later.
                     </Alert>
                   ) : (systemLoading || clockLoading) ? (
                     <div className="text-center">
@@ -668,7 +1186,7 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
                   <Card.Title as="h2">Interfaces</Card.Title>
                   {interfacesError ? (
                     <Alert variant="danger">
-                      Error: {interfacesError.message}. Please try again later.
+                      Error: {interfacesError}. Please try again later.
                     </Alert>
                   ) : interfacesLoading ? (
                     <div className="text-center">
@@ -702,7 +1220,7 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
                                   iface.interface || iface.intf || "",
                                   iface.status || ""
                                 )}
-                                disabled={!device?.is_reachable || togglingInterfaces[iface.interface || iface.intf || ""] || !!currentTaskId}
+                                disabled={!isReachable || togglingInterfaces[iface.interface || iface.intf || ""] || !!currentTaskId}
                               >
                                 {(togglingInterfaces[iface.interface || iface.intf || ""] || 
                                   (currentTaskId && taskAction === 'toggleInterface')) ? (
@@ -740,7 +1258,7 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
                   <Card.Title as="h2">Routing Information</Card.Title>
                   {routingError ? (
                     <Alert variant="danger">
-                      Error: {routingError.message}. Please try again later.
+                      Error: {routingError}. Please try again later.
                     </Alert>
                   ) : routingLoading ? (
                     <div className="text-center">
@@ -782,6 +1300,160 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
           </Row>
         </Tab>
         
+        <Tab eventKey="discovery" title="Network Discovery">
+          <Tabs
+            activeKey={activeDiscoveryTab}
+            onSelect={(k) => setActiveDiscoveryTab(k || 'arp')}
+            className="mb-3"
+            mountOnEnter={true}
+            unmountOnExit={true}
+          >
+            <Tab eventKey="arp" title="ARP Table">
+              <Row className="mb-4">
+                <Col md={12}>
+                  <Card>
+                    <Card.Body>
+                      <Card.Title as="h2">ARP Table</Card.Title>
+                      {arpError ? (
+                        <Alert variant="danger">
+                          Error: {arpError}. Please try again later.
+                        </Alert>
+                      ) : arpLoading ? (
+                        <div className="text-center">
+                          <Spinner animation="border" role="status">
+                            <span className="visually-hidden">Loading...</span>
+                          </Spinner>
+                        </div>
+                      ) : arpTable && arpTable.length > 0 ? (
+                        <Table striped bordered hover responsive>
+                          <thead>
+                            <tr>
+                              <th>Address</th>
+                              <th>MAC Address</th>
+                              <th>Interface</th>
+                              <th>Age</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {arpTable.map((entry: any, index: number) => (
+                              <tr key={index}>
+                                <td>{entry.ip_address || entry.address ||  "N/A"}</td>
+                                <td>{entry.mac_address || entry.hardware_address || "N/A"}</td>
+                                <td>{entry.interface || entry.port || "N/A"}</td>
+                                <td>{entry.age || "N/A"}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </Table>
+                      ) : (
+                        <Alert variant="info">No ARP entries found.</Alert>
+                      )}
+                    </Card.Body>
+                  </Card>
+                </Col>
+              </Row>
+            </Tab>
+            <Tab eventKey="cdp" title="CDP Neighbors">
+              <Row className="mb-4">
+                <Col md={12}>
+                  <Card>
+                    <Card.Body>
+                      <Card.Title as="h2">CDP Neighbors</Card.Title>
+                      {cdpError ? (
+                        <Alert variant="danger">
+                          Error: {cdpError}. Please try again later.
+                        </Alert>
+                      ) : cdpLoading ? (
+                        <div className="text-center">
+                          <Spinner animation="border" role="status">
+                            <span className="visually-hidden">Loading...</span>
+                          </Spinner>
+                        </div>
+                      ) : cdpNeighbors && cdpNeighbors.length > 0 ? (
+                        <Table striped bordered hover responsive>
+                          <thead>
+                            <tr>
+                              <th>Device ID</th>
+                              <th>Local Interface</th>
+                              <th>Hold Time</th>
+                              <th>Capability</th>
+                              <th>Platform</th>
+                              <th>Port ID</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {cdpNeighbors.map((neighbor: any, index: number) => (
+                              <tr key={index}>
+                                <td>{neighbor.device_id || "N/A"}</td>
+                                <td>{neighbor.local_interface || "N/A"}</td>
+                                <td>{neighbor.hold_time || "N/A"}</td>
+                                <td>{neighbor.capability || "N/A"}</td>
+                                <td>{neighbor.platform || "N/A"}</td>
+                                <td>{neighbor.port_id || "N/A"}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </Table>
+                      ) : (
+                        <Alert variant="info">No CDP neighbors found.</Alert>
+                      )}
+                    </Card.Body>
+                  </Card>
+                </Col>
+              </Row>
+            </Tab>
+            <Tab eventKey="lldp" title="LLDP Neighbors">
+              <Row className="mb-4">
+                <Col md={12}>
+                  <Card>
+                    <Card.Body>
+                      <Card.Title as="h2">LLDP Neighbors</Card.Title>
+                      {lldpError ? (
+                        <Alert variant="danger">
+                          Error: {lldpError}. Please try again later.
+                        </Alert>
+                      ) : lldpLoading ? (
+                        <div className="text-center">
+                          <Spinner animation="border" role="status">
+                            <span className="visually-hidden">Loading...</span>
+                          </Spinner>
+                        </div>
+                      ) : lldpNeighbors && lldpNeighbors.length > 0 ? (
+                        <Table striped bordered hover responsive>
+                          <thead>
+                            <tr>
+                              <th>Device ID</th>
+                              <th>Local Interface</th>
+                              <th>Hold Time</th>
+                              <th>Capability</th>
+                              <th>Platform</th>
+                              <th>Port ID</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {lldpNeighbors.map((neighbor: any, index: number) => (
+                              <tr key={index}>
+                                <td>{neighbor.device_id || "N/A"}</td>
+                                <td>{neighbor.local_interface || "N/A"}</td>
+                                <td>{neighbor.hold_time || "N/A"}</td>
+                                <td>{neighbor.capability || "N/A"}</td>
+                                <td>{neighbor.platform || "N/A"}</td>
+                                <td>{neighbor.port_id || "N/A"}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </Table>
+                      ) : (
+                        <Alert variant="info">No LLDP neighbors found.</Alert>
+                      )}
+                    </Card.Body>
+                  </Card>
+                </Col>
+              </Row>
+            </Tab>
+          </Tabs>
+        </Tab>
+
         <Tab eventKey="commands" title="Commands">
           <Row>
             <Col md={6}>

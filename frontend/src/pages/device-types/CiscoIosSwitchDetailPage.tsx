@@ -33,7 +33,7 @@ const useSystemInfo = (deviceId: string | undefined, enabled: boolean, isDeviceR
   };
 };
 
-// Separate hook for clock information with task-based fetching
+// Separate hook for clock information with task-based fetching and localStorage caching
 const useClockInfo = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
@@ -42,15 +42,23 @@ const useClockInfo = (deviceId: string | undefined, enabled: boolean, isDeviceRe
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const cacheKey = deviceId ? `clock_${deviceId}` : null;
+
   const { taskStatus, loading: taskLoading, error: taskError } = useTaskPolling(taskId, {
     interval: 250,
     onSuccess: (result) => {
       // Handle the case where result is a string directly (clock data)
       if (typeof result === 'string') {
         setClockData(result || "N/A");
+        if (cacheKey) {
+            localStorage.setItem(cacheKey, result || "N/A");
+        }
       } else if (result && typeof result === 'object' && result.clock) {
         // Handle the case where result is an object with a clock property
         setClockData(result.clock || "N/A");
+        if (cacheKey) {
+            localStorage.setItem(cacheKey, result.clock || "N/A");
+        }
       } else {
         setClockData("N/A");
       }
@@ -73,6 +81,15 @@ const useClockInfo = (deviceId: string | undefined, enabled: boolean, isDeviceRe
       setLoading(true);
       setError(null);
       setTaskId(null); // Reset task ID before new request
+
+      if (cacheKey) {
+        const cachedData = localStorage.getItem(cacheKey);
+        if (cachedData) {
+            setClockData(cachedData);
+            setLoading(false);
+            return;
+        }
+      }
       
       const response = await fetch(`/api/devices/${deviceId}/system/clock`, {
         headers: {
@@ -98,6 +115,9 @@ const useClockInfo = (deviceId: string | undefined, enabled: boolean, isDeviceRe
       } else if (data && data.clock) {
         // If we get direct data, use it
         setClockData(data.clock || "N/A");
+        if (cacheKey) {
+            localStorage.setItem(cacheKey, data.clock || "N/A");
+        }
         setLoading(false);
       } else {
         // Handle case where we get an unexpected response
@@ -108,15 +128,24 @@ const useClockInfo = (deviceId: string | undefined, enabled: boolean, isDeviceRe
       setError(err.message || "Failed to fetch clock information");
       setLoading(false);
     }
-  }, [token, deviceId, enabled, isDeviceReachable, logout, navigate]);
+  }, [token, deviceId, enabled, isDeviceReachable, logout, navigate, cacheKey]);
 
   // Reset state when deviceId or enabled changes
   useEffect(() => {
     setTaskId(null);
-    setClockData(null);
+    if (cacheKey) {
+        const cachedData = localStorage.getItem(cacheKey);
+        if (cachedData) {
+            setClockData(cachedData);
+        } else {
+            setClockData(null);
+        }
+    } else {
+        setClockData(null);
+    }
     setLoading(false);
     setError(null);
-  }, [deviceId, enabled]);
+  }, [deviceId, enabled, cacheKey]);
 
   // Fetch data when enabled and device is reachable
   useEffect(() => {
@@ -125,15 +154,23 @@ const useClockInfo = (deviceId: string | undefined, enabled: boolean, isDeviceRe
     }
   }, [enabled, isDeviceReachable, deviceId, fetchClockInfo]);
 
+  const clearCache = useCallback(() => {
+    if (cacheKey) {
+        localStorage.removeItem(cacheKey);
+        setClockData(null);
+    }
+  }, [cacheKey]);
+
   return {
     data: clockData,
     isFetching: loading || taskLoading,
     error: error || taskError,
-    refetch: fetchClockInfo
+    refetch: fetchClockInfo,
+    clearCache
   };
 };
 
-// Separate hook for interfaces with task-based fetching
+// Separate hook for interfaces with task-based fetching and localStorage caching
 const useInterfaces = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
@@ -142,12 +179,18 @@ const useInterfaces = (deviceId: string | undefined, enabled: boolean, isDeviceR
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const cacheKey = deviceId ? `interfaces_${deviceId}` : null;
+
   const { taskStatus, loading: taskLoading, error: taskError } = useTaskPolling(taskId, {
     interval: 250,
     onSuccess: (result) => {
       // Handle the case where result is an array directly (interfaces data)
       if (Array.isArray(result)) {
         setInterfacesData(result);
+        // Cache the result in localStorage
+        if (cacheKey) {
+          localStorage.setItem(cacheKey, JSON.stringify(result));
+        }
       } else {
         setInterfacesData([]);
       }
@@ -170,6 +213,17 @@ const useInterfaces = (deviceId: string | undefined, enabled: boolean, isDeviceR
       setLoading(true);
       setError(null);
       setTaskId(null); // Reset task ID before new request
+
+      // Check if data exists in localStorage cache
+      if (cacheKey) {
+        const cachedData = localStorage.getItem(cacheKey);
+        if (cachedData) {
+          const parsedData = JSON.parse(cachedData);
+          setInterfacesData(parsedData);
+          setLoading(false);
+          return;
+        }
+      }
       
       const response = await fetch(`/api/devices/${deviceId}/interfaces/brief`, {
         headers: {
@@ -195,6 +249,10 @@ const useInterfaces = (deviceId: string | undefined, enabled: boolean, isDeviceR
       } else if (Array.isArray(data)) {
         // If we get direct data, use it
         setInterfacesData(data);
+        // Cache the result in localStorage
+        if (cacheKey) {
+          localStorage.setItem(cacheKey, JSON.stringify(data));
+        }
         setLoading(false);
       } else {
         // Handle case where we get an unexpected response
@@ -205,15 +263,25 @@ const useInterfaces = (deviceId: string | undefined, enabled: boolean, isDeviceR
       setError(err.message || "Failed to fetch interfaces");
       setLoading(false);
     }
-  }, [token, deviceId, enabled, isDeviceReachable, logout, navigate]);
+  }, [token, deviceId, enabled, isDeviceReachable, logout, navigate, cacheKey]);
 
   // Reset state when deviceId or enabled changes
   useEffect(() => {
     setTaskId(null);
-    setInterfacesData(null);
+    // Check for cached data when component mounts
+    if (cacheKey) {
+      const cachedData = localStorage.getItem(cacheKey);
+      if (cachedData) {
+        setInterfacesData(JSON.parse(cachedData));
+      } else {
+        setInterfacesData(null);
+      }
+    } else {
+      setInterfacesData(null);
+    }
     setLoading(false);
     setError(null);
-  }, [deviceId, enabled]);
+  }, [deviceId, enabled, cacheKey]);
 
   // Fetch data when enabled and device is reachable
   useEffect(() => {
@@ -222,15 +290,24 @@ const useInterfaces = (deviceId: string | undefined, enabled: boolean, isDeviceR
     }
   }, [enabled, isDeviceReachable, deviceId, fetchInterfaces]);
 
+  // Function to clear cache
+  const clearCache = useCallback(() => {
+    if (cacheKey) {
+      localStorage.removeItem(cacheKey);
+      setInterfacesData(null); // Reset to null to trigger a refetch
+    }
+  }, [cacheKey]);
+
   return {
     data: interfacesData,
     isFetching: loading || taskLoading,
     error: error || taskError,
-    refetch: fetchInterfaces
+    refetch: fetchInterfaces,
+    clearCache
   };
 };
 
-// Separate hook for VLAN information with task-based fetching
+// Separate hook for VLAN information with task-based fetching and localStorage caching
 const useVlanInfo = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
@@ -239,12 +316,18 @@ const useVlanInfo = (deviceId: string | undefined, enabled: boolean, isDeviceRea
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const cacheKey = deviceId ? `vlans_${deviceId}` : null;
+
   const { taskStatus, loading: taskLoading, error: taskError } = useTaskPolling(taskId, {
     interval: 250,
     onSuccess: (result) => {
       // Handle the case where result is an array directly (VLAN data)
       if (Array.isArray(result)) {
         setVlanData(result);
+        // Cache the result in localStorage
+        if (cacheKey) {
+          localStorage.setItem(cacheKey, JSON.stringify(result));
+        }
       } else {
         setVlanData([]);
       }
@@ -267,6 +350,17 @@ const useVlanInfo = (deviceId: string | undefined, enabled: boolean, isDeviceRea
       setLoading(true);
       setError(null);
       setTaskId(null); // Reset task ID before new request
+
+      // Check if data exists in localStorage cache
+      if (cacheKey) {
+        const cachedData = localStorage.getItem(cacheKey);
+        if (cachedData) {
+          const parsedData = JSON.parse(cachedData);
+          setVlanData(parsedData);
+          setLoading(false);
+          return;
+        }
+      }
       
       const response = await fetch(`/api/devices/${deviceId}/vlans/brief`, {
         headers: {
@@ -292,6 +386,10 @@ const useVlanInfo = (deviceId: string | undefined, enabled: boolean, isDeviceRea
       } else if (Array.isArray(data)) {
         // If we get direct data, use it
         setVlanData(data);
+        // Cache the result in localStorage
+        if (cacheKey) {
+          localStorage.setItem(cacheKey, JSON.stringify(data));
+        }
         setLoading(false);
       } else {
         // Handle case where we get an unexpected response
@@ -302,15 +400,25 @@ const useVlanInfo = (deviceId: string | undefined, enabled: boolean, isDeviceRea
       setError(err.message || "Failed to fetch VLANs");
       setLoading(false);
     }
-  }, [token, deviceId, enabled, isDeviceReachable, logout, navigate]);
+  }, [token, deviceId, enabled, isDeviceReachable, logout, navigate, cacheKey]);
 
   // Reset state when deviceId or enabled changes
   useEffect(() => {
     setTaskId(null);
-    setVlanData(null);
+    // Check for cached data when component mounts
+    if (cacheKey) {
+      const cachedData = localStorage.getItem(cacheKey);
+      if (cachedData) {
+        setVlanData(JSON.parse(cachedData));
+      } else {
+        setVlanData(null);
+      }
+    } else {
+      setVlanData(null);
+    }
     setLoading(false);
     setError(null);
-  }, [deviceId, enabled]);
+  }, [deviceId, enabled, cacheKey]);
 
   // Fetch data when enabled and device is reachable
   useEffect(() => {
@@ -319,15 +427,24 @@ const useVlanInfo = (deviceId: string | undefined, enabled: boolean, isDeviceRea
     }
   }, [enabled, isDeviceReachable, deviceId, fetchVlanInfo]);
 
+  // Function to clear cache
+  const clearCache = useCallback(() => {
+    if (cacheKey) {
+      localStorage.removeItem(cacheKey);
+      setVlanData(null); // Reset to null to trigger a refetch
+    }
+  }, [cacheKey]);
+
   return {
     data: vlanData,
     isFetching: loading || taskLoading,
     error: error || taskError,
-    refetch: fetchVlanInfo
+    refetch: fetchVlanInfo,
+    clearCache
   };
 };
 
-// Separate hook for ARP table with task-based fetching
+// Separate hook for ARP table with task-based fetching and localStorage caching
 const useArpTable = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
@@ -336,12 +453,18 @@ const useArpTable = (deviceId: string | undefined, enabled: boolean, isDeviceRea
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const cacheKey = deviceId ? `arp_${deviceId}` : null;
+
   const { taskStatus, loading: taskLoading, error: taskError } = useTaskPolling(taskId, {
     interval: 250,
     onSuccess: (result) => {
       // Handle the case where result is an array directly (ARP data)
       if (Array.isArray(result)) {
         setArpData(result);
+        // Cache the result in localStorage
+        if (cacheKey) {
+          localStorage.setItem(cacheKey, JSON.stringify(result));
+        }
       } else {
         setArpData([]);
       }
@@ -364,6 +487,17 @@ const useArpTable = (deviceId: string | undefined, enabled: boolean, isDeviceRea
       setLoading(true);
       setError(null);
       setTaskId(null); // Reset task ID before new request
+
+      // Check if data exists in localStorage cache
+      if (cacheKey) {
+        const cachedData = localStorage.getItem(cacheKey);
+        if (cachedData) {
+          const parsedData = JSON.parse(cachedData);
+          setArpData(parsedData);
+          setLoading(false);
+          return;
+        }
+      }
       
       const response = await fetch(`/api/devices/${deviceId}/arp`, {
         headers: {
@@ -389,6 +523,10 @@ const useArpTable = (deviceId: string | undefined, enabled: boolean, isDeviceRea
       } else if (Array.isArray(data)) {
         // If we get direct data, use it
         setArpData(data);
+        // Cache the result in localStorage
+        if (cacheKey) {
+          localStorage.setItem(cacheKey, JSON.stringify(data));
+        }
         setLoading(false);
       } else {
         // Handle case where we get an unexpected response
@@ -399,15 +537,25 @@ const useArpTable = (deviceId: string | undefined, enabled: boolean, isDeviceRea
       setError(err.message || "Failed to fetch ARP table");
       setLoading(false);
     }
-  }, [token, deviceId, enabled, isDeviceReachable, logout, navigate]);
+  }, [token, deviceId, enabled, isDeviceReachable, logout, navigate, cacheKey]);
 
   // Reset state when deviceId or enabled changes
   useEffect(() => {
     setTaskId(null);
-    setArpData(null);
+    // Check for cached data when component mounts
+    if (cacheKey) {
+      const cachedData = localStorage.getItem(cacheKey);
+      if (cachedData) {
+        setArpData(JSON.parse(cachedData));
+      } else {
+        setArpData(null);
+      }
+    } else {
+      setArpData(null);
+    }
     setLoading(false);
     setError(null);
-  }, [deviceId, enabled]);
+  }, [deviceId, enabled, cacheKey]);
 
   // Fetch data when enabled and device is reachable
   useEffect(() => {
@@ -416,15 +564,24 @@ const useArpTable = (deviceId: string | undefined, enabled: boolean, isDeviceRea
     }
   }, [enabled, isDeviceReachable, deviceId, fetchArpTable]);
 
+  // Function to clear cache
+  const clearCache = useCallback(() => {
+    if (cacheKey) {
+      localStorage.removeItem(cacheKey);
+      setArpData(null); // Reset to null to trigger a refetch
+    }
+  }, [cacheKey]);
+
   return {
     data: arpData,
     isFetching: loading || taskLoading,
     error: error || taskError,
-    refetch: fetchArpTable
+    refetch: fetchArpTable,
+    clearCache
   };
 };
 
-// Separate hook for CDP neighbors with task-based fetching
+// Separate hook for CDP neighbors with task-based fetching and localStorage caching
 const useCdpNeighbors = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
@@ -433,22 +590,24 @@ const useCdpNeighbors = (deviceId: string | undefined, enabled: boolean, isDevic
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const cacheKey = deviceId ? `cdp_${deviceId}` : null;
+
   const { taskStatus, loading: taskLoading, error: taskError } = useTaskPolling(taskId, {
     interval: 250,
     onSuccess: (result) => {
-      // Handle the case where result is an array directly (CDP data)
       if (Array.isArray(result)) {
         setCdpData(result);
+        if (cacheKey) {
+          localStorage.setItem(cacheKey, JSON.stringify(result));
+        }
       } else {
         setCdpData([]);
       }
-      // Clear the task ID to stop polling
       setTaskId(null);
       setLoading(false);
     },
     onError: (err) => {
       setError(err);
-      // Clear the task ID to stop polling
       setTaskId(null);
       setLoading(false);
     }
@@ -460,7 +619,16 @@ const useCdpNeighbors = (deviceId: string | undefined, enabled: boolean, isDevic
     try {
       setLoading(true);
       setError(null);
-      setTaskId(null); // Reset task ID before new request
+      setTaskId(null);
+
+      if (cacheKey) {
+        const cachedData = localStorage.getItem(cacheKey);
+        if (cachedData) {
+          setCdpData(JSON.parse(cachedData));
+          setLoading(false);
+          return;
+        }
+      }
       
       const response = await fetch(`/api/devices/${deviceId}/cdp`, {
         headers: {
@@ -480,15 +648,15 @@ const useCdpNeighbors = (deviceId: string | undefined, enabled: boolean, isDevic
       
       const data = await response.json();
       
-      // If we get a task_id, start polling
       if (data && data.task_id) {
         setTaskId(data.task_id);
       } else if (Array.isArray(data)) {
-        // If we get direct data, use it
         setCdpData(data);
+        if (cacheKey) {
+          localStorage.setItem(cacheKey, JSON.stringify(data));
+        }
         setLoading(false);
       } else {
-        // Handle case where we get an unexpected response
         setCdpData([]);
         setLoading(false);
       }
@@ -496,32 +664,47 @@ const useCdpNeighbors = (deviceId: string | undefined, enabled: boolean, isDevic
       setError(err.message || "Failed to fetch CDP neighbors");
       setLoading(false);
     }
-  }, [token, deviceId, enabled, isDeviceReachable, logout, navigate]);
+  }, [token, deviceId, enabled, isDeviceReachable, logout, navigate, cacheKey]);
 
-  // Reset state when deviceId or enabled changes
   useEffect(() => {
     setTaskId(null);
-    setCdpData(null);
+    if (cacheKey) {
+      const cachedData = localStorage.getItem(cacheKey);
+      if (cachedData) {
+        setCdpData(JSON.parse(cachedData));
+      } else {
+        setCdpData(null);
+      }
+    } else {
+      setCdpData(null);
+    }
     setLoading(false);
     setError(null);
-  }, [deviceId, enabled]);
+  }, [deviceId, enabled, cacheKey]);
 
-  // Fetch data when enabled and device is reachable
   useEffect(() => {
     if (enabled && isDeviceReachable && deviceId) {
       fetchCdpNeighbors();
     }
   }, [enabled, isDeviceReachable, deviceId, fetchCdpNeighbors]);
 
+  const clearCache = useCallback(() => {
+    if (cacheKey) {
+      localStorage.removeItem(cacheKey);
+      setCdpData(null);
+    }
+  }, [cacheKey]);
+
   return {
     data: cdpData,
     isFetching: loading || taskLoading,
     error: error || taskError,
-    refetch: fetchCdpNeighbors
+    refetch: fetchCdpNeighbors,
+    clearCache
   };
 };
 
-// Separate hook for LLDP neighbors with task-based fetching
+// Separate hook for LLDP neighbors with task-based fetching and localStorage caching
 const useLldpNeighbors = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
@@ -530,22 +713,24 @@ const useLldpNeighbors = (deviceId: string | undefined, enabled: boolean, isDevi
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const cacheKey = deviceId ? `lldp_${deviceId}` : null;
+
   const { taskStatus, loading: taskLoading, error: taskError } = useTaskPolling(taskId, {
     interval: 250,
     onSuccess: (result) => {
-      // Handle the case where result is an array directly (LLDP data)
       if (Array.isArray(result)) {
         setLldpData(result);
+        if (cacheKey) {
+          localStorage.setItem(cacheKey, JSON.stringify(result));
+        }
       } else {
         setLldpData([]);
       }
-      // Clear the task ID to stop polling
       setTaskId(null);
       setLoading(false);
     },
     onError: (err) => {
       setError(err);
-      // Clear the task ID to stop polling
       setTaskId(null);
       setLoading(false);
     }
@@ -557,7 +742,16 @@ const useLldpNeighbors = (deviceId: string | undefined, enabled: boolean, isDevi
     try {
       setLoading(true);
       setError(null);
-      setTaskId(null); // Reset task ID before new request
+      setTaskId(null);
+
+      if (cacheKey) {
+        const cachedData = localStorage.getItem(cacheKey);
+        if (cachedData) {
+          setLldpData(JSON.parse(cachedData));
+          setLoading(false);
+          return;
+        }
+      }
       
       const response = await fetch(`/api/devices/${deviceId}/lldp`, {
         headers: {
@@ -577,15 +771,15 @@ const useLldpNeighbors = (deviceId: string | undefined, enabled: boolean, isDevi
       
       const data = await response.json();
       
-      // If we get a task_id, start polling
       if (data && data.task_id) {
         setTaskId(data.task_id);
       } else if (Array.isArray(data)) {
-        // If we get direct data, use it
         setLldpData(data);
+        if (cacheKey) {
+          localStorage.setItem(cacheKey, JSON.stringify(data));
+        }
         setLoading(false);
       } else {
-        // Handle case where we get an unexpected response
         setLldpData([]);
         setLoading(false);
       }
@@ -593,28 +787,43 @@ const useLldpNeighbors = (deviceId: string | undefined, enabled: boolean, isDevi
       setError(err.message || "Failed to fetch LLDP neighbors");
       setLoading(false);
     }
-  }, [token, deviceId, enabled, isDeviceReachable, logout, navigate]);
+  }, [token, deviceId, enabled, isDeviceReachable, logout, navigate, cacheKey]);
 
-  // Reset state when deviceId or enabled changes
   useEffect(() => {
     setTaskId(null);
-    setLldpData(null);
+    if (cacheKey) {
+      const cachedData = localStorage.getItem(cacheKey);
+      if (cachedData) {
+        setLldpData(JSON.parse(cachedData));
+      } else {
+        setLldpData(null);
+      }
+    } else {
+      setLldpData(null);
+    }
     setLoading(false);
     setError(null);
-  }, [deviceId, enabled]);
+  }, [deviceId, enabled, cacheKey]);
 
-  // Fetch data when enabled and device is reachable
   useEffect(() => {
     if (enabled && isDeviceReachable && deviceId) {
       fetchLldpNeighbors();
     }
   }, [enabled, isDeviceReachable, deviceId, fetchLldpNeighbors]);
 
+  const clearCache = useCallback(() => {
+    if (cacheKey) {
+      localStorage.removeItem(cacheKey);
+      setLldpData(null);
+    }
+  }, [cacheKey]);
+
   return {
     data: lldpData,
     isFetching: loading || taskLoading,
     error: error || taskError,
-    refetch: fetchLldpNeighbors
+    refetch: fetchLldpNeighbors,
+    clearCache
   };
 };
 
@@ -681,15 +890,15 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
   });
   
   // Fetch interfaces once for both interfaces and VLANs tabs to avoid duplicate API calls
-  const { data: interfaces, isFetching: interfacesLoading, error: interfacesError, refetch: refetchInterfaces } = useInterfaces(id, activeTab === "interfaces" || activeTab === "vlans", isReachable);
+  const { data: interfaces, isFetching: interfacesLoading, error: interfacesError, refetch: refetchInterfaces, clearCache: clearInterfacesCache } = useInterfaces(id, activeTab === "interfaces" || activeTab === "vlans", isReachable);
   
   // Lazy load data based on active tab
   const { data: systemInfo, isLoading: systemLoading, error: systemError } = useSystemInfo(id, activeTab === "overview", isReachable, device);
-  const { data: clockInfo, isFetching: clockLoading, error: clockError } = useClockInfo(id, activeTab === "overview", isReachable);
-  const { data: vlanInfo, isFetching: vlanLoading, error: vlanError, refetch: refetchVlanInfo } = useVlanInfo(id, activeTab === "vlans", isReachable);
-  const { data: arpTable, isFetching: arpLoading, error: arpError, refetch: refetchArpTable } = useArpTable(id, activeTab === 'discovery' && activeDiscoveryTab === 'arp', isReachable);
-  const { data: cdpNeighbors, isFetching: cdpLoading, error: cdpError, refetch: refetchCdpNeighbors } = useCdpNeighbors(id, activeTab === 'discovery' && activeDiscoveryTab === 'cdp', isReachable);
-  const { data: lldpNeighbors, isFetching: lldpLoading, error: lldpError, refetch: refetchLldpNeighbors } = useLldpNeighbors(id, activeTab === 'discovery' && activeDiscoveryTab === 'lldp', isReachable);
+  const { data: clockInfo, isFetching: clockLoading, error: clockError, refetch: refetchClockInfo, clearCache: clearClockCache } = useClockInfo(id, activeTab === "overview", isReachable);
+  const { data: vlanInfo, isFetching: vlanLoading, error: vlanError, refetch: refetchVlanInfo, clearCache: clearVlanInfoCache } = useVlanInfo(id, activeTab === "vlans", isReachable);
+  const { data: arpTable, isFetching: arpLoading, error: arpError, refetch: refetchArpTable, clearCache: clearArpTableCache } = useArpTable(id, activeTab === 'discovery' && activeDiscoveryTab === 'arp', isReachable);
+  const { data: cdpNeighbors, isFetching: cdpLoading, error: cdpError, refetch: refetchCdpNeighbors, clearCache: clearCdpCache } = useCdpNeighbors(id, activeTab === 'discovery' && activeDiscoveryTab === 'cdp', isReachable);
+  const { data: lldpNeighbors, isFetching: lldpLoading, error: lldpError, refetch: refetchLldpNeighbors, clearCache: clearLldpCache } = useLldpNeighbors(id, activeTab === 'discovery' && activeDiscoveryTab === 'lldp', isReachable);
   
   // Command execution state
   const [command, setCommand] = useState("");
@@ -725,6 +934,21 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
   const createVlan = useCreateVlan(id);
   const deleteVlan = useDeleteVlan(id);
   const configureInterfaceVlan = useConfigureInterfaceVlan(id);
+
+  const handleRefresh = () => {
+    clearInterfacesCache();
+    clearVlanInfoCache();
+    clearArpTableCache();
+    clearCdpCache();
+    clearLldpCache();
+    clearClockCache();
+    refetchInterfaces();
+    refetchVlanInfo();
+    refetchArpTable();
+    refetchCdpNeighbors();
+    refetchLldpNeighbors();
+    refetchClockInfo();
+  };
 
   useEffect(() => {
     if (interfaces && interfaces.length > 0) {
@@ -1097,7 +1321,7 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
                   </Card.Subtitle>
                 </div>
                 <div>
-                  <Button variant="outline-primary" onClick={() => window.location.reload()}>
+                  <Button variant="outline-primary" onClick={handleRefresh}>
                     Refresh
                   </Button>
                   <Button variant="secondary" onClick={() => navigate(-1)} className="ms-2">
