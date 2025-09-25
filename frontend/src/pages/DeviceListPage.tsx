@@ -31,6 +31,11 @@ const DeviceListPage = () => {
   };
 
   const handleRefreshStatus = () => {
+    Object.keys(localStorage).forEach(key => {
+      if (key !== 'token') {
+        localStorage.removeItem(key);
+      }
+    });
     window.location.reload();
   };
 
