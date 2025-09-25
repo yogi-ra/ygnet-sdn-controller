@@ -24,3 +24,10 @@ if platform.system() == "Windows":
         worker_pool="solo",
         worker_concurrency=1,
     )
+
+celery_app.conf.beat_schedule = {
+    'cleanup-celery-meta-ten-minutes': {
+        'task': 'src.tasks.cleanup_celery_meta',
+        'schedule': 600,
+    },
+}

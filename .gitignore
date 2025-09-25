@@ -15,6 +15,11 @@ venv/
 .vscode/
 .idea/
 
+# Celery Beat
+celerybeat-schedule
+celerybeat-schedule-shm
+celerybeat-schedule-wal
+
 # Pytest cache
 .pytest_cache/
 
