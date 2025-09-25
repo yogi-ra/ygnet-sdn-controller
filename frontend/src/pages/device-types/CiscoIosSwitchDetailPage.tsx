@@ -1711,7 +1711,7 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
                       <Card.Title as="h2">ARP Table</Card.Title>
                       {arpError ? (
                         <Alert variant="danger">
-                          Error: {arpError.message}. Please try again later.
+                          Error: {arpError}. Please try again later.
                         </Alert>
                       ) : arpLoading ? (
                         <div className="text-center">
@@ -1732,8 +1732,8 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
                           <tbody>
                             {arpTable.map((entry: any, index: number) => (
                               <tr key={index}>
-                                <td>{entry.address || "N/A"}</td>
-                                <td>{entry.mac || entry.hardware || "N/A"}</td>
+                                <td>{entry.ip_address || entry.address ||  "N/A"}</td>
+                                <td>{entry.mac_address || entry.hardware_address || "N/A"}</td>
                                 <td>{entry.interface || entry.port || "N/A"}</td>
                                 <td>{entry.age || "N/A"}</td>
                               </tr>
@@ -1756,7 +1756,7 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
                       <Card.Title as="h2">CDP Neighbors</Card.Title>
                       {cdpError ? (
                         <Alert variant="danger">
-                          Error: {cdpError.message}. Please try again later.
+                          Error: {cdpError}. Please try again later.
                         </Alert>
                       ) : cdpLoading ? (
                         <div className="text-center">
@@ -1805,7 +1805,7 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
                       <Card.Title as="h2">LLDP Neighbors</Card.Title>
                       {lldpError ? (
                         <Alert variant="danger">
-                          Error: {lldpError.message}. Please try again later.
+                          Error: {lldpError}. Please try again later.
                         </Alert>
                       ) : lldpLoading ? (
                         <div className="text-center">
