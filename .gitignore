@@ -16,9 +16,7 @@ venv/
 .idea/
 
 # Celery Beat
-celerybeat-schedule
-celerybeat-schedule-shm
-celerybeat-schedule-wal
+celerybeat-schedule*
 
 # Pytest cache
 .pytest_cache/
