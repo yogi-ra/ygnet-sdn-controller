@@ -992,15 +992,25 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
     }));
   };
 
+  const handleCancelVlanNameEdit = (vlanId: string) => {
+    setVlanNameEdits(prev => {
+      const newState = { ...prev };
+      delete newState[vlanId];
+      return newState;
+    });
+  };
+
   const handleSaveVlanName = async (vlanId: string) => {
     const newName = vlanNameEdits[vlanId];
     if (!id || newName === undefined) return;
 
     try {
-      setTaskAction('changeVlanName');
+      // Set the task action immediately to show loading state
       const response = await changeVlanName.mutateAsync({ vlanId, newName });
       setCurrentTaskId(response.task_id);
+      setTaskAction('changeVlanName');
     } catch (err: any) {
+      // On error, show toast and reset task state
       setToastMessage(`Error changing VLAN name: ${err.message || 'Unknown error'}`);
       setToastVariant('danger');
       setShowToast(true);
@@ -1221,33 +1231,52 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
         
         // Reset interface loading states
         setTogglingInterfaces({});
+        
+        // Refresh interfaces to show latest changes
+        clearInterfacesCache();
+        refetchInterfaces();
       } else if (taskAction === 'assignPortToVlan') {
         setToastMessage('Successfully assigned port to VLAN');
         setToastVariant('success');
         setShowToast(true);
+        
+        // Refresh VLANs to show latest changes
+        clearVlanInfoCache();
+        refetchVlanInfo();
       } else if (taskAction === 'changeVlanName') {
-        setToastMessage('Successfully changed VLAN name');
+        setToastMessage(`Successfully changed VLAN name`);
         setToastVariant('success');
         setShowToast(true);
-        setVlanNameEdits(prev => {
-          const newState = { ...prev };
-          delete newState[vlanToDelete || ''];
-          return newState;
-        });
+        
+        // Refresh VLANs to show latest changes
+        clearVlanInfoCache();
+        refetchVlanInfo();
       } else if (taskAction === 'createVlan') {
         setToastMessage('Successfully created VLAN');
         setToastVariant('success');
         setShowToast(true);
         setNewVlanId('');
         setNewVlanName('');
+        
+        // Refresh VLANs to show latest changes
+        clearVlanInfoCache();
+        refetchVlanInfo();
       } else if (taskAction === 'deleteVlan') {
         setToastMessage('Successfully deleted VLAN');
         setToastVariant('success');
         setShowToast(true);
+        
+        // Refresh VLANs to show latest changes
+        clearVlanInfoCache();
+        refetchVlanInfo();
       } else if (taskAction === 'configureInterfaceVlan') {
         setToastMessage('Successfully configured VLAN settings for interface');
         setToastVariant('success');
         setShowToast(true);
+        
+        // Refresh interfaces to show latest changes
+        clearInterfacesCache();
+        refetchInterfaces();
       } else if (taskAction === 'executeCommand') {
         // Handle command execution result
         // The result can be in either 'result' or 'info' field depending on how the backend formats it
@@ -1270,26 +1299,50 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
         setToastVariant('danger');
         setShowToast(true);
         setTogglingInterfaces({});
+        
+        // Refresh interfaces to show latest changes
+        clearInterfacesCache();
+        refetchInterfaces();
       } else if (taskAction === 'assignPortToVlan') {
         setToastMessage(`Error assigning port to VLAN: ${errorMessage}`);
         setToastVariant('danger');
         setShowToast(true);
+        
+        // Refresh VLANs to show latest changes
+        clearVlanInfoCache();
+        refetchVlanInfo();
       } else if (taskAction === 'changeVlanName') {
         setToastMessage(`Error changing VLAN name: ${errorMessage}`);
         setToastVariant('danger');
         setShowToast(true);
+        
+        // Refresh VLANs to show latest changes
+        clearVlanInfoCache();
+        refetchVlanInfo();
       } else if (taskAction === 'createVlan') {
         setToastMessage(`Error creating VLAN: ${errorMessage}`);
         setToastVariant('danger');
         setShowToast(true);
+        
+        // Refresh VLANs to show latest changes
+        clearVlanInfoCache();
+        refetchVlanInfo();
       } else if (taskAction === 'deleteVlan') {
         setToastMessage(`Error deleting VLAN: ${errorMessage}`);
         setToastVariant('danger');
         setShowToast(true);
+        
+        // Refresh VLANs to show latest changes
+        clearVlanInfoCache();
+        refetchVlanInfo();
       } else if (taskAction === 'configureInterfaceVlan') {
         setToastMessage(`Error configuring interface VLAN: ${errorMessage}`);
         setToastVariant('danger');
         setShowToast(true);
+        
+        // Refresh interfaces to show latest changes
+        clearInterfacesCache();
+        refetchInterfaces();
       } else if (taskAction === 'executeCommand') {
         setCommandError(errorMessage);
         setExecutingCommand(false);
@@ -1333,19 +1386,6 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
           </Card>
         </Col>
       </Row>
-
-      {(taskLoading || currentTaskId) && (
-        <Row className="mb-3">
-          <Col>
-            <Alert variant="info">
-              <div className="d-flex align-items-center">
-                <Spinner animation="border" size="sm" className="me-2" />
-                <span>Processing task: {taskAction}...</span>
-              </div>
-            </Alert>
-          </Col>
-        </Row>
-      )}
 
       {taskError && (
         <Row className="mb-3">
@@ -1563,6 +1603,14 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
                                       disabled={!isReachable || !!currentTaskId || (currentTaskId && taskAction === 'changeVlanName')}
                                     >
                                       {currentTaskId && taskAction === 'changeVlanName' ? <Spinner as="span" animation="border" size="sm" /> : "Save"}
+                                    </Button>
+                                    <Button 
+                                      size="sm" 
+                                      variant="outline-secondary" 
+                                      onClick={() => handleCancelVlanNameEdit(vlanId)} 
+                                      disabled={!!currentTaskId}
+                                    >
+                                      ×
                                     </Button>
                                   </InputGroup>
                                 ) : (

@@ -1028,6 +1028,10 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
         
         // Reset interface loading states
         setTogglingInterfaces({});
+        
+        // Refresh interfaces to show latest changes
+        clearInterfacesCache();
+        refetchInterfaces();
       } else if (taskAction === 'executeCommand') {
         // Handle command execution result
         // The result can be in either 'result' or 'info' field depending on how the backend formats it
@@ -1093,19 +1097,6 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
           </Card>
         </Col>
       </Row>
-
-      {(taskLoading || currentTaskId) && (
-        <Row className="mb-3">
-          <Col>
-            <Alert variant="info">
-              <div className="d-flex align-items-center">
-                <Spinner animation="border" size="sm" className="me-2" />
-                <span>Processing task: {taskAction}...</span>
-              </div>
-            </Alert>
-          </Col>
-        </Row>
-      )}
 
       {taskError && (
         <Row className="mb-3">

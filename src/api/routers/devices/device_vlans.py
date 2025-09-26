@@ -29,30 +29,12 @@ def create_vlan(
     """
     Create a new VLAN on the device.
     """
-    handler = get_handler_from_device_id(device_id, db)
-    try:
-        with handler:
-            # Check if the device supports VLANs
-            if not hasattr(handler, "vlans"):
-                raise HTTPException(
-                    status_code=400, detail="Device does not support VLANs"
-                )
-
-            # Extract VLAN ID and optional name from request
-            vlan_id = vlan_data.get("id")
-            vlan_name = vlan_data.get("name")
-
-            if vlan_id is None:
-                raise HTTPException(status_code=400, detail="Missing VLAN ID")
-
-            result = handler.vlans.create_vlan(vlan_id, vlan_name)
-
-            return result
-    except Exception as e:
-        error_msg = f"Failed to create VLAN for device {device_id}: {str(e)}"
-        print(error_msg)
-        raise HTTPException(status_code=500, detail=error_msg)
-
+    vlan_id = vlan_data.get("id")
+    vlan_name = vlan_data.get("name")
+    if vlan_id is None:
+        raise HTTPException(status_code=400, detail="Missing VLAN ID")
+    task = execute_netmiko_command_task.delay(device_id, "vlans.create_vlan", vlan_id, vlan_name)
+    return {"task_id": task.id}
 
 @router.post(
     "/{device_id}/vlans/{vlan_id}/assign-port",
@@ -67,28 +49,13 @@ def assign_port_to_vlan(
     """
     Assign a port to a specific VLAN.
     """
-    handler = get_handler_from_device_id(device_id, db)
-    try:
-        with handler:
-            # Extract the port from the request body
-            port = port_assignment.get("port")
-            if port is None:
-                raise HTTPException(
-                    status_code=400, detail="Missing 'port' field in request body"
-                )
-
-            result = handler.vlans.assign_port_to_vlan(vlan_id, port)
-
-            return {"result": result}
-    except FutureTimeoutError:
-        error_msg = f"Timeout assigning port to VLAN for device {device_id}"
-        print(error_msg)
-        raise HTTPException(status_code=504, detail=error_msg)
-    except Exception as e:
-        error_msg = f"Failed to assign port to VLAN for device {device_id}: {str(e)}"
-        print(error_msg)
-        raise HTTPException(status_code=500, detail=error_msg)
-
+    port = port_assignment.get("port")
+    if port is None:
+        raise HTTPException(
+            status_code=400, detail="Missing 'port' field in request body"
+        )
+    task = execute_netmiko_command_task.delay(device_id, "vlans.assign_port_to_vlan", vlan_id, port)
+    return {"task_id": task.id}
 
 @router.post(
     "/{device_id}/vlans/{vlan_id}/change-name",
@@ -103,28 +70,13 @@ def change_vlan_name(
     """
     Change the name of a VLAN.
     """
-    handler = get_handler_from_device_id(device_id, db)
-    try:
-        with handler:
-            # Extract the new name from the request body
-            new_name = vlan_name_change.get("new_name")
-            if new_name is None:
-                raise HTTPException(
-                    status_code=400, detail="Missing 'new_name' field in request body"
-                )
-
-            result = handler.vlans.change_vlan_name(vlan_id, new_name)
-
-            return {"result": result}
-    except FutureTimeoutError:
-        error_msg = f"Timeout changing VLAN name for device {device_id}"
-        print(error_msg)
-        raise HTTPException(status_code=504, detail=error_msg)
-    except Exception as e:
-        error_msg = f"Failed to change VLAN name for device {device_id}: {str(e)}"
-        print(error_msg)
-        raise HTTPException(status_code=500, detail=error_msg)
-
+    new_name = vlan_name_change.get("new_name")
+    if new_name is None:
+        raise HTTPException(
+            status_code=400, detail="Missing 'new_name' field in request body"
+        )
+    task = execute_netmiko_command_task.delay(device_id, "vlans.change_vlan_name", vlan_id, new_name)
+    return {"task_id": task.id}
 
 @router.post(
     "/{device_id}/interfaces/vlan-config",
@@ -176,20 +128,5 @@ def delete_vlan(
     """
     Delete a VLAN from the device.
     """
-    handler = get_handler_from_device_id(device_id, db)
-    try:
-        with handler:
-            # Check if the device supports VLANs
-            if not hasattr(handler, "vlans"):
-                raise HTTPException(
-                    status_code=400, detail="Device does not support VLANs"
-                )
-
-            result = handler.vlans.delete_vlan(vlan_id)
-
-            return {"result": result}
-    except Exception as e:
-        error_msg = f"Failed to delete VLAN for device {device_id}: {str(e)}"
-        print(error_msg)
-        raise HTTPException(status_code=500, detail=error_msg)
-
+    task = execute_netmiko_command_task.delay(device_id, "vlans.delete_vlan", vlan_id)
+    return {"task_id": task.id}
