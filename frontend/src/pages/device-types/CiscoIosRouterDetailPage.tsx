@@ -1364,23 +1364,21 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
                         <Table striped bordered hover responsive>
                           <thead>
                             <tr>
-                              <th>Device ID</th>
                               <th>Local Interface</th>
-                              <th>Hold Time</th>
-                              <th>Capability</th>
-                              <th>Platform</th>
-                              <th>Port ID</th>
+                              <th>Capabilities</th>
+                              <th>Neighbor Name</th>
+                              <th>Neighbor Platform</th>
+                              <th>Neighbor Interface</th>
                             </tr>
                           </thead>
                           <tbody>
                             {cdpNeighbors.map((neighbor: any, index: number) => (
                               <tr key={index}>
-                                <td>{neighbor.device_id || "N/A"}</td>
                                 <td>{neighbor.local_interface || "N/A"}</td>
-                                <td>{neighbor.hold_time || "N/A"}</td>
-                                <td>{neighbor.capability || "N/A"}</td>
+                                <td>{neighbor.capabilities || neighbor.capability || "N/A"}</td>
+                                <td>{neighbor.neighbor_name || "N/A"}</td>
                                 <td>{neighbor.platform || "N/A"}</td>
-                                <td>{neighbor.port_id || "N/A"}</td>
+                                <td>{neighbor.neighbor_interface || "N/A"}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -1413,23 +1411,19 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
                         <Table striped bordered hover responsive>
                           <thead>
                             <tr>
-                              <th>Device ID</th>
                               <th>Local Interface</th>
-                              <th>Hold Time</th>
-                              <th>Capability</th>
-                              <th>Platform</th>
-                              <th>Port ID</th>
+                              <th>Capabilities</th>
+                              <th>Nieghbor Name</th>
+                              <th>Neighbor Interface</th>
                             </tr>
                           </thead>
                           <tbody>
                             {lldpNeighbors.map((neighbor: any, index: number) => (
                               <tr key={index}>
-                                <td>{neighbor.device_id || "N/A"}</td>
                                 <td>{neighbor.local_interface || "N/A"}</td>
-                                <td>{neighbor.hold_time || "N/A"}</td>
-                                <td>{neighbor.capability || "N/A"}</td>
-                                <td>{neighbor.platform || "N/A"}</td>
-                                <td>{neighbor.port_id || "N/A"}</td>
+                                <td>{neighbor.capabilities || "N/A"}</td>
+                                <td>{neighbor.neighbor_name || "N/A"}</td>
+                                <td>{neighbor.neighbor_interface || "N/A"}</td>
                               </tr>
                             ))}
                           </tbody>
