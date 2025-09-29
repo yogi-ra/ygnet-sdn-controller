@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 from ....database import get_db
 
 from ...dependencies import require_read_privileges, require_write_privileges
-from ...utils import get_handler_from_device_id
 from ....tasks import execute_netmiko_command_task
 
 router = APIRouter(tags=["Device VLANs"])
@@ -90,31 +89,14 @@ def configure_interface_vlan(
     """
     Configures VLAN settings for a specific interface (access or trunk).
     """
-    handler = get_handler_from_device_id(device_id, db)
-    try:
-        with handler:
-            # Extract interface configuration from request body
-            interface_name = interface_config.get("interface_name")
-            vlan_mode = interface_config.get("vlan_mode")
-            vlan_ids = interface_config.get("vlan_ids")
-
-            if interface_name is None or vlan_mode is None:
-                raise HTTPException(
-                    status_code=400, detail="Missing required fields in request body"
-                )
-
-            result = handler.vlans.configure_interface_vlan(interface_config)
-
-            return {"result": result}
-    except FutureTimeoutError:
-        error_msg = f"Timeout configuring VLAN for interface {interface_config.get('interface_name')} on device {device_id}"
-        print(error_msg)
-        raise HTTPException(status_code=504, detail=error_msg)
-    except Exception as e:
-        error_msg = f"Failed to configure VLAN for interface {interface_config.get('interface_name')} on device {device_id}: {str(e)}"
-        print(error_msg)
-        raise HTTPException(status_code=500, detail=error_msg)
-
+    interface_name = interface_config.get("interface_name")
+    vlan_mode = interface_config.get("mode")
+    if interface_name is None or vlan_mode is None:
+        raise HTTPException(
+            status_code=400, detail="Missing required fields in request body"
+        )
+    task = execute_netmiko_command_task.delay(device_id, "vlans.configure_interface_vlan", interface_config)
+    return {"task_id": task.id}
 
 @router.delete(
     "/{device_id}/vlans/{vlan_id}",

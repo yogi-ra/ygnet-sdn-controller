@@ -164,6 +164,7 @@ class CiscoIosInterfaces(BaseInterfaces):
             if interface_config['mode'] == "access":
                 commands.append("switchport mode access")
                 if interface_config.get('access_vlan'):
+                    commands.append("switchport trunk encapsulation dot1q")
                     commands.append(f"switchport access vlan {interface_config['access_vlan']}")
             elif interface_config['mode'] == "trunk":
                 commands.append("switchport mode trunk")
@@ -173,16 +174,7 @@ class CiscoIosInterfaces(BaseInterfaces):
                     commands.append(f"switchport trunk native vlan {interface_config['native_vlan']}")
             
             self.device_handler.send_config_set(commands)
-            # Clear cache asynchronously to avoid blocking the response
-            threading.Thread(target=self._clear_interface_vlan_cache_async).start()
             return True
         except Exception as e:
             self.device_handler.logger.error(f"Error configuring interface VLAN for {interface_config.get('interface_name')}: {e}")
             return False
-
-    def _clear_interface_vlan_cache_async(self):
-        """Asynchronously clear interface and VLAN-related cache entries."""
-        try:
-            self.device_handler.clear_cache(["device_vlans_brief", "device_interfaces_brief"])
-        except Exception as e:
-            self.device_handler.logger.error(f"Error clearing interface/VLAN cache: {e}")
