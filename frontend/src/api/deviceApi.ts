@@ -119,6 +119,20 @@ export const fetchInterfacesStatus = async (deviceId: string, token: string | nu
   return response.json();
 };
 
+export const fetchInterfacesDescription = async (deviceId: string, token: string | null) => {
+  const headers = getAuthHeaders(token);
+  const response = await fetch(`/api/devices/${deviceId}/interfaces/description`, { headers });
+  
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new UnauthorizedError("Unauthorized");
+    }
+    throw new Error(`Failed to fetch interfaces description: ${response.statusText}`);
+  }
+  
+  return response.json();
+};
+
 export const setInterfaceState = async (
   deviceId: string,
   interfaceName: string,

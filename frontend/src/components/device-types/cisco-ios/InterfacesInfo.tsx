@@ -10,6 +10,11 @@ interface InterfacesInfoProps {
   isReachable: boolean;
 }
 
+// Helper function to determine if interface is administratively up
+const isInterfaceAdminUp = (status: string) => {
+  return !status?.toLowerCase().includes("administratively down");
+};
+
 const InterfacesInfo: React.FC<InterfacesInfoProps> = ({ deviceId, token, isReachable }) => {
   // State for storing task ID
   const [interfacesTaskId, setInterfacesTaskId] = useState<string | null>(null);
@@ -46,11 +51,6 @@ const InterfacesInfo: React.FC<InterfacesInfoProps> = ({ deviceId, token, isReac
   
   // Extract data when available
   const interfacesData = interfacesTask?.status === 'SUCCESS' ? interfacesTask.result : null;
-  
-  // Helper function to determine if interface is administratively up
-  const isInterfaceAdminUp = (status: string) => {
-    return !status?.toLowerCase().includes("administratively down");
-  };
   
   // Handle interface toggle
   const handleToggleInterface = async (interfaceName: string, currentState: string) => {

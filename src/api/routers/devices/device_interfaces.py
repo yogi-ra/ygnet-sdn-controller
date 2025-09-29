@@ -37,6 +37,19 @@ def get_interfaces_status(
     task = execute_netmiko_command_task.delay(device_id, "interfaces.get_interfaces_status")
     return {"task_id": task.id}
 
+@router.get(
+    "/{device_id}/interfaces/description", 
+    status_code=status.HTTP_202_ACCEPTED, 
+    dependencies=[Depends(require_read_privileges)]
+)
+def get_interfaces_description(
+    request: Request, device_id: int, db: Session = Depends(get_db)
+):
+    """
+    Get detailed interface status information.
+    """
+    task = execute_netmiko_command_task.delay(device_id, "interfaces.get_interfaces_description")
+    return {"task_id": task.id}
 
 @router.post(
     "/{device_id}/interfaces/state", 
@@ -57,6 +70,23 @@ def set_interface_state(
     )
     return {"task_id": task.id}
 
+@router.post(
+    "/{device_id}/interfaces/description", 
+    status_code=status.HTTP_202_ACCEPTED, 
+    dependencies=[Depends(require_write_privileges)]
+)
+def set_interface_state(
+    device_id: int, interface_description: dict, db: Session = Depends(get_db)
+):
+    """
+    Set interface description of specific interface.
+    """
+    task = execute_netmiko_command_task.delay(
+        device_id, 
+        "interfaces.set_interface_description", 
+        interface_description.description, 
+    )
+    return {"task_id": task.id}
 
 @router.post(
     "/{device_id}/interfaces/vlan-config", 

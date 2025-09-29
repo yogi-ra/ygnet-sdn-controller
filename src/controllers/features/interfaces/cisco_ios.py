@@ -55,6 +55,15 @@ class CiscoIosInterfaces(BaseInterfaces):
             self.device_handler.logger.error(f"Error getting interfaces status: {e}")
             return []
 
+    def get_interfaces_description(self) -> List[Dict[str, Any]]:
+        try:
+            command = "show interfaces description"
+            raw_output = self.device_handler.send_command(command)
+            return self.device_handler.parse_cli_output(command, raw_output)
+        except Exception as e:
+            self.device_handler.logger.error(f"Error getting interfaces description: {e}")
+            return []
+
     def get_interfaces_trunk(self) -> List[Dict[str, Any]]:
         try:
             command = "show interfaces trunk"
@@ -121,6 +130,21 @@ class CiscoIosInterfaces(BaseInterfaces):
             return output
         except Exception as e:
             self.device_handler.logger.error(f"Error setting interface state for {interface_name}: {e}")
+            return str(e)
+
+    def set_interface_description(self, interface_name: str, description: str) -> str:
+        """
+        Create or modify description of a specific interface.
+        """
+        commands = [
+            f"interface {interface_name}",
+            f"description {description}"
+        ]
+        try:
+            output = self.device_handler.send_config_set(commands)
+            return output
+        except Exception as e:
+            self.device_handler.logger.error(f"Error setting interface description for {interface_name}: {e}")
             return str(e)
 
     def configure_interface(self, interface_name: str, config_commands: List[str]) -> str:

@@ -302,6 +302,143 @@ const useInterfaces = (deviceId: string | undefined, enabled: boolean, isDeviceR
   };
 };
 
+// Separate hook for interface descriptions with task-based fetching and localStorage caching
+const useInterfaceDescriptions = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
+  const { token, logout } = useAuth();
+  const navigate = useNavigate();
+  const [taskId, setTaskId] = useState<string | null>(null);
+  const [descriptionsData, setDescriptionsData] = useState<any[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const cacheKey = deviceId ? `interface_descriptions_${deviceId}` : null;
+
+  const { taskStatus, loading: taskLoading, error: taskError } = useTaskPolling(taskId, {
+    interval: 250,
+    onSuccess: (result) => {
+      // Handle the case where result is an array directly (interface descriptions data)
+      if (Array.isArray(result)) {
+        setDescriptionsData(result);
+        // Cache the result in localStorage
+        if (cacheKey) {
+          localStorage.setItem(cacheKey, JSON.stringify(result));
+        }
+      } else {
+        setDescriptionsData([]);
+      }
+      // Clear the task ID to stop polling
+      setTaskId(null);
+      setLoading(false);
+    },
+    onError: (err) => {
+      setError(err);
+      // Clear the task ID to stop polling
+      setTaskId(null);
+      setLoading(false);
+    }
+  });
+
+  const fetchInterfaceDescriptions = useCallback(async () => {
+    if (!token || !deviceId || !enabled || !isDeviceReachable) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+      setTaskId(null); // Reset task ID before new request
+
+      // Check if data exists in localStorage cache
+      if (cacheKey) {
+        const cachedData = localStorage.getItem(cacheKey);
+        if (cachedData) {
+          const parsedData = JSON.parse(cachedData);
+          setDescriptionsData(parsedData);
+          setLoading(false);
+          return;
+        }
+      }
+      
+      const response = await fetch(`/api/devices/${deviceId}/interfaces/description`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      
+      if (response.status === 401) {
+        logout();
+        navigate("/login");
+        throw new Error("Session expired or unauthorized. Please log in again.");
+      }
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch interface descriptions: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      
+      // If we get a task_id, start polling
+      if (data && data.task_id) {
+        setTaskId(data.task_id);
+      } else if (Array.isArray(data)) {
+        // If we get direct data, use it
+        setDescriptionsData(data);
+        // Cache the result in localStorage
+        if (cacheKey) {
+          localStorage.setItem(cacheKey, JSON.stringify(data));
+        }
+        setLoading(false);
+      } else {
+        // Handle case where we get an unexpected response
+        setDescriptionsData([]);
+        setLoading(false);
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to fetch interface descriptions");
+      setLoading(false);
+    }
+  }, [token, deviceId, enabled, isDeviceReachable, logout, navigate, cacheKey]);
+
+  // Reset state when deviceId or enabled changes
+  useEffect(() => {
+    setTaskId(null);
+    // Check for cached data when component mounts
+    if (cacheKey) {
+      const cachedData = localStorage.getItem(cacheKey);
+      if (cachedData) {
+        setDescriptionsData(JSON.parse(cachedData));
+      } else {
+        setDescriptionsData(null);
+      }
+    } else {
+      setDescriptionsData(null);
+    }
+    setLoading(false);
+    setError(null);
+  }, [deviceId, enabled, cacheKey]);
+
+  // Fetch data when enabled and device is reachable
+  useEffect(() => {
+    if (enabled && isDeviceReachable && deviceId) {
+      fetchInterfaceDescriptions();
+    }
+  }, [enabled, isDeviceReachable, deviceId, fetchInterfaceDescriptions]);
+
+  // Function to clear cache
+  const clearCache = useCallback(() => {
+    if (cacheKey) {
+      localStorage.removeItem(cacheKey);
+      setDescriptionsData(null); // Reset to null to trigger a refetch
+    }
+  }, [cacheKey]);
+
+  return {
+    data: descriptionsData,
+    isFetching: loading || taskLoading,
+    error: error || taskError,
+    refetch: fetchInterfaceDescriptions,
+    clearCache
+  };
+};
+
 // Separate hook for routing information with task-based fetching and localStorage caching
 const useRoutingInfo = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
   const { token, logout } = useAuth();
@@ -881,6 +1018,7 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
   const { data: systemInfo, isLoading: systemLoading, error: systemError } = useSystemInfo(id, activeTab === "overview", isReachable, device);
   const { data: clockInfo, isFetching: clockLoading, error: clockError, refetch: refetchClock, clearCache: clearClockCache } = useClockInfo(id, activeTab === "overview", isReachable);
   const { data: interfaces, isFetching: interfacesLoading, error: interfacesError, refetch: refetchInterfaces, clearCache: clearInterfacesCache } = useInterfaces(id, activeTab === "interfaces", isReachable);
+  const { data: interfaceDescriptions, isFetching: interfaceDescriptionsLoading, error: interfaceDescriptionsError, refetch: refetchInterfaceDescriptions, clearCache: clearInterfaceDescriptionsCache } = useInterfaceDescriptions(id, activeTab === "interfaces", isReachable);
   const { data: routingInfo, isFetching: routingLoading, error: routingError, refetch: refetchRoutingInfo, clearCache: clearRoutingInfoCache } = useRoutingInfo(id, activeTab === "routing", isReachable);
   const { data: arpTable, isFetching: arpLoading, error: arpError, refetch: refetchArpTable, clearCache: clearArpTableCache } = useArpTable(id, activeTab === 'discovery' && activeDiscoveryTab === 'arp', isReachable);
   const { data: cdpNeighbors, isFetching: cdpLoading, error: cdpError, refetch: refetchCdpNeighbors, clearCache: clearCdpCache } = useCdpNeighbors(id, activeTab === 'discovery' && activeDiscoveryTab === 'cdp', isReachable);
@@ -904,12 +1042,14 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
 
   const handleRefresh = () => {
     clearInterfacesCache();
+    clearInterfaceDescriptionsCache();
     clearRoutingInfoCache();
     clearArpTableCache();
     clearCdpCache();
     clearLldpCache();
     clearClockCache();
     refetchInterfaces();
+    refetchInterfaceDescriptions();
     refetchRoutingInfo();
     refetchArpTable();
     refetchCdpNeighbors();
@@ -922,6 +1062,11 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
     if (tabKey) {
       setActiveTab(tabKey);
     }
+  };
+
+  // Helper function to determine if interface is administratively up
+  const isInterfaceAdminUp = (status: string) => {
+    return !status?.toLowerCase().includes("administratively down");
   };
 
   // Handle interface toggle
@@ -1175,11 +1320,11 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
               <Card>
                 <Card.Body>
                   <Card.Title as="h2">Interfaces</Card.Title>
-                  {interfacesError ? (
+                  {(interfacesError || interfaceDescriptionsError) ? (
                     <Alert variant="danger">
-                      Error: {interfacesError}. Please try again later.
+                      Error: {interfacesError || interfaceDescriptionsError}. Please try again later.
                     </Alert>
-                  ) : interfacesLoading ? (
+                  ) : (interfacesLoading || interfaceDescriptionsLoading) ? (
                     <div className="text-center">
                       <Spinner animation="border" role="status">
                         <span className="visually-hidden">Loading...</span>
@@ -1190,6 +1335,7 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
                       <thead>
                         <tr>
                           <th>Interface</th>
+                          <th>Description</th>
                           <th>IP Address</th>
                           <th>Status</th>
                           <th>Protocol</th>
@@ -1197,39 +1343,75 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
                         </tr>
                       </thead>
                       <tbody>
-                        {interfaces.map((iface: any, index: number) => (
-                          <tr key={index}>
-                            <td>{iface.interface || iface.intf || "N/A"}</td>
-                            <td>{iface.ip_address || iface.ip || "N/A"}</td>
-                            <td>{iface.status || "N/A"}</td>
-                            <td>{iface.proto || "N/A"}</td>
-                            <td>
-                              <Button
-                                size="sm"
-                                variant={isInterfaceAdminUp(iface.status) ? "danger" : "success"}
-                                onClick={() => handleToggleInterface(
-                                  iface.interface || iface.intf || "",
-                                  iface.status || ""
-                                )}
-                                disabled={!isReachable || togglingInterfaces[iface.interface || iface.intf || ""] || !!currentTaskId}
-                              >
-                                {(togglingInterfaces[iface.interface || iface.intf || ""] || 
-                                  (currentTaskId && taskAction === 'toggleInterface')) ? (
-                                  <>
-                                    <Spinner
-                                      as="span"
-                                      animation="border"
-                                      size="sm"
-                                      role="status"
-                                      aria-hidden="true"
-                                    />
-                                    <span className="visually-hidden">Loading...</span>
-                                  </>
-                                ) : isInterfaceAdminUp(iface.status) ? "Shut Down" : "Enable"}
-                              </Button>
-                            </td>
-                          </tr>
-                        ))}
+                        {interfaces.map((iface: any, index: number) => {
+                          // Extract interface name for matching
+                          const fullInterfaceName = iface.interface || iface.intf || "";
+                          
+                          // Find matching description data for this interface
+                          // The description API returns 'port' field that matches the short form (e.g., 'Gi0/0')
+                          // while the brief API returns 'interface' field with full name (e.g., 'GigabitEthernet0/0')
+                          const descriptionEntry = interfaceDescriptions?.find((desc: any) => {
+                            // Check if the description port matches the full interface name
+                            if (desc.port === fullInterfaceName) return true;
+                            
+                            // If not direct match, try to match by converting full name to short form
+                            // For example: GigabitEthernet0/0 -> Gi0/0, FastEthernet0/1 -> Fa0/1
+                            const shortInterfaceName = fullInterfaceName.replace(/^GigabitEthernet/, 'Gi')
+                                                                      .replace(/^FastEthernet/, 'Fa')
+                                                                      .replace(/^Ethernet/, 'Eth')
+                                                                      .replace(/^Serial/, 'Se')
+                                                                      .replace(/^Loopback/, 'Lo')
+                                                                      .replace(/^Vlan/, 'Vl');
+                            
+                            return desc.port === shortInterfaceName;
+                          });
+                          
+                          // Handle different possible field names for description
+                          let description = "N/A";
+                          if (descriptionEntry) {
+                            // Check for common field names that might contain the description
+                            description = descriptionEntry.description || 
+                                         descriptionEntry.desc || 
+                                         descriptionEntry.interface_description || 
+                                         descriptionEntry.notes || 
+                                         "N/A";
+                          }
+                          
+                          return (
+                            <tr key={index}>
+                              <td>{iface.interface || iface.intf || "N/A"}</td>
+                              <td>{description}</td>
+                              <td>{iface.ip_address || iface.ip || "N/A"}</td>
+                              <td>{iface.status || "N/A"}</td>
+                              <td>{iface.proto || "N/A"}</td>
+                              <td>
+                                <Button
+                                  size="sm"
+                                  variant={isInterfaceAdminUp(iface.status) ? "danger" : "success"}
+                                  onClick={() => handleToggleInterface(
+                                    iface.interface || iface.intf || "",
+                                    iface.status || ""
+                                  )}
+                                  disabled={!isReachable || togglingInterfaces[iface.interface || iface.intf || ""] || !!currentTaskId}
+                                >
+                                  {(togglingInterfaces[iface.interface || iface.intf || ""] || 
+                                    (currentTaskId && taskAction === 'toggleInterface')) ? (
+                                    <>
+                                      <Spinner
+                                        as="span"
+                                        animation="border"
+                                        size="sm"
+                                        role="status"
+                                        aria-hidden="true"
+                                      />
+                                      <span className="visually-hidden">Loading...</span>
+                                    </>
+                                  ) : isInterfaceAdminUp(iface.status) ? "Shut Down" : "Enable"}
+                                </Button>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </Table>
                   ) : (
