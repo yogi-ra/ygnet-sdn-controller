@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 from ....database import get_db
-from ....schemas import InterfaceState, InterfaceVlanConfig
+from ....schemas import InterfaceState, InterfaceVlanConfig, InterfaceDescription
 
 from ...dependencies import require_read_privileges, require_write_privileges
 from ....tasks import execute_netmiko_command_task
@@ -75,8 +75,8 @@ def set_interface_state(
     status_code=status.HTTP_202_ACCEPTED, 
     dependencies=[Depends(require_write_privileges)]
 )
-def set_interface_state(
-    device_id: int, interface_description: dict, db: Session = Depends(get_db)
+def set_interface_description(
+    device_id: int, interface_description: InterfaceDescription, db: Session = Depends(get_db)
 ):
     """
     Set interface description of specific interface.
@@ -84,6 +84,7 @@ def set_interface_state(
     task = execute_netmiko_command_task.delay(
         device_id, 
         "interfaces.set_interface_description", 
+        interface_description.interface_name, 
         interface_description.description, 
     )
     return {"task_id": task.id}

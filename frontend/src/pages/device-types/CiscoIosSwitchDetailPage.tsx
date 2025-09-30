@@ -20,7 +20,7 @@ import {
 import { useAuth } from "../../hooks/useAuth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAssignPortToVlan, useChangeVlanName, useCreateVlan, useDeleteVlan } from '../../api/vlans';
-import { useConfigureInterfaceVlan } from '../../api/interfaces';
+import { useConfigureInterfaceVlan, useSetInterfaceDescription } from '../../api/interfaces';
 import { useTaskPolling } from "../../hooks/useTaskPolling";
 
 // Separate hook for system information with lazy loading
@@ -1065,6 +1065,8 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
   const [vlanToDelete, setVlanToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [applyingConfigs, setApplyingConfigs] = useState<{ [key: string]: boolean }>({});
+  const [descriptionEdits, setDescriptionEdits] = useState<{ [key: string]: string }>({});
+  const [savingDescription, setSavingDescription] = useState<{ [key: string]: boolean }>({});
 
   // API hooks
   const assignPortToVlan = useAssignPortToVlan(id);
@@ -1072,6 +1074,7 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
   const createVlan = useCreateVlan(id);
   const deleteVlan = useDeleteVlan(id);
   const configureInterfaceVlan = useConfigureInterfaceVlan(id);
+  const setInterfaceDescription = useSetInterfaceDescription(id);
 
   const handleRefresh = () => {
     clearInterfacesCache();
@@ -1145,12 +1148,10 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
     if (!id || newName === undefined) return;
 
     try {
-      // Set the task action immediately to show loading state
       const response = await changeVlanName.mutateAsync({ vlanId, newName });
       setCurrentTaskId(response.task_id);
       setTaskAction('changeVlanName');
     } catch (err: any) {
-      // On error, show toast and reset task state
       setToastMessage(`Error changing VLAN name: ${err.message || 'Unknown error'}`);
       setToastVariant('danger');
       setShowToast(true);
@@ -1318,6 +1319,37 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
     }
   };
 
+  const handleDescriptionChange = (ifaceName: string, value: string) => {
+    setDescriptionEdits(prev => ({
+      ...prev,
+      [ifaceName]: value
+    }));
+  };
+
+  const handleCancelDescriptionEdit = (ifaceName: string) => {
+    setDescriptionEdits(prev => {
+      const newState = { ...prev };
+      delete newState[ifaceName];
+      return newState;
+    });
+  };
+
+
+  const handleSaveDescription = async (ifaceName: string) => {
+    const description = descriptionEdits[ifaceName];
+    if (!id || description === undefined) return;
+
+    try {
+      const response = await setInterfaceDescription.mutateAsync({ interfaceName: ifaceName, description });
+      setCurrentTaskId(response.task_id);
+      setTaskAction('setInterfaceDescription');
+    } catch (err: any) {
+      setToastMessage(`Error setting interface description: ${err.message || 'Unknown error'}`);
+      setToastVariant('danger');
+      setShowToast(true);
+    }
+  };
+
   const handleExecuteCommand = async (e: React.FormEvent) => {
     e.preventDefault();
     setExecutingCommand(true);
@@ -1375,6 +1407,14 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
         // Refresh interfaces to show latest changes
         clearInterfacesCache();
         refetchInterfaces();
+      } else if (taskAction === 'setInterfaceDescription') {
+        setToastMessage('Successfully changed device description');
+        setToastVariant('success');
+        setShowToast(true);
+
+        // Refresh interface descriptions to show latest changes
+        clearInterfaceDescriptionsCache();
+        refetchInterfaceDescriptions();
       } else if (taskAction === 'assignPortToVlan') {
         setToastMessage('Successfully assigned port to VLAN');
         setToastVariant('success');
@@ -1443,6 +1483,14 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
         // Refresh interfaces to show latest changes
         clearInterfacesCache();
         refetchInterfaces();
+      } else if (taskAction === 'setInterfaceDescription') {
+        setToastMessage(`Error changing device description ${errorMessage}`);
+        setToastVariant('danger');
+        setShowToast(true);
+
+        // Refresh interface descriptions to show latest changes
+        clearInterfaceDescriptionsCache();
+        refetchInterfaceDescriptions();
       } else if (taskAction === 'assignPortToVlan') {
         setToastMessage(`Error assigning port to VLAN: ${errorMessage}`);
         setToastVariant('danger');
@@ -1556,9 +1604,7 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
                     </Alert>
                   ) : (systemLoading || clockLoading) ? (
                     <div className="text-center">
-                      <Spinner animation="border" role="status">
-                        <span className="visually-hidden">Loading...</span>
-                      </Spinner>
+                      <Spinner animation="border" role="status" />
                     </div>
                   ) : systemInfo ? (
                     <Table striped bordered hover>
@@ -1602,9 +1648,7 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
                      </Alert>
                   ) : (interfacesLoading || interfaceDescriptionsLoading) ? (
                      <div className="text-center">
-                       <Spinner animation="border" role="status">
-                         <span className="visually-hidden">Loading...</span>
-                       </Spinner>
+                       <Spinner animation="border" role="status" />
                      </div>
                   ) : interfaces && interfaces.length > 0 ? (
                     <Table striped bordered hover responsive>
@@ -1620,31 +1664,65 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
                       </thead>
                       <tbody>
                         {interfaces.map((iface: any, index: number) => {
-                          // Extract interface name for matching
-                          const fullInterfaceName = iface.interface || iface.intf || "";
-                          
+                          const ifaceName = iface.interface || iface.intf || "";
+                          const isEditing = descriptionEdits.hasOwnProperty(ifaceName);
+                          const editedDescription = descriptionEdits[ifaceName] ?? '';
+
                           // Find matching description data for this interface
-                          // The description API returns 'port' field that matches the short form (e.g., 'Gi0/0')
-                          // while the brief API returns 'interface' field with full name (e.g., 'GigabitEthernet0/0')
                           const descriptionEntry = interfaceDescriptions?.find((desc: any) => {
-                            // Check if the description port matches the full interface name
-                            if (desc.port === fullInterfaceName) return true;
-                            
-                            // If not direct match, try to match by converting full name to short form
-                            // For example: GigabitEthernet0/0 -> Gi0/0, FastEthernet0/1 -> Fa0/1
-                            const shortInterfaceName = fullInterfaceName.replace(/^GigabitEthernet/, 'Gi')
-                                                                      .replace(/^FastEthernet/, 'Fa')
-                                                                      .replace(/^TenGigabitEthernet/, 'Te');
-                            
+                            if (desc.port === ifaceName) return true;
+                            const shortInterfaceName = ifaceName.replace(/^GigabitEthernet/, 'Gi')
+                                                              .replace(/^FastEthernet/, 'Fa')
+                                                              .replace(/^Ethernet/, 'Eth')
+                                                              .replace(/^Serial/, 'Se')
+                                                              .replace(/^Loopback/, 'Lo')
+                                                              .replace(/^Vlan/, 'Vl');
                             return desc.port === shortInterfaceName;
+
                           });
 
-                          const description = descriptionEntry ? descriptionEntry.description : "N/A";
+                          const currentDescription = descriptionEntry ? descriptionEntry.description : "N/A";
 
                           return (
                           <tr key={index}>
-                            <td>{iface.interface || iface.intf || "N/A"}</td>
-                            <td>{description}</td>
+                            <td>{ifaceName}</td>
+                            <td>
+                              {isEditing ? (
+                                <InputGroup>
+                                  <Form.Control
+                                    type="text"
+                                    size="sm"
+                                    value={editedDescription}
+                                    onChange={(e) => handleDescriptionChange(ifaceName, e.target.value)}
+                                    disabled={!device?.is_reachable || !!currentTaskId}
+                                  />
+                                  <Button 
+                                    size="sm" 
+                                    variant="success" 
+                                    onClick={() => handleSaveDescription(ifaceName)} 
+                                    disabled={!device?.is_reachable || !!currentTaskId || savingDescription[ifaceName]}
+                                  >
+                                    {(savingDescription[ifaceName] ||
+                                      (currentTaskId && taskAction === "setInterfaceDescription")) ? 
+                                      <Spinner as="span" animation="border" size="sm" /> : "Save"
+                                    } 
+                                  </Button>
+                                  <Button 
+                                    size="sm" 
+                                    variant="outline-secondary" 
+                                    onClick={() => handleCancelDescriptionEdit(ifaceName)} 
+                                    disabled={!!currentTaskId}
+                                  >
+                                    ×
+                                  </Button>
+                                </InputGroup>
+                              ) : (
+                                <div>
+                                  {currentDescription}
+                                  <Button size="sm" variant="outline-primary" className="ms-2" onClick={() => handleDescriptionChange(ifaceName, currentDescription)} disabled={!device?.is_reachable || !!currentTaskId}>Edit</Button>
+                                </div>
+                              )}
+                            </td>
                             <td>{iface.ip_address || iface.ip || "N/A"}</td>
                             <td>{iface.status || "N/A"}</td>
                             <td>{iface.proto || "N/A"}</td>
@@ -1652,23 +1730,13 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
                               <Button
                                 size="sm"
                                 variant={isInterfaceAdminUp(iface.status) ? "danger" : "success"}
-                                onClick={() => handleToggleInterface(
-                                  iface.interface || iface.intf || "",
-                                  iface.status || ""
-                                )}
-                                disabled={!device?.is_reachable || togglingInterfaces[iface.interface || iface.intf || ""] || !!currentTaskId}
+                                onClick={() => handleToggleInterface(ifaceName, iface.status || "")}
+                                disabled={!device?.is_reachable || togglingInterfaces[ifaceName] || !!currentTaskId}
                               >
-                                {(togglingInterfaces[iface.interface || iface.intf || ""] || 
+                                {(togglingInterfaces[ifaceName] || 
                                   (currentTaskId && taskAction === 'toggleInterface')) ? (
                                   <>
-                                    <Spinner
-                                      as="span"
-                                      animation="border"
-                                      size="sm"
-                                      role="status"
-                                      aria-hidden="true"
-                                    />
-                                    <span className="visually-hidden">Loading...</span>
+                                    <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" />
                                   </>
                                 ) : isInterfaceAdminUp(iface.status) ? "Shut Down" : "Enable"}
                               </Button>
@@ -1886,7 +1954,6 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
                                           role="status"
                                           aria-hidden="true"
                                         />
-                                        <span className="visually-hidden">Loading...</span>
                                       </>
                                     ) : (
                                       "Apply"
@@ -1927,9 +1994,7 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
                         </Alert>
                       ) : arpLoading ? (
                         <div className="text-center">
-                          <Spinner animation="border" role="status">
-                            <span className="visually-hidden">Loading...</span>
-                          </Spinner>
+                          <Spinner animation="border" role="status" />
                         </div>
                       ) : arpTable && arpTable.length > 0 ? (
                         <Table striped bordered hover responsive>
@@ -1972,9 +2037,7 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
                         </Alert>
                       ) : cdpLoading ? (
                         <div className="text-center">
-                          <Spinner animation="border" role="status">
-                            <span className="visually-hidden">Loading...</span>
-                          </Spinner>
+                          <Spinner animation="border" role="status" />
                         </div>
                       ) : cdpNeighbors && cdpNeighbors.length > 0 ? (
                         <Table striped bordered hover responsive>
@@ -2019,9 +2082,7 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
                         </Alert>
                       ) : lldpLoading ? (
                         <div className="text-center">
-                          <Spinner animation="border" role="status">
-                            <span className="visually-hidden">Loading...</span>
-                          </Spinner>
+                          <Spinner animation="border" role="status" />
                         </div>
                       ) : lldpNeighbors && lldpNeighbors.length > 0 ? (
                         <Table striped bordered hover responsive>

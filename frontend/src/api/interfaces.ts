@@ -96,3 +96,37 @@ export const useConfigureInterfaceVlan = (deviceId: string | undefined) => {
     },
   });
 };
+
+export const useSetInterfaceDescription = (deviceId: string | undefined) => {
+  const { token } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ interfaceName, description }: { interfaceName: string; description: string }) => {
+      if (!token || !deviceId) {
+        throw new Error('Missing token or device ID');
+      }
+
+      const response = await fetch(`/api/devices/${deviceId}/interfaces/description`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ interface_name: interfaceName, description }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to set interface description');
+      }
+
+      return response.json();
+    },
+    onSuccess: () => {
+      // Invalidate relevant queries to refresh data
+      queryClient.invalidateQueries({ queryKey: ['interfacesBrief', deviceId] });
+      queryClient.invalidateQueries({ queryKey: ['interfacesDescription', deviceId] });
+    },
+  });
+};

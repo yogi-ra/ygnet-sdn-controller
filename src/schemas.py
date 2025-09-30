@@ -112,6 +112,11 @@ class InterfaceState(BaseModel):
     state: bool
 
 
+class InterfaceDescription(BaseModel):
+    interface_name: str
+    description: str
+
+
 class PortAssignment(BaseModel):
     port: str
 

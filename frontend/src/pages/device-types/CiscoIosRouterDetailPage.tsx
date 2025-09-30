@@ -14,10 +14,12 @@ import {
   Tabs,
   Tab,
   Toast,
+  InputGroup
 } from "react-bootstrap";
 import { useAuth } from "../../hooks/useAuth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTaskPolling } from "../../hooks/useTaskPolling";
+import { useSetInterfaceDescription } from '../../api/interfaces';
 
 const useSystemInfo = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean, deviceData: any) => {
   // Return the version information from the passed device data instead of making another request
@@ -1040,6 +1042,13 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
   const [toastMessage, setToastMessage] = useState('');
   const [toastVariant, setToastVariant] = useState<'success' | 'danger'>('success');
 
+  // Interface description state
+  const [descriptionEdits, setDescriptionEdits] = useState<{ [key: string]: string }>({});
+  const [savingDescription, setSavingDescription] = useState<{ [key: string]: boolean }>({});
+
+  // API hooks
+  const setInterfaceDescription = useSetInterfaceDescription(id);
+
   const handleRefresh = () => {
     clearInterfacesCache();
     clearInterfaceDescriptionsCache();
@@ -1120,6 +1129,36 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
     }
   };
 
+  const handleDescriptionChange = (ifaceName: string, value: string) => {
+    setDescriptionEdits(prev => ({
+      ...prev,
+      [ifaceName]: value
+    }));
+  };
+
+  const handleCancelDescriptionEdit = (ifaceName: string) => {
+    setDescriptionEdits(prev => {
+      const newState = { ...prev };
+      delete newState[ifaceName];
+      return newState;
+    });
+  };
+
+  const handleSaveDescription = async (ifaceName: string) => {
+    const description = descriptionEdits[ifaceName];
+    if (!id || description === undefined) return;
+
+    try {
+      const response = await setInterfaceDescription.mutateAsync({ interfaceName: ifaceName, description });
+      setCurrentTaskId(response.task_id);
+      setTaskAction('setInterfaceDescription');
+    } catch (err: any) {
+      setToastMessage(`Error setting interface description: ${err.message || 'Unknown error'}`);
+      setToastVariant('danger');
+      setShowToast(true);
+    }
+  };
+
   const handleExecuteCommand = async (e: React.FormEvent) => {
     e.preventDefault();
     setExecutingCommand(true);
@@ -1177,6 +1216,14 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
         // Refresh interfaces to show latest changes
         clearInterfacesCache();
         refetchInterfaces();
+      } else if (taskAction === 'setInterfaceDescription') {
+        setToastMessage('Successfully changed device description');
+        setToastVariant('success');
+        setShowToast(true);
+
+        // Refresh interface descriptions to show latest changes
+        clearInterfaceDescriptionsCache();
+        refetchInterfaceDescriptions();
       } else if (taskAction === 'executeCommand') {
         // Handle command execution result
         // The result can be in either 'result' or 'info' field depending on how the backend formats it
@@ -1199,6 +1246,14 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
         setToastVariant('danger');
         setShowToast(true);
         setTogglingInterfaces({});
+      } else if (taskAction === 'setInterfaceDescription') {
+        setToastMessage(`Error changing device description ${errorMessage}`);
+        setToastVariant('danger');
+        setShowToast(true);
+
+        // Refresh interface descriptions to show latest changes
+        clearInterfaceDescriptionsCache();
+        refetchInterfaceDescriptions();
       } else if (taskAction === 'executeCommand') {
         setCommandError(errorMessage);
         setExecutingCommand(false);
@@ -1344,43 +1399,65 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
                       </thead>
                       <tbody>
                         {interfaces.map((iface: any, index: number) => {
-                          // Extract interface name for matching
-                          const fullInterfaceName = iface.interface || iface.intf || "";
-                          
+                          const ifaceName = iface.interface || iface.intf || "";
+                          const isEditing = descriptionEdits.hasOwnProperty(ifaceName);
+                          const editedDescription = descriptionEdits[ifaceName] ?? '';
+
                           // Find matching description data for this interface
-                          // The description API returns 'port' field that matches the short form (e.g., 'Gi0/0')
-                          // while the brief API returns 'interface' field with full name (e.g., 'GigabitEthernet0/0')
                           const descriptionEntry = interfaceDescriptions?.find((desc: any) => {
-                            // Check if the description port matches the full interface name
-                            if (desc.port === fullInterfaceName) return true;
-                            
-                            // If not direct match, try to match by converting full name to short form
-                            // For example: GigabitEthernet0/0 -> Gi0/0, FastEthernet0/1 -> Fa0/1
-                            const shortInterfaceName = fullInterfaceName.replace(/^GigabitEthernet/, 'Gi')
-                                                                      .replace(/^FastEthernet/, 'Fa')
-                                                                      .replace(/^Ethernet/, 'Eth')
-                                                                      .replace(/^Serial/, 'Se')
-                                                                      .replace(/^Loopback/, 'Lo')
-                                                                      .replace(/^Vlan/, 'Vl');
-                            
+                            if (desc.port === ifaceName) return true;
+                            const shortInterfaceName = ifaceName.replace(/^GigabitEthernet/, 'Gi')
+                                                              .replace(/^FastEthernet/, 'Fa')
+                                                              .replace(/^Ethernet/, 'Eth')
+                                                              .replace(/^Serial/, 'Se')
+                                                              .replace(/^Loopback/, 'Lo')
+                                                              .replace(/^Vlan/, 'Vl');
                             return desc.port === shortInterfaceName;
+
                           });
-                          
-                          // Handle different possible field names for description
-                          let description = "N/A";
-                          if (descriptionEntry) {
-                            // Check for common field names that might contain the description
-                            description = descriptionEntry.description || 
-                                         descriptionEntry.desc || 
-                                         descriptionEntry.interface_description || 
-                                         descriptionEntry.notes || 
-                                         "N/A";
-                          }
-                          
+
+                          const currentDescription = descriptionEntry ? descriptionEntry.description : "N/A";
+
                           return (
                             <tr key={index}>
-                              <td>{iface.interface || iface.intf || "N/A"}</td>
-                              <td>{description}</td>
+                              <td>{ifaceName}</td>
+                              <td>
+                                {isEditing ? (
+                                  <InputGroup>
+                                    <Form.Control
+                                      type="text"
+                                      size="sm"
+                                      value={editedDescription}
+                                      onChange={(e) => handleDescriptionChange(ifaceName, e.target.value)}
+                                      disabled={!device?.is_reachable || !!currentTaskId}
+                                    />
+                                    <Button 
+                                      size="sm" 
+                                      variant="success" 
+                                      onClick={() => handleSaveDescription(ifaceName)} 
+                                      disabled={!device?.is_reachable || !!currentTaskId || savingDescription[ifaceName]}
+                                    >
+                                      {(savingDescription[ifaceName] ||
+                                        (currentTaskId && taskAction === "setInterfaceDescription")) ? 
+                                        <Spinner as="span" animation="border" size="sm" /> : "Save"
+                                      } 
+                                    </Button>
+                                    <Button 
+                                      size="sm" 
+                                      variant="outline-secondary" 
+                                      onClick={() => handleCancelDescriptionEdit(ifaceName)} 
+                                      disabled={!!currentTaskId}
+                                    >
+                                      ×
+                                    </Button>
+                                  </InputGroup>
+                                ) : (
+                                  <div>
+                                    {currentDescription}
+                                    <Button size="sm" variant="outline-primary" className="ms-2" onClick={() => handleDescriptionChange(ifaceName, currentDescription)} disabled={!device?.is_reachable || !!currentTaskId}>Edit</Button>
+                                  </div>
+                                )}
+                              </td>
                               <td>{iface.ip_address || iface.ip || "N/A"}</td>
                               <td>{iface.status || "N/A"}</td>
                               <td>{iface.proto || "N/A"}</td>
@@ -1388,23 +1465,13 @@ const CiscoIosRouterDetailPage = ({ device }: { device: any }) => {
                                 <Button
                                   size="sm"
                                   variant={isInterfaceAdminUp(iface.status) ? "danger" : "success"}
-                                  onClick={() => handleToggleInterface(
-                                    iface.interface || iface.intf || "",
-                                    iface.status || ""
-                                  )}
-                                  disabled={!isReachable || togglingInterfaces[iface.interface || iface.intf || ""] || !!currentTaskId}
+                                  onClick={() => handleToggleInterface(ifaceName, iface.status || "")}
+                                  disabled={!isReachable || togglingInterfaces[ifaceName] || !!currentTaskId}
                                 >
-                                  {(togglingInterfaces[iface.interface || iface.intf || ""] || 
+                                  {(togglingInterfaces[ifaceName] || 
                                     (currentTaskId && taskAction === 'toggleInterface')) ? (
                                     <>
-                                      <Spinner
-                                        as="span"
-                                        animation="border"
-                                        size="sm"
-                                        role="status"
-                                        aria-hidden="true"
-                                      />
-                                      <span className="visually-hidden">Loading...</span>
+                                      <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" />
                                     </>
                                   ) : isInterfaceAdminUp(iface.status) ? "Shut Down" : "Enable"}
                                 </Button>
