@@ -138,8 +138,11 @@ class CiscoIosInterfaces(BaseInterfaces):
         """
         commands = [
             f"interface {interface_name}",
-            f"description {description}"
         ]
+        if not description:
+            commands.append(f"no description")
+        else:
+            commands.append(f"description {description}")
         try:
             output = self.device_handler.send_config_set(commands)
             return output
