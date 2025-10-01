@@ -139,7 +139,7 @@ def update_device(
     if db_device is None:
         raise HTTPException(status_code=404, detail="Device not found")
 
-    updated_device = crud.update_device(db=db, device_id=device_id, device=device)
+    updated_device = crud.update_device(db=db, device_id=device_id, device_update=device)
 
     return updated_device
 
