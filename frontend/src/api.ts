@@ -55,9 +55,13 @@ export const fetchDeviceTypes = async (token: string | null): Promise<DeviceType
   return response.json();
 };
 
-export const fetchDevices = async (token: string | null): Promise<Device[]> => {
+export const fetchDevices = async (
+  token: string | null,
+  skip: number = 0,
+  limit: number = 5
+): Promise<DevicesResponse> => {
   const headers = getAuthHeaders(token);
-  const response = await fetch("/api/devices/", { headers });
+  const response = await fetch(`/api/devices/?skip=${skip}&limit=${limit}`, { headers });
 
   if (!response.ok) {
     if (response.status === 401) {
@@ -66,8 +70,13 @@ export const fetchDevices = async (token: string | null): Promise<Device[]> => {
     throw new Error(`Failed to fetch devices: ${response.statusText}`);
   }
 
-  const data = await response.json();
-  return Array.isArray(data) ? data : [];
+  const devices = await response.json();
+  const total = response.headers.get('X-Total-Count');
+  
+  return {
+    devices: Array.isArray(devices) ? devices : [],
+    total: total ? parseInt(total, 10) : devices.length,
+  };
 };
 
 export const deleteDevice = async (

@@ -41,7 +41,7 @@ def create_device(device: schemas.DeviceCreate, db: Session = Depends(get_db)):
     dependencies=[Depends(require_read_privileges)],
 )
 async def read_devices(
-    request: Request, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)
+    request: Request, skip: int = 0, limit: int = 5, db: Session = Depends(get_db)
 ):
     """
     Retrieve a list of network devices from the database, including their reachability status.

@@ -1,16 +1,18 @@
-import { Container, Table, Button, Alert, Spinner } from "react-bootstrap";
+import { Container, Table, Button, Alert, Pagination } from "react-bootstrap";
 import { useNavigate } from "react-router-dom";
 import { useDevices } from "../hooks/useDevices";
 import { useConfig } from "../context/ConfigContext";
 import { toast } from "react-hot-toast";
 import { findDeviceTypeDisplayName } from "../utils/deviceTypes";
-import { useDeviceReachability } from "../hooks/useDeviceReachability";
+import { useState } from "react";
 
 const DeviceListPage = () => {
   const navigate = useNavigate();
-  const { devices, isLoading, isError, error, deleteDevice } = useDevices();
+  const [page, setPage] = useState(1);
+  const pageSize = 5;
+  const { devices, total, isLoading, isError, error, deleteDevice } = useDevices(page, pageSize);
   const { deviceTypes } = useConfig();
-  
+
 
   const handleAddDevice = () => {
     navigate("/devices/add");
@@ -38,6 +40,8 @@ const DeviceListPage = () => {
     });
     window.location.reload();
   };
+
+  const totalPages = Math.ceil(total / pageSize);
 
   return (
     <Container fluid className="mt-4">
@@ -159,6 +163,17 @@ const DeviceListPage = () => {
                 ))}
             </tbody>
           </Table>
+          <Pagination>
+            <Pagination.First onClick={() => setPage(1)} disabled={page === 1} />
+            <Pagination.Prev onClick={() => setPage(page - 1)} disabled={page === 1} />
+            {[...Array(totalPages).keys()].map((p) => (
+              <Pagination.Item key={p + 1} active={p + 1 === page} onClick={() => setPage(p + 1)}>
+                {p + 1}
+              </Pagination.Item>
+            ))}
+            <Pagination.Next onClick={() => setPage(page + 1)} disabled={page === totalPages} />
+            <Pagination.Last onClick={() => setPage(totalPages)} disabled={page === totalPages} />
+          </Pagination>
         </div>
       )}
     </Container>

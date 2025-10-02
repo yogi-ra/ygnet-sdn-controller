@@ -1,19 +1,19 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchDevices, deleteDevice, type Device } from "../api";
+import { fetchDevices, deleteDevice, type DevicesResponse } from "../api";
 import { useAuth } from "./useAuth";
 
-export const useDevices = () => {
+export const useDevices = (page: number, pageSize: number) => {
   const { token } = useAuth();
   const queryClient = useQueryClient();
 
   const {
-    data: devices = [],
+    data,
     isLoading,
     isError,
     error,
-  } = useQuery<Device[], Error>({
-    queryKey: ["devices"],
-    queryFn: () => fetchDevices(token),
+  } = useQuery<DevicesResponse, Error>({
+    queryKey: ["devices", page, pageSize],
+    queryFn: () => fetchDevices(token, (page - 1) * pageSize, pageSize),
     refetchOnWindowFocus: false,
   });
 
@@ -29,7 +29,8 @@ export const useDevices = () => {
   };
 
   return {
-    devices,
+    devices: data?.devices ?? [],
+    total: data?.total ?? 0,
     isLoading,
     isError,
     error,
