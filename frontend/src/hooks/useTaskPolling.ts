@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from './useAuth';
+import { taskPollingRegistry } from '../utils/taskPollingRegistry';
 
 export type TaskStatus = {
   task_id: string;
@@ -17,12 +18,62 @@ type UseTaskPollingOptions = {
 };
 
 export const useTaskPolling = (taskId: string | null, options: UseTaskPollingOptions = {}) => {
-  const { interval = 250, onSuccess, onError } = options;
+  const { interval = 1000, onSuccess, onError } = options;
   const { token } = useAuth();
   const [taskStatus, setTaskStatus] = useState<TaskStatus | null>(null);
   const [pollingError, setPollingError] = useState<string | null>(null);
+  
+  // Generate a unique component ID for registry tracking
+  const componentId = useRef(`${taskId}-${Date.now()}-${Math.random()}`).current;
 
-  const fetchTaskStatus = useCallback(async () => {
+  // Callback to handle task status updates
+  const handleTaskUpdate = useCallback((status: TaskStatus, error: string | null) => {
+    if (status) {
+      setTaskStatus(status);
+      
+      if (status.status === 'SUCCESS') {
+        onSuccess?.(status.result);
+      } else if (status.status === 'FAILURE') {
+        const errorMessage = status.error || 'Task failed';
+        setPollingError(errorMessage);
+        onError?.(errorMessage);
+      }
+    } else if (error) {
+      setPollingError(error);
+      onError?.(error);
+    }
+  }, [onSuccess, onError]);
+
+  useEffect(() => {
+    if (!taskId || !token) {
+      setTaskStatus(null);
+      setPollingError(null);
+      return;
+    }
+
+    // Check if task is already being polled and get current status
+    const currentStatus = taskPollingRegistry.getCurrentStatus(taskId);
+    if (currentStatus?.status) {
+      setTaskStatus(currentStatus.status);
+      if (currentStatus.error) {
+        setPollingError(currentStatus.error);
+      }
+    }
+
+    // Subscribe to the task polling registry
+    taskPollingRegistry.subscribe(taskId, componentId, handleTaskUpdate, interval);
+
+    // Clean up on unmount or when dependencies change
+    return () => {
+      taskPollingRegistry.unsubscribe(taskId, componentId);
+    };
+  }, [taskId, token, interval, componentId, handleTaskUpdate]);
+
+  // Loading is true when task status is PENDING or PROCESSING
+  const isLoading = taskStatus?.status === 'PENDING' || taskStatus?.status === 'PROCESSING';
+
+  // Refetch function - in the registry system, we just trigger a manual fetch
+  const refetch = useCallback(async () => {
     if (!taskId || !token) return;
 
     try {
@@ -53,30 +104,11 @@ export const useTaskPolling = (taskId: string | null, options: UseTaskPollingOpt
     }
   }, [taskId, token, onSuccess, onError]);
 
-  useEffect(() => {
-    if (!taskId) {
-      setTaskStatus(null);
-      setPollingError(null);
-      return;
-    }
-
-    // Fetch immediately
-    fetchTaskStatus();
-
-    // Set up polling
-    const intervalId = setInterval(fetchTaskStatus, interval);
-
-    // Clean up interval on unmount or when taskId changes
-    return () => clearInterval(intervalId);
-  }, [taskId, fetchTaskStatus, interval]);
-
-  // Loading is true when task status is PENDING or PROCESSING
-  const isLoading = taskStatus?.status === 'PENDING' || taskStatus?.status === 'PROCESSING';
-
   return {
     taskStatus,
+    taskResult: taskStatus?.status === 'SUCCESS' ? taskStatus.result : taskStatus,
     loading: isLoading,
     error: pollingError,
-    refetch: fetchTaskStatus,
+    refetch,
   };
 };

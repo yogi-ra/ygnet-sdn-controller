@@ -18,12 +18,10 @@ celery_app.conf.update(
     enable_utc=True,
 )
 
-# Windows-specific configuration
-if platform.system() == "Windows":
-    celery_app.conf.update(
-        worker_pool="solo",
-        worker_concurrency=1,
-    )
+celery_app.conf.update(
+    worker_pool='threads',  # Use threads instead of solo to allow concurrency
+    worker_concurrency=4,   # Allow up to 4 concurrent tasks
+)
 
 celery_app.conf.beat_schedule = {
     'cleanup-celery-meta-ten-minutes': {

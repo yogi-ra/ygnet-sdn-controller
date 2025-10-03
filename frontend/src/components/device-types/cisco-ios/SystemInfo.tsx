@@ -11,25 +11,25 @@ interface SystemInfoProps {
 
 const SystemInfo: React.FC<SystemInfoProps> = ({ deviceId, token, isReachable }) => {
   // Fetch version info with task polling
-  const { taskResult: versionTask, loading: versionLoading } = useTaskPolling<{ hostname: string; version: string; uptime: string }>(
+  const { taskStatus: versionTask, loading: versionLoading } = useTaskPolling(
     fetchSystemVersion(deviceId, token).then(res => res.task_id),
     { interval: 250 }
   );
   
   // Fetch hostname info with task polling
-  const { taskResult: hostnameTask, loading: hostnameLoading } = useTaskPolling<string>(
+  const { taskStatus: hostnameTask, loading: hostnameLoading } = useTaskPolling(
     fetchSystemHostname(deviceId, token).then(res => res.task_id),
     { interval: 250 }
   );
   
   // Fetch uptime info with task polling
-  const { taskResult: uptimeTask, loading: uptimeLoading } = useTaskPolling<string>(
+  const { taskStatus: uptimeTask, loading: uptimeLoading } = useTaskPolling(
     fetchSystemUptime(deviceId, token).then(res => res.task_id),
     { interval: 250 }
   );
   
   // Fetch clock info with task polling
-  const { taskResult: clockTask, loading: clockLoading } = useTaskPolling<string>(
+  const { taskStatus: clockTask, loading: clockLoading } = useTaskPolling(
     fetchSystemClock(deviceId, token).then(res => res.task_id),
     { interval: 250 }
   );
