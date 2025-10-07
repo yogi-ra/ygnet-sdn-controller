@@ -32,7 +32,7 @@ class CRUD:
             .first()
         )
 
-    def get_devices(self, db: Session, skip: int = 0, limit: int = 100):
+    def get_devices(self, db: Session, skip: int = 0, limit: int = None):
         return db.query(models.NetworkDevice).offset(skip).limit(limit).all()
 
     def create_device(self, db: Session, device: schemas.DeviceCreate):

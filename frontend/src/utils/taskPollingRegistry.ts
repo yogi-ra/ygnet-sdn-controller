@@ -11,7 +11,7 @@ interface TaskPollingEntry {
 
 class TaskPollingRegistry {
   private registry: Map<string, TaskPollingEntry> = new Map();
-  private readonly defaultInterval: number = 1000; // 1 second
+  private readonly defaultInterval: number = parseInt(import.meta.env.VITE_TASK_POLLING_INTERVAL || '1000', 10); // Configurable via environment variable, default 1 second
 
   /**
    * Register a component to start polling a task

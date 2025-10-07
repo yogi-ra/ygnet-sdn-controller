@@ -1,6 +1,6 @@
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
-from typing import List
+from typing import List, Dict
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from .... import schemas
@@ -8,12 +8,6 @@ from ....config import settings
 from ....crud import crud
 from ....database import get_db
 from ....device_reachability import check_device_reachability
-from ....exceptions import (
-    DeviceUnreachableError,
-    DeviceConnectionError,
-    DeviceAuthenticationError,
-    DeviceTimeoutError
-)
 from ...dependencies import require_read_privileges, require_write_privileges
 from ...utils import get_handler_from_device_id
 
@@ -34,14 +28,12 @@ def create_device(device: schemas.DeviceCreate, db: Session = Depends(get_db)):
 
     return created_device
 
-
 @router.get(
     "/",
-    response_model=List[schemas.Device],
     dependencies=[Depends(require_read_privileges)],
 )
 async def read_devices(
-    request: Request, skip: int = 0, limit: int = 5, db: Session = Depends(get_db)
+    skip: int = 0, limit: int = 5, db: Session = Depends(get_db)
 ):
     """
     Retrieve a list of network devices from the database, including their reachability status.
@@ -49,45 +41,35 @@ async def read_devices(
     """
     db_devices = crud.get_devices(db, skip=skip, limit=limit)
 
-    # Check reachability for all devices asynchronously
-    reachability_tasks = [
-        check_device_reachability(db_device.id, db) for db_device in db_devices
-    ]
-    reachability_results = await asyncio.gather(
-        *reachability_tasks, return_exceptions=True
-    )
+    return db_devices 
 
-    # Update device objects with reachability status
-    devices_with_reachability = []
-    for i, db_device in enumerate(db_devices):
-        # Handle potential exceptions in reachability checks
-        is_reachable = False
-        if isinstance(reachability_results[i], Exception):
-            is_reachable = False
-        else:
-            is_reachable = reachability_results[i]
-            
-        # Create Device schema object with required fields
-        device = schemas.Device(
-            id=db_device.id,
-            name=db_device.name,
-            ip_address=db_device.ip_address,
-            port=db_device.port,
-            device_type=db_device.device_type,
-            username=db_device.username,
-            is_reachable=is_reachable
-        )
-        devices_with_reachability.append(device)
+@router.get(
+    "/stats", response_model=Dict[str, int], dependencies=[Depends(require_read_privileges)]
+)
+async def get_device_stats(db: Session = Depends(get_db)):
+    """  
+    Get device statistics including total and active devices.
 
-    return devices_with_reachability
+    Returns:
+        Dict containing total_devices and active_devices
+counts
+    """
+    devices = crud.get_devices(db)
+    total_devices = len(devices)
+    active_devices = sum(1 for i in devices if i.is_reachable)
 
+    return {
+        "total_devices": total_devices,
+        "active_devices": active_devices,
+        "inactive_devices": total_devices - active_devices,
+    }
 
 @router.get(
     "/{device_id}",
     response_model=schemas.DeviceDetail,
     dependencies=[Depends(require_read_privileges)],
 )
-async def read_device(request: Request, device_id: int, db: Session = Depends(get_db)):
+async def read_device(device_id: int, db: Session = Depends(get_db)):
     """
     Retrieve a single network device by its ID with detailed information.
     Only includes version information. Interfaces and other operational data
@@ -155,10 +137,6 @@ def delete_device(device_id: int, db: Session = Depends(get_db)):
     crud.delete_device(db, device_id=device_id)
 
     return
-
-
-
-
 
 @router.get(
     "/{device_id}/check-reachability", dependencies=[Depends(require_read_privileges)]

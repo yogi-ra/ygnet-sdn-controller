@@ -18,7 +18,7 @@ type UseTaskPollingOptions = {
 };
 
 export const useTaskPolling = (taskId: string | null, options: UseTaskPollingOptions = {}) => {
-  const { interval = 1000, onSuccess, onError } = options;
+  const { interval = parseInt(import.meta.env.VITE_TASK_POLLING_INTERVAL || '1000', 10), onSuccess, onError } = options;
   const { token } = useAuth();
   const [taskStatus, setTaskStatus] = useState<TaskStatus | null>(null);
   const [pollingError, setPollingError] = useState<string | null>(null);

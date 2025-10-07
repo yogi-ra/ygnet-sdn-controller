@@ -6,6 +6,7 @@ import { useAuth } from '../hooks/useAuth'; // Import useAuth
 const DashboardPage = () => {
   const [totalDevices, setTotalDevices] = useState(0);
   const [activeDevicesCount, setActiveDevicesCount] = useState(0); // New state for active devices
+  const [inactiveDevicesCount, setinactiveDevicesCount] = useState(0); // New state for active devices
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { token } = useAuth(); // Get the token from useAuth
@@ -23,7 +24,7 @@ const DashboardPage = () => {
 
       try {
         // Fetch all devices
-        const devicesResponse = await fetch('/api/devices/', {
+        const devicesResponse = await fetch('/api/devices/stats', {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
@@ -34,11 +35,9 @@ const DashboardPage = () => {
           throw new Error(errorData.detail || `HTTP error! status: ${devicesResponse.status}`);
         }
         const devices = await devicesResponse.json();
-        setTotalDevices(devices.length);
-
-        // Filter devices based on the new is_reachable property
-        const activeCount = devices.filter((device: any) => device.is_reachable).length;
-        setActiveDevicesCount(activeCount);
+        setTotalDevices(devices.total_devices);
+        setActiveDevicesCount(devices.active_devices);
+        setinactiveDevicesCount(devices.inactive_devices)
 
       } catch (e: any) {
         if (e.message && e.message.includes("Could not validate credentials")) {
@@ -103,7 +102,7 @@ const DashboardPage = () => {
         <Col md={6} lg={4}>
           <Card className="text-center bg-info text-white mb-4">
             <Card.Body>
-              <Card.Title as="h2">{totalDevices - activeDevicesCount}</Card.Title>
+              <Card.Title as="h2">{inactiveDevicesCount}</Card.Title>
               <Card.Text>Inactive Devices</Card.Text>
             </Card.Body>
           </Card>

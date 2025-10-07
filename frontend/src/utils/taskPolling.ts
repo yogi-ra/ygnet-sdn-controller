@@ -22,7 +22,7 @@ export interface TaskStatus {
 export async function pollTaskStatus(
   taskId: string,
   token: string,
-  interval: number = 1000,
+  interval: number = parseInt(import.meta.env.VITE_TASK_POLLING_INTERVAL || '1000', 10),
   maxAttempts: number = 30
 ): Promise<TaskStatus> {
   let attempts = 0;
@@ -77,7 +77,7 @@ export async function executeTaskAndPoll(
     maxAttempts?: number;
   } = {}
 ): Promise<any> {
-  const { method = 'POST', interval = 1000, maxAttempts = 30 } = options;
+  const { method = 'POST', interval = parseInt(import.meta.env.VITE_TASK_POLLING_INTERVAL || '1000', 10), maxAttempts = 30 } = options;
   
   try {
     // Start the task
