@@ -1,7 +1,8 @@
 import threading
 import socket
 import queue
-from concurrent.futures import ThreadPoolExecutor
+import time
+from concurrent.futures import ThreadPoolExecutor, Future
 from collections import defaultdict
 from netmiko import ConnectHandler, NetmikoTimeoutException, NetmikoAuthenticationException
 from src.config import settings
@@ -32,8 +33,9 @@ class ConnectionManager:
                     cls._instance._connections = {}  # device_key -> [connection objects]
                     cls._instance._connection_locks = {}  # device_key -> lock
                     cls._instance._connection_counts = defaultdict(int)  # device_key -> count
-                    cls._instance._max_connections_per_device = 2  # Default max connections per device
+                    cls._instance._max_connections_per_device = 3  # Default max connections per device
                     cls._instance._connection_conditions = {}  # device_key -> threading.Condition
+                    cls._instance._request_queues = {}  # device_key -> queue.Queue for pending requests
                     cls._instance._executor = ThreadPoolExecutor(max_workers=settings.MAX_WORKER_THREADS)
                     cls._instance._executor_shutdown = False
         return cls._instance
@@ -62,6 +64,8 @@ class ConnectionManager:
         if device_key not in self._connection_conditions:
             # Use the existing lock for the condition
             self._connection_conditions[device_key] = threading.Condition(self._connection_locks[device_key])
+        if device_key not in self._request_queues:
+            self._request_queues[device_key] = queue.Queue()
 
         with self._connection_conditions[device_key]:
             while self._connection_counts[device_key] >= self._max_connections_per_device:
@@ -78,7 +82,7 @@ class ConnectionManager:
                     try:
                         # Perform a TCP port check before considering the connection alive
                         if self._check_tcp_port_open(device_info.ip_address, device_info.port):
-                            if connection.is_alive():
+                            if self._validate_connection(connection):
                                 print(f"Reusing existing connection to {device_info.ip_address}.")
                                 return connection
                             else:
@@ -86,8 +90,8 @@ class ConnectionManager:
                                 print(f"Stale connection found for {device_info.ip_address}. Removing...")
                                 try:
                                     connection.disconnect()
-                                except Exception:
-                                    pass  # Ignore errors on disconnect
+                                except Exception as disconnect_error:
+                                    print(f"Error disconnecting stale connection for {device_info.ip_address}: {disconnect_error}")
                                 self._connections[device_key].remove(connection)
                                 self._connection_counts[device_key] -= 1
                         else:
@@ -95,8 +99,8 @@ class ConnectionManager:
                             print(f"Device {device_info.ip_address} port is closed. Removing connection.")
                             try:
                                 connection.disconnect()
-                            except Exception:
-                                pass  # Ignore errors on disconnect
+                            except Exception as disconnect_error:
+                                print(f"Error disconnecting connection for unreachable device {device_info.ip_address}: {disconnect_error}")
                             self._connections[device_key].remove(connection)
                             self._connection_counts[device_key] -= 1
                             # Update database and invalidate cache when device is unreachable
@@ -106,8 +110,8 @@ class ConnectionManager:
                         print(f"Error checking stale connection for {device_info.ip_address}: {e}. Removing...")
                         try:
                             connection.disconnect()
-                        except Exception:
-                            pass  # Ignore errors on disconnect
+                        except Exception as disconnect_error:
+                            print(f"Error disconnecting problematic connection for {device_info.ip_address}: {disconnect_error}")
                         
                         # Ensure the connection is removed even if it was already gone
                         if connection in self._connections[device_key]:
@@ -169,6 +173,78 @@ class ConnectionManager:
                     raise DeviceUnreachableError(f"Failed to update reachability for device {device_info.ip_address}")
                 raise
 
+    def _validate_connection(self, connection) -> bool:
+        """
+        Validates if a connection is still alive and responsive.
+        """
+        try:
+            # Check if the connection is alive using Netmiko's built-in method
+            if not connection.is_alive():
+                return False
+
+            return True
+        except Exception:
+            # If any exception occurs during validation, consider the connection invalid
+            return False
+
+    def _execute_with_queue(self, device_info: DeviceConnectionInfo, operation_func, timeout: int = None):
+        """
+        Execute an operation with a per-device request queue to prevent blocking across devices.
+        """
+        device_key = device_info.get_key()
+        
+        # Create a future to return immediately
+        future = Future()
+        
+        # Add the operation to the device's request queue
+        request_item = {
+            'operation_func': operation_func,
+            'future': future,
+            'timeout': timeout
+        }
+        
+        # Ensure the queue exists for this device
+        if device_key not in self._request_queues:
+            self._request_queues[device_key] = queue.Queue()
+        
+        self._request_queues[device_key].put(request_item)
+        
+        # Process the queue in a separate thread to avoid blocking
+        self._executor.submit(self._process_device_queue, device_key)
+        
+        return future
+
+    def _process_device_queue(self, device_key: str):
+        """
+        Process the request queue for a specific device in bulk.
+        """
+        if device_key not in self._request_queues:
+            return
+            
+        queue_for_device = self._request_queues[device_key]
+        
+        # Collect all items in the queue for bulk processing
+        request_items = []
+        while not queue_for_device.empty():
+            try:
+                request_item = queue_for_device.get_nowait()
+                request_items.append(request_item)
+            except queue.Empty:
+                break
+        
+        # Execute all operations in parallel
+        for request_item in request_items:
+            future = request_item['future']
+            operation_func = request_item['operation_func']
+            timeout = request_item['timeout']
+            
+            # Execute the operation
+            try:
+                result = operation_func()
+                future.set_result(result)
+            except Exception as e:
+                future.set_exception(e)
+
     def _release_connection(self, device_info: DeviceConnectionInfo, connection):
         """Release a connection back to the pool."""
         device_key = device_info.get_key()
@@ -180,13 +256,31 @@ class ConnectionManager:
                 self._connection_conditions[device_key].notify()
 
     def get_connection(self, device_info: DeviceConnectionInfo, netmiko_device_type: str):
-        """Submits a connection request to the thread pool and returns a Future."""
+        """Submits a connection request with per-device queuing and returns a Future."""
         if self._executor_shutdown:
             raise RuntimeError("Cannot schedule new futures after shutdown")
-        return self._executor.submit(self._connect_device, device_info, netmiko_device_type)
+        def retry_connect_device():
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    return self._connect_device(device_info, netmiko_device_type)
+                except (NetmikoTimeoutException, NetmikoAuthenticationException, DeviceUnreachableError) as e:
+                    if attempt == max_retries - 1:  # Last attempt
+                        print(f"Connection failed for {device_info.ip_address} after {max_retries} attempts: {e}")
+                        raise e
+                    # Exponential backoff: wait 1s, then 2s, then 4s
+                    wait_time = 2 ** attempt
+                    print(f"Connection failed for {device_info.ip_address}, attempt {attempt + 1}. Retrying in {wait_time}s: {e}")
+                    time.sleep(wait_time)
+                except Exception as e:
+                    # For other exceptions, don't retry
+                    print(f"Non-retryable error during connection to {device_info.ip_address}: {e}")
+                    raise e
+        
+        return self._execute_with_queue(device_info, retry_connect_device)
 
     def send_command(self, device_info: DeviceConnectionInfo, command: str, netmiko_device_type: str, timeout: int = None, **kwargs):
-        """Submits a command execution request to the thread pool and returns a Future."""
+        """Submits a command execution request with per-device queuing and returns a Future."""
         if self._executor_shutdown:
             raise RuntimeError("Cannot schedule new futures after shutdown")
             
@@ -211,10 +305,28 @@ class ConnectionManager:
                 if connection:
                     self._release_connection(device_info, connection)
 
-        return self._executor.submit(_execute_command)
+        def retry_execute_command():
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    return _execute_command()
+                except (NetmikoTimeoutException, NetmikoAuthenticationException, DeviceUnreachableError) as e:
+                    if attempt == max_retries - 1:  # Last attempt
+                        print(f"Command execution failed for {device_info.ip_address} after {max_retries} attempts: {e}")
+                        raise e
+                    # Exponential backoff: wait 1s, then 2s, then 4s
+                    wait_time = 2 ** attempt
+                    print(f"Command execution failed for {device_info.ip_address}, attempt {attempt + 1}. Retrying in {wait_time}s: {e}")
+                    time.sleep(wait_time)
+                except Exception as e:
+                    # For other exceptions, don't retry
+                    print(f"Non-retryable error during command execution for {device_info.ip_address}: {e}")
+                    raise e
+        
+        return self._execute_with_queue(device_info, retry_execute_command, timeout)
 
     def send_config_set(self, device_info: DeviceConnectionInfo, commands: list[str], netmiko_device_type: str, timeout: int = None, **kwargs):
-        """Submits a config set execution request to the thread pool and returns a Future."""
+        """Submits a config set execution request with per-device queuing and returns a Future."""
         if self._executor_shutdown:
             raise RuntimeError("Cannot schedule new futures after shutdown")
             
@@ -239,10 +351,28 @@ class ConnectionManager:
                 if connection:
                     self._release_connection(device_info, connection)
 
-        return self._executor.submit(_execute_config_set)
+        def retry_execute_config_set():
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    return _execute_config_set()
+                except (NetmikoTimeoutException, NetmikoAuthenticationException, DeviceUnreachableError) as e:
+                    if attempt == max_retries - 1:  # Last attempt
+                        print(f"Config set execution failed for {device_info.ip_address} after {max_retries} attempts: {e}")
+                        raise e
+                    # Exponential backoff: wait 1s, then 2s, then 4s
+                    wait_time = 2 ** attempt
+                    print(f"Config set execution failed for {device_info.ip_address}, attempt {attempt + 1}. Retrying in {wait_time}s: {e}")
+                    time.sleep(wait_time)
+                except Exception as e:
+                    # For other exceptions, don't retry
+                    print(f"Non-retryable error during config set execution for {device_info.ip_address}: {e}")
+                    raise e
+        
+        return self._execute_with_queue(device_info, retry_execute_config_set, timeout)
 
     def send_multiline_commands(self, device_info: DeviceConnectionInfo, command_patterns: list[list[str]], netmiko_device_type: str, timeout: int = None, **kwargs):
-        """Submits a multiline command execution request to the thread pool and returns a Future."""
+        """Submits a multiline command execution request with per-device queuing and returns a Future."""
         if self._executor_shutdown:
             raise RuntimeError("Cannot schedule new futures after shutdown")
             
@@ -267,7 +397,25 @@ class ConnectionManager:
                 if connection:
                     self._release_connection(device_info, connection)
 
-        return self._executor.submit(_execute_multiline_commands)
+        def retry_execute_multiline_commands():
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    return _execute_multiline_commands()
+                except (NetmikoTimeoutException, NetmikoAuthenticationException, DeviceUnreachableError) as e:
+                    if attempt == max_retries - 1:  # Last attempt
+                        print(f"Multiline command execution failed for {device_info.ip_address} after {max_retries} attempts: {e}")
+                        raise e
+                    # Exponential backoff: wait 1s, then 2s, then 4s
+                    wait_time = 2 ** attempt
+                    print(f"Multiline command execution failed for {device_info.ip_address}, attempt {attempt + 1}. Retrying in {wait_time}s: {e}")
+                    time.sleep(wait_time)
+                except Exception as e:
+                    # For other exceptions, don't retry
+                    print(f"Non-retryable error during multiline command execution for {device_info.ip_address}: {e}")
+                    raise e
+        
+        return self._execute_with_queue(device_info, retry_execute_multiline_commands, timeout)
 
     def _update_device_reachability(self, device_info: DeviceConnectionInfo, is_reachable: bool):
         """
@@ -324,16 +472,6 @@ class ConnectionManager:
                 # Clear the connection list for this device
                 self._connections[device_key] = []
                 self._connection_counts[device_key] = 0
-                
-                # Clear the queue for this device
-                if device_key in self._connection_queues:
-                    while not self._connection_queues[device_key].empty():
-                        try:
-                            event = self._connection_queues[device_key].get_nowait()
-                            event.set()  # Release waiting threads
-                        except queue.Empty:
-                            break
-                    del self._connection_queues[device_key]
             
             # Only shutdown if not already shutdown
             if not self._executor_shutdown:
