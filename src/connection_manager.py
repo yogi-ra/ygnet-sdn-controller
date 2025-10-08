@@ -36,6 +36,7 @@ class ConnectionManager:
                     cls._instance._max_connections_per_device = 3  # Default max connections per device
                     cls._instance._connection_conditions = {}  # device_key -> threading.Condition
                     cls._instance._request_queues = {}  # device_key -> queue.Queue for pending requests
+                    cls._instance._connection_semaphores = {}  # device_key -> dict of semaphores for each connection
                     cls._instance._executor = ThreadPoolExecutor(max_workers=settings.MAX_WORKER_THREADS)
                     cls._instance._executor_shutdown = False
         return cls._instance
@@ -66,8 +67,11 @@ class ConnectionManager:
             self._connection_conditions[device_key] = threading.Condition(self._connection_locks[device_key])
         if device_key not in self._request_queues:
             self._request_queues[device_key] = queue.Queue()
+        if device_key not in self._connection_semaphores:
+            self._connection_semaphores[device_key] = {}
 
         with self._connection_conditions[device_key]:
+            # Wait until we have available connection slots
             while self._connection_counts[device_key] >= self._max_connections_per_device:
                 print(f"Max connections reached for {device_key}. Waiting for a connection to be released...")
                 self._connection_conditions[device_key].wait()
@@ -84,6 +88,10 @@ class ConnectionManager:
                         if self._check_tcp_port_open(device_info.ip_address, device_info.port):
                             if self._validate_connection(connection):
                                 print(f"Reusing existing connection to {device_info.ip_address}.")
+                                # Add semaphore for this connection if not exists
+                                conn_id = id(connection)
+                                if conn_id not in self._connection_semaphores[device_key]:
+                                    self._connection_semaphores[device_key][conn_id] = threading.Semaphore(1)
                                 return connection
                             else:
                                 # This connection is stale, remove it from the pool
@@ -94,6 +102,10 @@ class ConnectionManager:
                                     print(f"Error disconnecting stale connection for {device_info.ip_address}: {disconnect_error}")
                                 self._connections[device_key].remove(connection)
                                 self._connection_counts[device_key] -= 1
+                                # Remove semaphore for this connection
+                                conn_id = id(connection)
+                                if conn_id in self._connection_semaphores[device_key]:
+                                    del self._connection_semaphores[device_key][conn_id]
                         else:
                             # Port is closed, mark device as unreachable and remove connection
                             print(f"Device {device_info.ip_address} port is closed. Removing connection.")
@@ -103,6 +115,10 @@ class ConnectionManager:
                                 print(f"Error disconnecting connection for unreachable device {device_info.ip_address}: {disconnect_error}")
                             self._connections[device_key].remove(connection)
                             self._connection_counts[device_key] -= 1
+                            # Remove semaphore for this connection
+                            conn_id = id(connection)
+                            if conn_id in self._connection_semaphores[device_key]:
+                                del self._connection_semaphores[device_key][conn_id]
                             # Update database and invalidate cache when device is unreachable
                             self._update_device_reachability(device_info, False)
                     except Exception as e:
@@ -117,6 +133,10 @@ class ConnectionManager:
                         if connection in self._connections[device_key]:
                             self._connections[device_key].remove(connection)
                             self._connection_counts[device_key] -= 1
+                            # Remove semaphore for this connection
+                            conn_id = id(connection)
+                            if conn_id in self._connection_semaphores[device_key]:
+                                del self._connection_semaphores[device_key][conn_id]
 
             # If no reusable connection, establish a new one
             print(f"Attempting to connect to {device_info.ip_address}...")
@@ -144,6 +164,10 @@ class ConnectionManager:
                     self._connections[device_key] = []
                 self._connections[device_key].append(connection)
                 self._connection_counts[device_key] += 1
+                
+                # Add semaphore for this new connection
+                conn_id = id(connection)
+                self._connection_semaphores[device_key][conn_id] = threading.Semaphore(1)
                 
                 # Update database and invalidate cache when device is reachable
                 is_reachable = self._update_device_reachability(device_info, True)
@@ -210,40 +234,76 @@ class ConnectionManager:
         self._request_queues[device_key].put(request_item)
         
         # Process the queue in a separate thread to avoid blocking
-        self._executor.submit(self._process_device_queue, device_key)
+        # Only submit a new processing task if one isn't already running for this device
+        if not hasattr(self, '_processing_devices'):
+            self._processing_devices = set()
+        
+        if device_key not in self._processing_devices:
+            self._processing_devices.add(device_key)
+            self._executor.submit(self._process_device_queue_wrapper, device_key)
         
         return future
 
+    def _process_device_queue_wrapper(self, device_key: str):
+        """
+        Wrapper to ensure queue processing continues until empty.
+        """
+        try:
+            self._process_device_queue(device_key)
+        finally:
+            # Only remove from processing set when the queue is truly empty
+            if device_key in self._request_queues and self._request_queues[device_key].empty():
+                if hasattr(self, '_processing_devices'):
+                    self._processing_devices.discard(device_key)
+            # If queue is not empty, continue processing
+            elif device_key in self._request_queues and not self._request_queues[device_key].empty():
+                # Schedule another processing cycle after a short delay
+                import time
+                def reschedule():
+                    time.sleep(0.01)  # Small delay to avoid busy waiting
+                    if device_key not in self._processing_devices:
+                        self._processing_devices.add(device_key)
+                        self._executor.submit(self._process_device_queue_wrapper, device_key)
+                self._executor.submit(reschedule)
+
     def _process_device_queue(self, device_key: str):
         """
-        Process the request queue for a specific device in bulk.
+        Process the request queue for a specific device with parallel execution respecting max connections.
         """
         if device_key not in self._request_queues:
             return
             
         queue_for_device = self._request_queues[device_key]
         
-        # Collect all items in the queue for bulk processing
-        request_items = []
-        while not queue_for_device.empty():
-            try:
-                request_item = queue_for_device.get_nowait()
-                request_items.append(request_item)
-            except queue.Empty:
+        # Process requests while respecting the max connections limit
+        while True:
+            # Check if we can execute immediately (connection available)
+            if self._connection_counts[device_key] < self._max_connections_per_device and not queue_for_device.empty():
+                try:
+                    # Get the next request
+                    request_item = queue_for_device.get_nowait()
+                    future = request_item['future']
+                    operation_func = request_item['operation_func']
+                    timeout = request_item['timeout']
+                    
+                    # Execute the operation in a separate thread to not block the queue processing
+                    self._executor.submit(self._execute_request, future, operation_func, timeout)
+                except queue.Empty:
+                    # Queue became empty between the check and the get_nowait call
+                    break
+            else:
+                # Max connections reached or queue is empty, exit the loop
                 break
-        
-        # Execute all operations in parallel
-        for request_item in request_items:
-            future = request_item['future']
-            operation_func = request_item['operation_func']
-            timeout = request_item['timeout']
-            
-            # Execute the operation
-            try:
-                result = operation_func()
-                future.set_result(result)
-            except Exception as e:
-                future.set_exception(e)
+
+    def _execute_request(self, future, operation_func, timeout):
+        """
+        Execute a single request and set the result on the future.
+        """
+        try:
+            result = operation_func()
+            future.set_result(result)
+        except Exception as e:
+            future.set_exception(e)
 
     def _release_connection(self, device_info: DeviceConnectionInfo, connection):
         """Release a connection back to the pool."""
@@ -252,8 +312,16 @@ class ConnectionManager:
             if device_key in self._connections and connection in self._connections[device_key]:
                 self._connections[device_key].remove(connection)
                 self._connection_counts[device_key] -= 1
-                # Notify one waiting thread that a connection is available
-                self._connection_conditions[device_key].notify()
+                # Remove semaphore for this connection
+                conn_id = id(connection)
+                if conn_id in self._connection_semaphores[device_key]:
+                    del self._connection_semaphores[device_key][conn_id]
+                # Notify all waiting threads that a connection is available
+                self._connection_conditions[device_key].notify_all()
+                
+                # Process the queue again in case there are pending requests
+                if not self._request_queues[device_key].empty():
+                    self._executor.submit(self._process_device_queue, device_key)
 
     def get_connection(self, device_info: DeviceConnectionInfo, netmiko_device_type: str):
         """Submits a connection request with per-device queuing and returns a Future."""
@@ -288,15 +356,46 @@ class ConnectionManager:
             connection = None
             try:
                 connection = self._connect_device(device_info, netmiko_device_type)  # Ensure connection is active or re-established
-                # Ensure we are in privileged EXEC mode before sending the command
-                if not connection.check_enable_mode():
-                    connection.enable()
-                print(f"Executing command '{command}' on {device_info.ip_address}...")
-                # Set a timeout for the command execution
-                cmd_timeout = timeout or settings.NETMIKO_READ_TIMEOUT
-                output = connection.send_command(command, read_timeout=cmd_timeout, **kwargs)
-                print(f"Command '{command}' executed on {device_info.ip_address}.")
-                return output
+                device_key = device_info.get_key()
+                conn_id = id(connection)
+                
+                # Acquire the semaphore for this specific connection to ensure exclusive access
+                if device_key in self._connection_semaphores and conn_id in self._connection_semaphores[device_key]:
+                    with self._connection_semaphores[device_key][conn_id]:
+                        # Ensure we are in privileged EXEC mode before sending the command
+                        if not connection.check_enable_mode():
+                            connection.enable()
+                        
+                        # Clear the buffer before sending the command to avoid interference
+                        connection.clear_buffer()
+                        
+                        print(f"Executing command '{command}' on {device_info.ip_address}...")
+                        # Set a timeout for the command execution
+                        cmd_timeout = timeout or settings.NETMIKO_READ_TIMEOUT
+                        
+                        # Use a more specific approach to send the command to avoid pattern conflicts
+                        output = connection.send_command(
+                            command, 
+                            read_timeout=cmd_timeout, 
+                            **kwargs
+                        )
+                        print(f"Command '{command}' executed on {device_info.ip_address}.")
+                        return output
+                else:
+                    # Fallback to direct execution if semaphore not found
+                    with self._connection_locks[device_key]:  # Use device-level lock as fallback
+                        if not connection.check_enable_mode():
+                            connection.enable()
+                        
+                        # Clear the buffer before sending the command to avoid interference
+                        connection.clear_buffer()
+                        
+                        print(f"Executing command '{command}' on {device_info.ip_address}...")
+                        # Set a timeout for the command execution
+                        cmd_timeout = timeout or settings.NETMIKO_READ_TIMEOUT
+                        output = connection.send_command(command, read_timeout=cmd_timeout, **kwargs)
+                        print(f"Command '{command}' executed on {device_info.ip_address}.")
+                        return output
             except Exception as e:
                 print(f"Error executing command '{command}' on {device_info.ip_address}: {e}")
                 raise
@@ -334,15 +433,32 @@ class ConnectionManager:
             connection = None
             try:
                 connection = self._connect_device(device_info, netmiko_device_type)  # Ensure connection is active or re-established
-                # Ensure we are in privileged EXEC mode before sending the command
-                if not connection.check_enable_mode():
-                    connection.enable()
-                print(f"Executing config commands on {device_info.ip_address}...")
-                # Set a timeout for the command execution
-                cmd_timeout = timeout or settings.NETMIKO_READ_TIMEOUT
-                output = connection.send_config_set(commands, cmd_timeout=cmd_timeout, **kwargs)
-                print(f"Config commands executed on {device_info.ip_address}.")
-                return output
+                device_key = device_info.get_key()
+                conn_id = id(connection)
+                
+                # Acquire the semaphore for this specific connection to ensure exclusive access
+                if device_key in self._connection_semaphores and conn_id in self._connection_semaphores[device_key]:
+                    with self._connection_semaphores[device_key][conn_id]:
+                        # Ensure we are in privileged EXEC mode before sending the command
+                        if not connection.check_enable_mode():
+                            connection.enable()
+                        print(f"Executing config commands on {device_info.ip_address}...")
+                        # Set a timeout for the command execution
+                        cmd_timeout = timeout or settings.NETMIKO_READ_TIMEOUT
+                        output = connection.send_config_set(commands, cmd_timeout=cmd_timeout, **kwargs)
+                        print(f"Config commands executed on {device_info.ip_address}.")
+                        return output
+                else:
+                    # Fallback to direct execution if semaphore not found
+                    with self._connection_locks[device_key]:  # Use device-level lock as fallback
+                        if not connection.check_enable_mode():
+                            connection.enable()
+                        print(f"Executing config commands on {device_info.ip_address}...")
+                        # Set a timeout for the command execution
+                        cmd_timeout = timeout or settings.NETMIKO_READ_TIMEOUT
+                        output = connection.send_config_set(commands, cmd_timeout=cmd_timeout, **kwargs)
+                        print(f"Config commands executed on {device_info.ip_address}.")
+                        return output
             except Exception as e:
                 print(f"Error executing config commands on {device_info.ip_address}: {e}")
                 raise
@@ -380,15 +496,32 @@ class ConnectionManager:
             connection = None
             try:
                 connection = self._connect_device(device_info, netmiko_device_type)  # Ensure connection is active or re-established
-                # Ensure we are in privileged EXEC mode before sending the command
-                if not connection.check_enable_mode():
-                    connection.enable()
-                print(f"Executing multiline commands on {device_info.ip_address}...")
-                # Set a timeout for the command execution
-                cmd_timeout = timeout or settings.NETMIKO_READ_TIMEOUT
-                output = connection.send_multiline(command_patterns, read_timeout=cmd_timeout, **kwargs)
-                print(f"Multiline commands executed on {device_info.ip_address}.")
-                return output
+                device_key = device_info.get_key()
+                conn_id = id(connection)
+                
+                # Acquire the semaphore for this specific connection to ensure exclusive access
+                if device_key in self._connection_semaphores and conn_id in self._connection_semaphores[device_key]:
+                    with self._connection_semaphores[device_key][conn_id]:
+                        # Ensure we are in privileged EXEC mode before sending the command
+                        if not connection.check_enable_mode():
+                            connection.enable()
+                        print(f"Executing multiline commands on {device_info.ip_address}...")
+                        # Set a timeout for the command execution
+                        cmd_timeout = timeout or settings.NETMIKO_READ_TIMEOUT
+                        output = connection.send_multiline(command_patterns, read_timeout=cmd_timeout, **kwargs)
+                        print(f"Multiline commands executed on {device_info.ip_address}.")
+                        return output
+                else:
+                    # Fallback to direct execution if semaphore not found
+                    with self._connection_locks[device_key]:  # Use device-level lock as fallback
+                        if not connection.check_enable_mode():
+                            connection.enable()
+                        print(f"Executing multiline commands on {device_info.ip_address}...")
+                        # Set a timeout for the command execution
+                        cmd_timeout = timeout or settings.NETMIKO_READ_TIMEOUT
+                        output = connection.send_multiline(command_patterns, read_timeout=cmd_timeout, **kwargs)
+                        print(f"Multiline commands executed on {device_info.ip_address}.")
+                        return output
             except Exception as e:
                 print(f"Error executing multiline commands on {device_info.ip_address}: {e}")
                 raise
