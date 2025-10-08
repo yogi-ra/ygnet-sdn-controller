@@ -1,5 +1,8 @@
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
@@ -20,7 +23,6 @@ def scheduled_task(trigger, **job_kwargs):
         scheduler.add_job(func, trigger, **job_kwargs)
         return func
     return decorator
-
 
 
 
@@ -46,9 +48,24 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins - adjust for production
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
+)
+
 # Include the API routers
 app.include_router(auth.router, prefix="/api")
 app.include_router(devices_router, prefix="/api")
+app.include_router(tasks.router, prefix="/api")
+
+
+@app.get("/")
+def read_root():
+    return {"message": "Welcome to the SDN Controller API", "docs": "/docs"}
 app.include_router(tasks.router, prefix="/api")
 
 
