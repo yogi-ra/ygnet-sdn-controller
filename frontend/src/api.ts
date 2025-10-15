@@ -71,7 +71,16 @@ export const fetchDevices = async (
   }
 
   const devices = await response.json();
-  const total = response.headers.get('X-Total-Count');
+  // Get the total count from the stats endpoint
+  const statsResponse = await fetch('/api/devices/stats', { headers });
+  if (!statsResponse.ok) {
+    if (statsResponse.status === 401) {
+      throw new UnauthorizedError("Unauthorized");
+    }
+    throw new Error(`Failed to fetch device stats: ${statsResponse.statusText}`);
+  }
+  const stats = await statsResponse.json();
+  const total = stats.total_devices;
   
   return {
     devices: Array.isArray(devices) ? devices : [],
