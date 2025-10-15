@@ -16,8 +16,6 @@ def create_admin_user():
         print(f"User '{username}' already exists.")
         return
 
-    
-
     # Create user schema
     user_create = schemas.UserCreate(
         username=username,

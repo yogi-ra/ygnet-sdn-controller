@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from passlib.context import CryptContext
+import bcrypt
 import jwt  # Using PyJWT
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
@@ -20,16 +20,18 @@ if settings.SECRET_KEY == "your_super_secret_key_change_me":
 key = base64.urlsafe_b64encode(digest.finalize())
 fernet = Fernet(key)
 
-# --- Password Hashing for Users ---
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    return bcrypt.checkpw(
+        bytes(plain_password, encoding="utf-8"),
+        bytes(hashed_password, encoding="utf-8")
+    )
 
 
 def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+    return bcrypt.hashpw(
+        bytes(password, encoding="utf-8"),
+        bcrypt.gensalt(),
+    ).decode()
 
 
 # --- Data Encryption for Device Credentials ---
