@@ -5,6 +5,15 @@ from typing import List, Dict, Any
 class CiscoIosSystem(BaseSystem):
     """Cisco IOS implementation of system features."""
 
+    def get_running_config(self) -> List[Dict[str, Any]]:
+        try:
+            command = "show runn"
+            raw_output = self.device_handler.send_command(command)
+            return raw_output
+        except Exception as e:
+            self.device_handler.logger.error(f"Error getting version info: {e}")
+            return []
+
     def get_version_info(self) -> List[Dict[str, Any]]:
         try:
             command = "show version"

@@ -2,6 +2,7 @@ import { Container, Navbar, Nav, Button } from 'react-bootstrap';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
+import BackupPage from './pages/BackupPage';
 import DeviceListPage from './pages/DeviceListPage';
 import AddDevicePage from './pages/AddDevicePage';
 import DeviceDetailPage from './pages/DeviceDetailPage';
@@ -35,6 +36,7 @@ const MainLayout = () => {
             <Nav className="me-auto">
               <Nav.Link href="/dashboard">Dashboard</Nav.Link>
               <Nav.Link href="/devices">Devices</Nav.Link>
+              <Nav.Link href="/backup">Backup</Nav.Link>
             </Nav>
             <Nav>
               {token ? (
@@ -50,6 +52,14 @@ const MainLayout = () => {
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route
+            path="/backup"
+            element={
+              <ProtectedRoute>
+                <BackupPage />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/dashboard"
             element={

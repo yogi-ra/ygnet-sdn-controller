@@ -6,6 +6,7 @@ from .device_vlans import router as device_vlans_router
 from .device_system import router as device_system_router
 from .device_interfaces import router as device_interfaces_router
 from .device_discovery import router as device_discovery_router
+from .device_backup import router as device_backup_router
 
 # Create the main devices router
 router = APIRouter(prefix="/devices", tags=["Devices"])
@@ -19,3 +20,4 @@ router.include_router(device_vlans_router)
 router.include_router(device_system_router)
 router.include_router(device_interfaces_router)
 router.include_router(device_discovery_router)
+router.include_router(device_backup_router)

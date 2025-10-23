@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     NETMIKO_TIMEOUT: int = int(os.getenv("NETMIKO_TIMEOUT", 60))
     NETMIKO_READ_TIMEOUT: int = int(os.getenv("NETMIKO_READ_TIMEOUT", 60))
     MAX_WORKER_THREADS: int = int(os.getenv("MAX_WORKER_THREADS", 10)) # Added this line
+    FTP_HOST: str = os.getenv("FTP_HOST", "localhost")
+    FTP_USERNAME: str = os.getenv("FTP_USERNAME", "")
+    FTP_PASSWORD: str = os.getenv("FTP_PASSWORD", "")
+    FTP_PORT: int = int(os.getenv("FTP_PORT", 21))
+    FTP_DEST_DIR: str = os.getenv("FTP_DEST_DIR", "NETWORK_BACKUP")
     CELERY_BROKER_URL: str = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
     CELERY_RESULT_BACKEND: str = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
 

@@ -124,3 +124,24 @@ export const checkDevicesReachability = async (token: string | null): Promise<{ 
 
   return response.json();
 };
+
+export const backupDevices = async (
+  deviceIds: number[],
+  token: string | null
+): Promise<{ message: string; results: Array<{ device?: string; status: string; message?: string }> }> => {
+  const headers = getAuthHeaders(token);
+  const response = await fetch('/api/devices/backup', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(deviceIds),
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new UnauthorizedError("Unauthorized");
+    }
+    throw new Error(`Failed to backup devices: ${response.statusText}`);
+  }
+
+  return response.json();
+};
