@@ -128,7 +128,7 @@ export const checkDevicesReachability = async (token: string | null): Promise<{ 
 export const backupDevices = async (
   deviceIds: number[],
   token: string | null
-): Promise<{ message: string; results: Array<{ device?: string; status: string; message?: string }> }> => {
+): Promise<{ task_id: string }> => {
   const headers = getAuthHeaders(token);
   const response = await fetch('/api/devices/backup', {
     method: 'POST',

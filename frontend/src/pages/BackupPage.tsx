@@ -2,15 +2,34 @@ import { Container, Card, Row, Col, Form, Button, Alert } from 'react-bootstrap'
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { useTaskPolling } from '../hooks/useTaskPolling';
 import { fetchDevices, backupDevices, type Device } from '../api';
 
 const BackupPage = () => {
   const { token } = useAuth();
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedDevices, setSelectedDevices] = useState<number[]>([]);
+  const [backupTaskId, setBackupTaskId] = useState<string | null>(null);
   const [backupResult, setBackupResult] = useState<{ message: string; results: Array<{ device?: string; status: string; message?: string }> } | null>(null);
   const [isBackupRunning, setIsBackupRunning] = useState(false);
   const navigate = useNavigate();
+  
+  const { taskStatus, loading: taskLoading, error: taskError } = useTaskPolling(backupTaskId, {
+    onSuccess: (result) => {
+      setBackupResult(result);
+      setIsBackupRunning(false);
+    },
+    onError: (error) => {
+      setBackupResult({
+        message: 'Backup failed',
+        results: selectedDevices.map(id => ({
+          status: 'error',
+          message: error
+        }))
+      });
+      setIsBackupRunning(false);
+    }
+  });
 
   useEffect(() => {
     const loadDevices = async () => {
@@ -42,21 +61,21 @@ const BackupPage = () => {
     
     setIsBackupRunning(true);
     setBackupResult(null);
+    setBackupTaskId(null);
     
     try {
       const result = await backupDevices(selectedDevices, token);
-      setBackupResult(result);
-      console.log('Backup result:', result);
+      setBackupTaskId(result.task_id);
+      console.log('Backup task started with ID:', result.task_id);
     } catch (error) {
-      console.error('Failed to backup devices:', error);
+      console.error('Failed to start backup task:', error);
       setBackupResult({
-        message: 'Backup failed',
+        message: 'Failed to start backup task',
         results: selectedDevices.map(id => ({
           status: 'error',
-          message: 'Failed to backup device'
+          message: error instanceof Error ? error.message : 'Unknown error'
         }))
       });
-    } finally {
       setIsBackupRunning(false);
     }
   };
@@ -111,10 +130,21 @@ const BackupPage = () => {
                 </Button>
               </div>
               
-              {backupResult && (
+              {(backupResult || taskStatus) && (
                 <div className="mt-4">
-                  <Alert variant={backupResult.results.some(r => r.status === 'failed' || r.status === 'error') ? 'danger' : 'success'}>
-                    <strong>Backup Result:</strong> {backupResult.message}
+                  <Alert variant={
+                    taskStatus?.status === 'FAILURE' || 
+                    (backupResult && backupResult.results.some(r => r.status === 'failed' || r.status === 'error')) ? 
+                    'danger' : 
+                    (taskStatus?.status === 'SUCCESS' || taskStatus?.status === 'PENDING' || taskStatus?.status === 'PROCESSING') ? 
+                    'info' : 
+                    'success'
+                  }>
+                    <strong>Backup Status:</strong> {
+                      taskStatus ? 
+                        taskStatus.status : 
+                        backupResult?.message
+                    }
                   </Alert>
                   <div className="console-log" style={{ 
                     backgroundColor: '#f8f9fa', 
@@ -125,7 +155,12 @@ const BackupPage = () => {
                     fontFamily: 'monospace',
                     fontSize: '12px'
                   }}>
-                    {backupResult.results.map((result, index) => (
+                    {taskStatus && taskStatus.status !== 'SUCCESS' && (
+                      <div style={{ color: 'blue', marginBottom: '5px' }}>
+                        Task {taskStatus.task_id} is {taskStatus.status.toLowerCase()}
+                      </div>
+                    )}
+                    {backupResult && backupResult.results.map((result, index) => (
                       <div key={index} style={{ 
                         color: result.status === 'success' ? 'green' : 'red',
                         marginBottom: '5px'
