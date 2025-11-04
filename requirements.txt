@@ -14,3 +14,4 @@ ttp==0.9.5
 APScheduler==3.11.0
 pydantic-settings==2.11.0
 celery==5.5.3
+websockets==15.0.1

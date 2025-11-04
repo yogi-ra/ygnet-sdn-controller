@@ -1,15 +1,13 @@
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
-
 from .database import engine, Base
 from .api.routers import auth, tasks
 from .api.routers.devices import router as devices_router
-from .tasks import update_device_reachability_status # Import new task
+from .api.routers.ssh import router as ssh_router
+from .tasks import update_device_reachability_status
 
 # Create all database tables
 Base.metadata.create_all(bind=engine)
@@ -22,9 +20,8 @@ def scheduled_task(trigger, **job_kwargs):
     def decorator(func):
         scheduler.add_job(func, trigger, **job_kwargs)
         return func
+
     return decorator
-
-
 
 
 @scheduled_task(IntervalTrigger(seconds=5), coalesce=True, max_instances=1)
@@ -61,12 +58,7 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api")
 app.include_router(devices_router, prefix="/api")
 app.include_router(tasks.router, prefix="/api")
-
-
-@app.get("/")
-def read_root():
-    return {"message": "Welcome to the SDN Controller API", "docs": "/docs"}
-app.include_router(tasks.router, prefix="/api")
+app.include_router(ssh_router, prefix="/api")
 
 
 @app.get("/")
