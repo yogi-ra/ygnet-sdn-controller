@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { Rnd } from "react-rnd";
 import "@xterm/xterm/css/xterm.css";
 import toast from "react-hot-toast";
@@ -245,7 +246,9 @@ const SshTerminal: React.FC<{
     connection;
 
   useEffect(() => {
-    if (!connected || !termDiv.current) return;
+    if (!connected) return;
+    const ws = new WebSocket("ws://localhost:8000/api/ws/ssh");
+    ws.binaryType = "arraybuffer";
 
     const term = new Terminal({
       cursorBlink: true,
@@ -254,19 +257,15 @@ const SshTerminal: React.FC<{
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
-    term.open(termDiv.current);
+    term.open(termDiv.current!);
     fit.fit();
     term.focus();
+
     termRef.current = term;
     fitRef.current = fit;
-
-    const ws = new WebSocket("ws://localhost:8000/api/ws/ssh");
     wsRef.current = ws;
 
-    const cleanup = () => {
-      ws.close();
-      term.dispose();
-    };
+    const decoder = new TextDecoder("utf-8", { fatal: false });
 
     ws.onopen = () => {
       ws.send(
@@ -278,64 +277,44 @@ const SshTerminal: React.FC<{
     };
 
     ws.onmessage = (evt) => {
-      try {
-        const msg = JSON.parse(evt.data);
-        if (msg.type === "connected") {
-          term.write("\r\n✅ Connected!\r\n");
-        } else if (msg.type === "error") {
-          const errMsg = `❌ Connection failed: ${msg.data}\r\n`;
-          term.write(`\r\n${errMsg}`);
-          toast.error(msg.data);
-          setTimeout(() => {
-            cleanup();
-            onUpdate(id, {
-              connected: false,
-              connecting: false,
-              error: msg.data,
-            });
-          }, 1500);
+      if (typeof evt.data === "string") {
+        try {
+          const msg = JSON.parse(evt.data);
+          if (msg.type === "connected") {
+            term.write("\r\n✅ Connected!\r\n");
+          } else if (msg.type === "error") {
+            const errMsg = `\r\n❌ Connection failed: ${msg.data}\r\n`;
+            term.write(errMsg);
+            toast.error(msg.data);
+            setTimeout(() => {
+              onUpdate(id, {
+                connected: false,
+                connecting: false,
+                error: msg.data,
+              });
+            }, 1500);
+          }
+        } catch {
+          term.write(evt.data);
         }
-      } catch {
-        term.write(evt.data);
+      } else if (evt.data instanceof ArrayBuffer) {
+        // ✅ Proper UTF-8 streaming decode
+        const text = decoder.decode(evt.data, { stream: true });
+        term.write(text);
       }
     };
 
     term.onData((data) => {
-      if (ws.readyState === WebSocket.OPEN) {
+      if (ws.readyState === WebSocket.OPEN)
         ws.send(JSON.stringify({ type: "data", data }));
-      }
     });
-
-    ws.onerror = () => {
-      toast.error("WebSocket connection error");
-      term.write("\r\n❌ WebSocket error\r\n");
-      setTimeout(() => {
-        cleanup();
-        onUpdate(id, {
-          connected: false,
-          connecting: false,
-          error: "WebSocket connection error",
-        });
-      }, 1500);
-    };
-
-    ws.onclose = () => {
-      term.write("\r\n❌ Disconnected\r\n");
-      setTimeout(() => {
-        cleanup();
-        onUpdate(id, {
-          connected: false,
-          connecting: false,
-          error: "Disconnected unexpectedly",
-        });
-      }, 1500);
-    };
 
     const resizeHandler = () => fit.fit();
     window.addEventListener("resize", resizeHandler);
     return () => {
       window.removeEventListener("resize", resizeHandler);
-      cleanup();
+      ws.close();
+      term.dispose();
     };
   }, [connected]);
 

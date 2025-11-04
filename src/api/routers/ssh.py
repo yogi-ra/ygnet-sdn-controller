@@ -45,9 +45,7 @@ class SSH:
                     data = self.channel.recv(4096)
                     if not data:
                         break
-                    await self.websocket.send_text(
-                        data.decode("utf-8", errors="ignore")
-                    )
+                    await self.websocket.send_bytes(data)
 
                 # Check if channel is still open
                 if self.channel.closed:
@@ -106,8 +104,9 @@ async def websocket_endpoint(websocket: WebSocket):
                 details = message["data"]
                 try:
                     print(
-                        f"Attempting SSH connection to {
-                            details['username']}@{details['host']}:{details['port']}"
+                        f"Attempting SSH connection to {details['username']}@{
+                            details['host']
+                        }:{details['port']}"
                     )
 
                     ssh_connection = SSH(
