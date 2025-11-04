@@ -52,7 +52,7 @@ const MainLayout = () => {
           </Navbar.Collapse>
         </Container>
       </Navbar>
-      <Container fluid className="p-3">
+      <Container fluid className="p-0">
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/login" element={<LoginPage />} />
@@ -132,4 +132,3 @@ function App() {
 }
 
 export default App;
-

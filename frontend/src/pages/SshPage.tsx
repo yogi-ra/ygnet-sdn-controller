@@ -1,252 +1,499 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import { Rnd } from "react-rnd";
 import "@xterm/xterm/css/xterm.css";
+import toast from "react-hot-toast";
+
+interface Connection {
+  id: string;
+  host: string;
+  port: number;
+  username: string;
+  password: string;
+  connected: boolean;
+  connecting: boolean;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  zIndex: number;
+  minimized: boolean;
+  maximized: boolean;
+  prevState?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  error?: string;
+}
 
 const SshPage: React.FC = () => {
-  const terminalRef = useRef<HTMLDivElement>(null);
-  const termRef = useRef<Terminal | null>(null);
-  const socketRef = useRef<WebSocket | null>(null);
-  const [connected, setConnected] = useState(false);
-  const [connecting, setConnecting] = useState(false);
-  const [host, setHost] = useState("");
-  const [port, setPort] = useState(22);
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+  const [connections, setConnections] = useState<Connection[]>([]);
+  const [zTop, setZTop] = useState(1);
+  const [navOffset, setNavOffset] = useState(0);
+  const workspaceRef = useRef<HTMLDivElement>(null);
 
+  // Measure navbar height
   useEffect(() => {
-    if (connected && terminalRef.current) {
-      const term = new Terminal({
-        cursorBlink: true,
-        fontSize: 14,
-        fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-        theme: {
-          background: "#1e1e1e",
-          foreground: "#d4d4d4",
-        },
-      });
-      const fitAddon = new FitAddon();
-      term.loadAddon(fitAddon);
-      term.open(terminalRef.current);
-      fitAddon.fit();
-      termRef.current = term;
+    const calcNavHeight = () => {
+      const nav = document.querySelector(".navbar");
+      const navHeight = nav ? nav.getBoundingClientRect().height : 0;
+      setNavOffset(navHeight);
+    };
+    calcNavHeight();
+    window.addEventListener("resize", calcNavHeight);
+    return () => window.removeEventListener("resize", calcNavHeight);
+  }, []);
 
-      // Create WebSocket connection
-      const socket = new WebSocket("ws://localhost:8000/api/ws/ssh");
-      socketRef.current = socket;
+  // Disable parent scroll
+  useEffect(() => {
+    const parent = document.querySelector(".container-fluid");
+    if (parent) parent.style.overflow = "hidden";
+    return () => {
+      if (parent) parent.style.overflow = "";
+    };
+  }, []);
 
-      socket.onopen = () => {
-        console.log("WebSocket connected");
-        socket.send(
-          JSON.stringify({
-            type: "connect",
-            data: { host, port, username, password },
-          }),
-        );
-      };
-
-      socket.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data);
-          if (message.type === "error") {
-            console.error("SSH Error:", message.data);
-            alert(`Error: ${message.data}`);
-            setConnected(false);
-            setConnecting(false);
-          } else if (message.type === "connected") {
-            console.log("SSH connected successfully");
-            setConnecting(false);
-          }
-        } catch (e) {
-          // Raw terminal data (not JSON)
-          term.write(event.data);
-        }
-      };
-
-      socket.onerror = (error) => {
-        console.error("WebSocket error:", error);
-        alert("WebSocket connection error");
-        setConnected(false);
-        setConnecting(false);
-      };
-
-      socket.onclose = () => {
-        console.log("WebSocket closed");
-        setConnected(false);
-        setConnecting(false);
-      };
-
-      // Handle terminal input
-      term.onData((data) => {
-        if (socket.readyState === WebSocket.OPEN) {
-          socket.send(JSON.stringify({ type: "data", data }));
-        }
-      });
-
-      // Handle window resize
-      const handleResize = () => {
-        fitAddon.fit();
-      };
-      window.addEventListener("resize", handleResize);
-
-      return () => {
-        window.removeEventListener("resize", handleResize);
-        if (socket.readyState === WebSocket.OPEN) {
-          socket.close();
-        }
-        term.dispose();
-      };
-    }
-  }, [connected, host, port, username, password]);
-
-  const handleConnect = () => {
-    if (host && port && username && password) {
-      setConnecting(true);
-      setConnected(true);
-    } else {
-      alert("Please fill in all connection details");
-    }
-  };
-
-  const handleDisconnect = () => {
-    if (socketRef.current) {
-      socketRef.current.close();
-    }
-    setConnected(false);
-    setConnecting(false);
-  };
-
-  if (!connected) {
-    return (
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          height: "100vh",
-          backgroundColor: "#1e1e1e",
-          color: "#d4d4d4",
-        }}
-      >
-        <div
-          style={{
-            backgroundColor: "#2d2d2d",
-            padding: "30px",
-            borderRadius: "8px",
-            boxShadow: "0 4px 6px rgba(0, 0, 0, 0.3)",
-            width: "400px",
-          }}
-        >
-          <h1 style={{ marginBottom: "20px", textAlign: "center" }}>
-            SSH Connection
-          </h1>
-          <div
-            style={{ display: "flex", flexDirection: "column", gap: "15px" }}
-          >
-            <input
-              type="text"
-              placeholder="Host (e.g., 192.168.1.1)"
-              value={host}
-              onChange={(e) => setHost(e.target.value)}
-              style={inputStyle}
-            />
-            <input
-              type="number"
-              placeholder="Port (default: 22)"
-              value={port}
-              onChange={(e) => setPort(parseInt(e.target.value, 10) || 22)}
-              style={inputStyle}
-            />
-            <input
-              type="text"
-              placeholder="Username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              style={inputStyle}
-            />
-            <input
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              onKeyPress={(e) => e.key === "Enter" && handleConnect()}
-              style={inputStyle}
-            />
-            <button
-              onClick={handleConnect}
-              disabled={connecting}
-              style={{
-                ...buttonStyle,
-                opacity: connecting ? 0.6 : 1,
-                cursor: connecting ? "not-allowed" : "pointer",
-              }}
-            >
-              {connecting ? "Connecting..." : "Connect"}
-            </button>
-          </div>
-        </div>
-      </div>
+  const bringToFront = (id: string) => {
+    const newZ = zTop + 1;
+    setZTop(newZ);
+    setConnections((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, zIndex: newZ } : c)),
     );
-  }
+  };
+
+  const addConnection = () => {
+    const id = crypto.randomUUID();
+    setConnections((prev) => [
+      ...prev,
+      {
+        id,
+        host: "",
+        port: 22,
+        username: "",
+        password: "",
+        connected: false,
+        connecting: false,
+        x: 120 + prev.length * 30,
+        y: 100 + prev.length * 30,
+        width: 800,
+        height: 500,
+        zIndex: zTop + 1,
+        minimized: false,
+        maximized: false,
+      },
+    ]);
+    setZTop((z) => z + 1);
+  };
+
+  const updateConnection = (id: string, updates: Partial<Connection>) =>
+    setConnections((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, ...updates } : c)),
+    );
+
+  const removeConnection = (id: string) => {
+    setConnections((prev) => prev.filter((c) => c.id !== id));
+  };
+
+  const toggleMaximize = (conn: Connection) => {
+    if (!workspaceRef.current) return;
+    if (!conn.maximized) {
+      updateConnection(conn.id, {
+        maximized: true,
+        prevState: {
+          x: conn.x,
+          y: conn.y,
+          width: conn.width,
+          height: conn.height,
+        },
+        x: 0,
+        y: 0,
+        width: workspaceRef.current.clientWidth,
+        height: workspaceRef.current.clientHeight - 50,
+      });
+    } else {
+      updateConnection(conn.id, {
+        maximized: false,
+        ...conn.prevState,
+      });
+    }
+  };
 
   return (
     <div
+      ref={workspaceRef}
       style={{
-        height: "100vh",
-        width: "100vw",
+        position: "relative",
+        top: 0,
+        height: `calc(100vh - ${navOffset}px)`,
+        width: "100%",
+        overflow: "hidden",
+        background: "#0f1216",
         display: "flex",
         flexDirection: "column",
       }}
     >
-      <div
-        style={{
-          backgroundColor: "#2d2d2d",
-          padding: "10px 20px",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          borderBottom: "1px solid #444",
-        }}
-      >
-        <span style={{ color: "#d4d4d4" }}>
-          Connected to {username}@{host}:{port}
-        </span>
-        <button
-          onClick={handleDisconnect}
-          style={{
-            ...buttonStyle,
-            backgroundColor: "#d32f2f",
-            padding: "5px 15px",
-          }}
-        >
-          Disconnect
+      {/* Toolbar */}
+      <div style={toolbar}>
+        <span style={{ fontWeight: 600, color: "#eee" }}>Web SSH</span>
+        <button style={btnPrimary} onClick={addConnection}>
+          + New Connection
         </button>
       </div>
-      <div ref={terminalRef} style={{ flex: 1, padding: "10px" }} />
+
+      {/* Workspace */}
+      <div style={{ flex: 1, position: "relative" }}>
+        {connections.map((conn) => (
+          <Rnd
+            key={conn.id}
+            size={{ width: conn.width, height: conn.height }}
+            position={{ x: conn.x, y: conn.y }}
+            bounds="parent"
+            style={{
+              zIndex: conn.zIndex,
+              background: "#16181b",
+              borderRadius: 10,
+              border: "1px solid rgba(255,255,255,0.08)",
+              boxShadow: "0 10px 30px rgba(0,0,0,0.5)",
+              overflow: "hidden",
+              display: conn.minimized ? "none" : "flex", // hide instead of unmounting
+              flexDirection: "column",
+            }}
+            disableDragging={conn.maximized}
+            enableResizing={!conn.maximized}
+            onDragStart={() => bringToFront(conn.id)}
+            onResizeStart={() => bringToFront(conn.id)}
+            onDragStop={(_, d) => updateConnection(conn.id, { x: d.x, y: d.y })}
+            onResizeStop={(_, __, ref, ___, pos) =>
+              updateConnection(conn.id, {
+                width: parseFloat(ref.style.width),
+                height: parseFloat(ref.style.height),
+                ...pos,
+              })
+            }
+          >
+            {/* Header */}
+            <div style={winHeader}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={dot("#ff5f56")}></span>
+                <span style={dot("#ffbd2e")}></span>
+                <span style={dot("#27c93f")}></span>
+                <span style={{ marginLeft: 8, color: "#eaeaea" }}>
+                  {conn.username && conn.host
+                    ? `${conn.username}@${conn.host}`
+                    : "SSH Session"}
+                </span>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  style={iconBtn}
+                  onClick={() => updateConnection(conn.id, { minimized: true })}
+                >
+                  ▂
+                </button>
+                <button style={iconBtn} onClick={() => toggleMaximize(conn)}>
+                  {conn.maximized ? "🗗" : "🗖"}
+                </button>
+                <button
+                  style={{ ...iconBtn, color: "#ff5555" }}
+                  onClick={() => removeConnection(conn.id)}
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {/* Terminal / Auth */}
+            <div style={{ flex: 1 }}>
+              <SshTerminal connection={conn} onUpdate={updateConnection} />
+            </div>
+          </Rnd>
+        ))}
+      </div>
+
+      {/* Taskbar */}
+      <div style={taskbar}>
+        {connections
+          .filter((c) => c.minimized)
+          .map((c) => (
+            <div
+              key={c.id}
+              style={taskbarItem}
+              onClick={() => updateConnection(c.id, { minimized: false })}
+            >
+              {c.username && c.host ? `${c.username}@${c.host}` : "SSH"}
+            </div>
+          ))}
+      </div>
     </div>
   );
 };
 
-const inputStyle: React.CSSProperties = {
-  padding: "12px",
-  fontSize: "14px",
-  backgroundColor: "#1e1e1e",
-  color: "#d4d4d4",
-  border: "1px solid #444",
-  borderRadius: "4px",
-  outline: "none",
+/* ---------------- Terminal Component ---------------- */
+const SshTerminal: React.FC<{
+  connection: Connection;
+  onUpdate: (id: string, updates: Partial<Connection>) => void;
+}> = ({ connection, onUpdate }) => {
+  const termDiv = useRef<HTMLDivElement>(null);
+  const termRef = useRef<Terminal>();
+  const fitRef = useRef<FitAddon>();
+  const wsRef = useRef<WebSocket>();
+
+  const { id, connected, connecting, host, port, username, password } =
+    connection;
+
+  useEffect(() => {
+    if (!connected || !termDiv.current) return;
+
+    const term = new Terminal({
+      cursorBlink: true,
+      fontSize: 13,
+      theme: { background: "#0f1113", foreground: "#d6dee7" },
+    });
+    const fit = new FitAddon();
+    term.loadAddon(fit);
+    term.open(termDiv.current);
+    fit.fit();
+    term.focus();
+    termRef.current = term;
+    fitRef.current = fit;
+
+    const ws = new WebSocket("ws://localhost:8000/api/ws/ssh");
+    wsRef.current = ws;
+
+    const cleanup = () => {
+      ws.close();
+      term.dispose();
+    };
+
+    ws.onopen = () => {
+      ws.send(
+        JSON.stringify({
+          type: "connect",
+          data: { host, port, username, password },
+        }),
+      );
+    };
+
+    ws.onmessage = (evt) => {
+      try {
+        const msg = JSON.parse(evt.data);
+        if (msg.type === "connected") {
+          term.write("\r\n✅ Connected!\r\n");
+        } else if (msg.type === "error") {
+          const errMsg = `❌ Connection failed: ${msg.data}\r\n`;
+          term.write(`\r\n${errMsg}`);
+          toast.error(msg.data);
+          setTimeout(() => {
+            cleanup();
+            onUpdate(id, {
+              connected: false,
+              connecting: false,
+              error: msg.data,
+            });
+          }, 1500);
+        }
+      } catch {
+        term.write(evt.data);
+      }
+    };
+
+    term.onData((data) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "data", data }));
+      }
+    });
+
+    ws.onerror = () => {
+      toast.error("WebSocket connection error");
+      term.write("\r\n❌ WebSocket error\r\n");
+      setTimeout(() => {
+        cleanup();
+        onUpdate(id, {
+          connected: false,
+          connecting: false,
+          error: "WebSocket connection error",
+        });
+      }, 1500);
+    };
+
+    ws.onclose = () => {
+      term.write("\r\n❌ Disconnected\r\n");
+      setTimeout(() => {
+        cleanup();
+        onUpdate(id, {
+          connected: false,
+          connecting: false,
+          error: "Disconnected unexpectedly",
+        });
+      }, 1500);
+    };
+
+    const resizeHandler = () => fit.fit();
+    window.addEventListener("resize", resizeHandler);
+    return () => {
+      window.removeEventListener("resize", resizeHandler);
+      cleanup();
+    };
+  }, [connected]);
+
+  // Auto-fit when unminimized
+  useEffect(() => {
+    if (!connection.minimized && fitRef.current) {
+      setTimeout(() => fitRef.current?.fit(), 50);
+    }
+  }, [connection.minimized]);
+
+  // Resize fit
+  useEffect(() => {
+    fitRef.current?.fit();
+  }, [connection.width, connection.height]);
+
+  if (!connected) {
+    return (
+      <div style={form}>
+        {connection.error && <div style={errorBox}>{connection.error}</div>}
+        <input
+          placeholder="Host"
+          value={host}
+          onChange={(e) =>
+            onUpdate(id, { host: e.target.value, error: undefined })
+          }
+          style={input}
+        />
+        <input
+          placeholder="Port"
+          type="number"
+          value={port}
+          onChange={(e) =>
+            onUpdate(id, { port: Number(e.target.value), error: undefined })
+          }
+          style={input}
+        />
+        <input
+          placeholder="Username"
+          value={username}
+          onChange={(e) =>
+            onUpdate(id, { username: e.target.value, error: undefined })
+          }
+          style={input}
+        />
+        <input
+          placeholder="Password"
+          type="password"
+          value={password}
+          onChange={(e) =>
+            onUpdate(id, { password: e.target.value, error: undefined })
+          }
+          style={input}
+        />
+        <button
+          style={btnPrimary}
+          disabled={connecting}
+          onClick={() => {
+            if (host && username && password)
+              onUpdate(id, {
+                connecting: true,
+                connected: true,
+                error: undefined,
+              });
+            else toast.error("Please fill all fields");
+          }}
+        >
+          {connecting ? "Connecting..." : "Connect"}
+        </button>
+      </div>
+    );
+  }
+
+  return <div ref={termDiv} style={{ width: "100%", height: "100%" }} />;
 };
 
-const buttonStyle: React.CSSProperties = {
-  padding: "12px",
-  fontSize: "14px",
-  backgroundColor: "#007acc",
-  color: "white",
+/* ---------------- Styles ---------------- */
+const toolbar: React.CSSProperties = {
+  height: 48,
+  padding: "8px 14px",
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  borderBottom: "1px solid rgba(255,255,255,0.05)",
+};
+const btnPrimary: React.CSSProperties = {
+  background: "#0078d4",
+  color: "#fff",
   border: "none",
-  borderRadius: "4px",
+  padding: "6px 12px",
+  borderRadius: 6,
   cursor: "pointer",
-  fontWeight: "bold",
+  fontWeight: 600,
+};
+const winHeader: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  padding: "8px 12px",
+  background: "#1c1e22",
+  borderBottom: "1px solid rgba(255,255,255,0.05)",
+};
+const dot = (color: string) => ({
+  width: 10,
+  height: 10,
+  borderRadius: "50%",
+  background: color,
+});
+const iconBtn: React.CSSProperties = {
+  background: "transparent",
+  border: "none",
+  color: "#ccc",
+  cursor: "pointer",
+  fontSize: 14,
+};
+const taskbar: React.CSSProperties = {
+  height: 50,
+  background: "#121416",
+  display: "flex",
+  alignItems: "center",
+  padding: "0 10px",
+  gap: 10,
+  borderTop: "1px solid rgba(255,255,255,0.05)",
+};
+const taskbarItem: React.CSSProperties = {
+  background: "#1a1d21",
+  color: "#eee",
+  padding: "6px 12px",
+  borderRadius: 6,
+  cursor: "pointer",
+  fontSize: 13,
+};
+const form: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  justifyContent: "center",
+  alignItems: "center",
+  height: "100%",
+  gap: 8,
+  background: "#0f1216",
+};
+const input: React.CSSProperties = {
+  width: "80%",
+  padding: "8px 10px",
+  borderRadius: 4,
+  border: "1px solid rgba(255,255,255,0.05)",
+  background: "#1c1e22",
+  color: "#fff",
+};
+const errorBox: React.CSSProperties = {
+  color: "#ff5555",
+  background: "rgba(255,85,85,0.15)",
+  padding: "8px 12px",
+  borderRadius: 4,
+  marginBottom: 10,
+  width: "80%",
+  textAlign: "center",
+  fontSize: 13,
+  fontWeight: 500,
 };
 
 export default SshPage;
