@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
-import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { Rnd } from "react-rnd";
 import "@xterm/xterm/css/xterm.css";
 import toast from "react-hot-toast";
