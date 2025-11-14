@@ -23,6 +23,11 @@ class DeviceBase(BaseModel):
 
 
 class DeviceCreate(DeviceBase):
+    name: str
+    ip_address: str
+    port: Optional[int] = 22
+    device_type: str
+    username: str
     password: str
     secret: Optional[str] = None
 
