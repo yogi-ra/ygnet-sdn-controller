@@ -24,17 +24,17 @@ def get_interfaces_brief(
 
 
 @router.get(
-    "/{device_id}/interfaces/status", 
+    "/{device_id}/interfaces/status",
     status_code=status.HTTP_202_ACCEPTED, 
     dependencies=[Depends(require_read_privileges)]
 )
 def get_interfaces_status(
-    request: Request, device_id: int, db: Session = Depends(get_db)
+    request: Request, device_id: int, interface: str = None, db: Session = Depends(get_db)
 ):
     """
     Get detailed interface status information.
     """
-    task = execute_netmiko_command_task.delay(device_id, "interfaces.get_interfaces_status")
+    task = execute_netmiko_command_task.delay(device_id, "interfaces.get_interfaces_status", interface)
     return {"task_id": task.id}
 
 @router.get(

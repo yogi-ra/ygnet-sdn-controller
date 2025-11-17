@@ -46,9 +46,11 @@ class CiscoIosInterfaces(BaseInterfaces):
             self.device_handler.logger.error(f"Error getting interface config for {interface_name}: {e}")
             return ""
 
-    def get_interfaces_status(self) -> List[Dict[str, Any]]:
+    def get_interfaces_status(self, interface: str = None) -> List[Dict[str, Any]]:
         try:
             command = "show interfaces status"
+            if interface:
+                command = f"show interface {interface} status"
             raw_output = self.device_handler.send_command(command)
             return self.device_handler.parse_cli_output(command, raw_output)
         except Exception as e:
