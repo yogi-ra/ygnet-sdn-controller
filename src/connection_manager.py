@@ -5,6 +5,7 @@ import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor, Future
 from collections import defaultdict
+from contextlib import closing
 from netmiko import ConnectHandler, NetmikoTimeoutException, NetmikoAuthenticationException
 from src.config import settings
 from src.device_info import DeviceConnectionInfo
@@ -13,7 +14,6 @@ from src.database import SessionLocal
 from src.crud import crud
 from src.schemas import DeviceUpdate
 
-# Mapping from our internal device types to Netmiko device types
 NETMIKO_DEVICE_TYPE_MAP = {
     "cisco_ios_router": "cisco_ios",
     "cisco_ios_switch": "cisco_ios",
@@ -30,27 +30,22 @@ class ConnectionManager:
             with cls._lock:
                 if cls._instance is None:
                     cls._instance = super(ConnectionManager, cls).__new__(cls)
-                    # SIMPLIFIED: Only one connection per device
-                    cls._instance._connections = {}  # device_key -> connection object (SINGLE connection)
-                    cls._instance._connection_locks = {}  # device_key -> lock
-                    cls._instance._connection_conditions = {}  # device_key -> threading.Condition
+                    cls._instance._connection_pools = {}  # device_key -> list of connections
+                    cls._instance._connection_locks = {}  # device_key -> lock for pool access
+                    cls._instance._device_semaphores = {}  # device_key -> threading.Semaphore for max concurrent connections
                     cls._instance._request_queues = {}  # device_key -> queue.Queue for pending requests
-                    
-                    # NEW: Track if a device is currently processing
-                    cls._instance._device_busy = {}  # device_key -> bool
-                    cls._instance._queue_processing = {}  # device_key -> bool (track if queue is being processed)
-                    
-                    # NEW: Failed operations tracking for automatic retry
+                    cls._instance._pool_sizes = {}  # device_key -> max connections in pool
                     cls._instance._failed_operations = defaultdict(list)  # device_key -> list of (operation_func, future, retry_count)
                     cls._instance._max_operation_retries = 3
-                    
                     cls._instance._executor = ThreadPoolExecutor(max_workers=settings.MAX_WORKER_THREADS)
                     cls._instance._executor_shutdown = False
-                    
+
                     # Connection health tracking
                     cls._instance._connection_last_success = {}  # device_key -> timestamp
                     cls._instance._connection_failures = {}  # device_key -> failure_count
                     cls._instance._max_consecutive_failures = 2
+
+                    cls._instance._default_pool_size = 3  # Default max concurrent connections per device
         return cls._instance
 
     def _debug_log(self, message: str, device_key: str = ""):
@@ -62,19 +57,27 @@ class ConnectionManager:
             print(f"[{timestamp}] {message}")
 
     def _check_tcp_port_open(self, ip_address: str, port: int, timeout: float = 2.0) -> bool:
-        """Checks if a TCP port is open on a given IP address."""
+        """Checks if a TCP port is open on a given IP address using socket.create_connection for reliable timeout."""
+
         self._debug_log(f"Checking TCP port {port} on {ip_address}")
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(timeout)
+
         try:
-            sock.connect((ip_address, port))
-            self._debug_log(f"TCP port {port} on {ip_address} is OPEN")
-            return True
-        except (socket.timeout, ConnectionRefusedError, OSError) as e:
-            self._debug_log(f"TCP port {port} on {ip_address} is CLOSED: {e}")
+            # socket.create_connection is more reliable for timeouts than raw socket.connect
+            with closing(socket.create_connection((ip_address, port), timeout=timeout)) as sock:
+                self._debug_log(f"TCP port {port} on {ip_address} is OPEN")
+                return True
+        except socket.timeout:
+            self._debug_log(f"TCP port {port} on {ip_address} is CLOSED: connection timed out")
             return False
-        finally:
-            sock.close()
+        except ConnectionRefusedError:
+            self._debug_log(f"TCP port {port} on {ip_address} is CLOSED: connection refused")
+            return False
+        except OSError as e:
+            self._debug_log(f"TCP port {port} on {ip_address} is CLOSED: OS error - {e}")
+            return False
+        except Exception as e:
+            self._debug_log(f"TCP port {port} on {ip_address} is CLOSED: unexpected error - {e}")
+            return False
 
     def _validate_connection_responsive(self, connection, device_info: DeviceConnectionInfo) -> bool:
         """Improved validation that tests if connection is responsive."""
@@ -131,17 +134,46 @@ class ConnectionManager:
         return False
 
     def _cleanup_stale_connection(self, device_key: str):
-        """Clean up a stale connection completely."""
-        if device_key in self._connections and self._connections[device_key]:
-            connection = self._connections[device_key]
-            try:
-                if connection.is_alive():
-                    connection.disconnect()
-                self._debug_log("Cleaned up stale connection", device_key)
-            except Exception as e:
-                self._debug_log(f"Error during stale connection cleanup: {e}", device_key)
-            finally:
-                self._connections[device_key] = None
+        """Clean up stale connections in the pool."""
+        if device_key in self._connection_pools:
+            with self._connection_locks[device_key]:
+                pool = self._connection_pools[device_key]
+                for i, conn_info in enumerate(pool[:]):  # Use slice to avoid modification during iteration
+                    connection = conn_info['connection']
+                    try:
+                        if connection.is_alive():
+                            connection.disconnect()
+                        self._debug_log("Cleaned up stale connection", device_key)
+                    except Exception as e:
+                        self._debug_log(f"Error during stale connection cleanup: {e}", device_key)
+                    finally:
+                        # Remove from pool
+                        if i < len(pool):
+                            pool.pop(i)
+
+    def quick_check_reachability(self, device_info: DeviceConnectionInfo) -> bool:
+        """
+        Fast reachability check using only TCP port check without acquiring connection pool resources.
+        This is designed for the periodic reachability task that runs every 5 seconds.
+        """
+        try:
+            # Perform a simple TCP port check without acquiring locks or connections
+            is_reachable = self._check_tcp_port_open(device_info.ip_address, device_info.port, timeout=2.0)
+            device_key = device_info.get_key()
+
+            if is_reachable:
+                self._debug_log("TCP port is open", device_key)
+                self._mark_connection_success(device_key)  # Consider successful TCP as success for reachability
+            else:
+                self._debug_log("TCP port is closed", device_key)
+                self._mark_connection_failure(device_key)  # Mark as failure for reachability
+
+            return is_reachable
+        except Exception as e:
+            device_key = device_info.get_key()
+            self._debug_log(f"Error during quick reachability check: {e}", device_key)
+            self._mark_connection_failure(device_key)
+            return False
 
     def _is_netmiko_error_retryable(self, error: Exception) -> bool:
         """Check if a Netmiko error is retryable (pattern detection errors, timeouts, etc.)"""
@@ -172,436 +204,295 @@ class ConnectionManager:
         self._debug_log("Error is NOT retryable")
         return False
 
-    def _connect_device(self, device_info: DeviceConnectionInfo, netmiko_device_type: str):
-        """Establishes a Netmiko connection to the device - SERIALIZED per device."""
+    def _get_connection_from_pool(self, device_info: DeviceConnectionInfo, netmiko_device_type: str):
+        """Get an available connection from the pool, or create a new one if needed."""
         device_key = device_info.get_key()
-        self._debug_log("Starting connection process", device_key)
-        
-        # Initialize synchronization primitives for this device
+
+        # Initialize device-specific resources if not already done
         if device_key not in self._connection_locks:
-            self._connection_locks[device_key] = threading.Lock()
-        if device_key not in self._connection_conditions:
-            self._connection_conditions[device_key] = threading.Condition(self._connection_locks[device_key])
-        if device_key not in self._request_queues:
-            self._request_queues[device_key] = queue.Queue()
-        if device_key not in self._device_busy:
-            self._device_busy[device_key] = False
+            with self._lock:  # Use class lock to avoid race conditions during init
+                if device_key not in self._connection_locks:
+                    self._connection_locks[device_key] = threading.RLock()  # Reentrant lock
+                    self._connection_pools[device_key] = []
+                    # Set semaphore to control max concurrent connections per device
+                    pool_size = self._pool_sizes.get(device_key, self._default_pool_size)
+                    self._device_semaphores[device_key] = threading.Semaphore(pool_size)
+                    self._request_queues[device_key] = queue.Queue()
 
-        with self._connection_conditions[device_key]:
-            # Wait if device is currently busy
-            while self._device_busy[device_key]:
-                self._debug_log("Device is busy, waiting...", device_key)
-                self._connection_conditions[device_key].wait()
+        # Acquire a slot for the connection (blocking if too many concurrent connections)
+        if not self._device_semaphores[device_key].acquire(blocking=True, timeout=settings.NETMIKO_TIMEOUT):
+            raise DeviceUnreachableError(f"Unable to acquire connection slot for {device_key}")
 
-            # Mark device as busy
-            self._device_busy[device_key] = True
-            self._debug_log("Device marked as busy", device_key)
+        with self._connection_locks[device_key]:
+            # Look for an available connection in the pool
+            for i, connection_info in enumerate(self._connection_pools[device_key]):
+                connection = connection_info['connection']
+                if connection_info['available'] and connection.is_alive():
+                    if self._validate_connection_responsive(connection, device_info):
+                        # Mark this connection as unavailable
+                        connection_info['available'] = False
+                        self._debug_log("Reusing connection from pool", device_key)
+                        return connection, i  # Return the connection and its index in the pool
 
-            try:
-                # Check if we have an existing connection that might be reusable
-                if (device_key in self._connections and 
-                    self._connections[device_key] is not None and
-                    not self._should_drop_connection(device_key)):
-                    
-                    connection = self._connections[device_key]
-                    try:
-                        # Perform TCP port check first
-                        if not self._check_tcp_port_open(device_info.ip_address, device_info.port):
-                            self._debug_log("Device port is closed, removing connection", device_key)
-                            self._cleanup_stale_connection(device_key)
-                            self._update_device_reachability(device_info, False)
-                        else:
-                            # Test connection responsiveness
-                            if (connection.is_alive() and 
-                                self._validate_connection_responsive(connection, device_info)):
-                                self._debug_log("Reusing responsive connection", device_key)
-                                return connection
-                            else:
-                                self._debug_log("Unresponsive connection found, removing", device_key)
-                                self._cleanup_stale_connection(device_key)
-                    except Exception as e:
-                        self._debug_log(f"Error checking connection: {e}, removing", device_key)
-                        self._cleanup_stale_connection(device_key)
+            # No available connection found, create a new one
+            self._debug_log("Creating new connection", device_key)
+            connection = self._create_new_connection(device_info, netmiko_device_type)
 
-                # If no reusable connection, establish a new one
-                self._debug_log("Attempting fresh connection", device_key)
-                if not self._check_tcp_port_open(device_info.ip_address, device_info.port):
-                    self._update_device_reachability(device_info, False)
-                    raise DeviceUnreachableError(f"TCP connection to device {device_info.ip_address}:{device_info.port} failed.")
-                
-                netmiko_type = NETMIKO_DEVICE_TYPE_MAP.get(device_info.device_type, device_info.device_type)
-                self._debug_log(f"Creating Netmiko connection with type: {netmiko_type}", device_key)
-                
-                # Enhanced connection parameters for better stability
-                connection_params = {
-                    'device_type': netmiko_type,
-                    'host': device_info.ip_address,
-                    'username': device_info.username,
-                    'password': device_info.password,
-                    'secret': device_info.secret,
-                    'port': device_info.port,
-                    'timeout': settings.NETMIKO_TIMEOUT,
-                    'session_timeout': settings.NETMIKO_TIMEOUT + 10,
-                    'global_delay_factor': 2.0,  # Increased for stability
-                    'fast_cli': False,
-                }
-                
-                # Add optional parameters if they exist in settings
-                if hasattr(settings, 'NETMIKO_BANNER_TIMEOUT'):
-                    connection_params['banner_timeout'] = settings.NETMIKO_BANNER_TIMEOUT
-                if hasattr(settings, 'NETMIKO_SESSION_LOG'):
-                    connection_params['session_log'] = settings.NETMIKO_SESSION_LOG
-                
-                connection = ConnectHandler(**connection_params)
-                
-                if not self._validate_connection_responsive(connection, device_info):
-                    self._debug_log("New connection is unresponsive, dropping", device_key)
-                    connection.disconnect()
-                    raise DeviceUnreachableError(f"New connection to {device_info.ip_address} is unresponsive")
-                
-                # Store the single connection for this device
-                self._connections[device_key] = connection
-                self._mark_connection_success(device_key)
-                
-                is_reachable = self._update_device_reachability(device_info, True)
-                if not is_reachable:
-                    raise DeviceUnreachableError(f"Failed to update reachability for device {device_info.ip_address}")
-                
-                self._debug_log("Successfully connected", device_key)
-                
-                # NEW: Retry any failed operations when we establish a fresh connection
-                self._retry_failed_operations(device_key)
-                
-                return connection
-                
-            except (NetmikoTimeoutException, NetmikoAuthenticationException) as e:
-                self._debug_log(f"Connection failed: {e}", device_key)
-                self._update_device_reachability(device_info, False)
-                self._mark_connection_failure(device_key)
-                raise
-            except DeviceUnreachableError:
-                self._mark_connection_failure(device_key)
-                raise
-            except Exception as e:
-                self._debug_log(f"Unexpected error during connection: {e}", device_key)
-                self._debug_log(f"Full traceback: {traceback.format_exc()}", device_key)
-                self._update_device_reachability(device_info, False)
-                self._mark_connection_failure(device_key)
-                raise
+            # Add new connection to pool
+            connection_info = {
+                'connection': connection,
+                'available': False,
+                'last_used': time.time()
+            }
+            self._connection_pools[device_key].append(connection_info)
+
+            return connection, len(self._connection_pools[device_key]) - 1
+
+    def _return_connection_to_pool(self, device_info: DeviceConnectionInfo, connection_index: int):
+        """Return a connection to the pool after use."""
+        device_key = device_info.get_key()
+
+        if device_key in self._connection_locks:
+            with self._connection_locks[device_key]:
+                if (device_key in self._connection_pools and
+                    connection_index < len(self._connection_pools[device_key])):
+                    connection_info = self._connection_pools[device_key][connection_index]
+                    connection_info['available'] = True
+                    connection_info['last_used'] = time.time()
+
+        # Release the semaphore to allow new connections
+        if device_key in self._device_semaphores:
+            self._device_semaphores[device_key].release()
+
+    def _create_new_connection(self, device_info: DeviceConnectionInfo, netmiko_device_type: str):
+        """Creates a new Netmiko connection to the device."""
+        device_key = device_info.get_key()
+
+        # Check if the port is open first
+        if not self._check_tcp_port_open(device_info.ip_address, device_info.port):
+            self._update_device_reachability(device_info, False)
+            raise DeviceUnreachableError(f"TCP connection to device {device_info.ip_address}:{device_info.port} failed.")
+
+        netmiko_type = NETMIKO_DEVICE_TYPE_MAP.get(device_info.device_type, device_info.device_type)
+        self._debug_log(f"Creating Netmiko connection with type: {netmiko_type}", device_key)
+
+        # Enhanced connection parameters for better stability
+        connection_params = {
+            'device_type': netmiko_type,
+            'host': device_info.ip_address,
+            'username': device_info.username,
+            'password': device_info.password,
+            'secret': device_info.secret,
+            'port': device_info.port,
+            'timeout': settings.NETMIKO_TIMEOUT,
+            'session_timeout': settings.NETMIKO_TIMEOUT + 10,
+            'global_delay_factor': 2.0,  # Increased for stability
+            'fast_cli': False,
+        }
+
+        # Add optional parameters if they exist in settings
+        if hasattr(settings, 'NETMIKO_BANNER_TIMEOUT'):
+            connection_params['banner_timeout'] = settings.NETMIKO_BANNER_TIMEOUT
+        if hasattr(settings, 'NETMIKO_SESSION_LOG'):
+            connection_params['session_log'] = settings.NETMIKO_SESSION_LOG
+
+        connection = ConnectHandler(**connection_params)
+
+        if not self._validate_connection_responsive(connection, device_info):
+            self._debug_log("New connection is unresponsive, dropping", device_key)
+            connection.disconnect()
+            raise DeviceUnreachableError(f"New connection to {device_info.ip_address} is unresponsive")
+
+        self._mark_connection_success(device_key)
+        is_reachable = self._update_device_reachability(device_info, True)
+        if not is_reachable:
+            raise DeviceUnreachableError(f"Failed to update reachability for device {device_info.ip_address}")
+
+        self._debug_log("Successfully connected", device_key)
+        return connection
 
     def _retry_failed_operations(self, device_key: str):
-        """Retry any failed operations for this device when we get a fresh connection"""
-        if device_key in self._failed_operations and self._failed_operations[device_key]:
-            self._debug_log(f"Retrying {len(self._failed_operations[device_key])} failed operations", device_key)
-            
-            # Get a copy to avoid modification during iteration
-            failed_ops = self._failed_operations[device_key][:]
+        """Retry any failed operations for this device when getting a fresh connection"""
+        if device_key in self._failed_operations:
+            self._debug_log(f"Clearing {len(self._failed_operations[device_key])} failed operations for {device_key}", device_key)
             self._failed_operations[device_key].clear()
-            
-            for operation_func, future, retry_count in failed_ops:
-                try:
-                    # Resubmit the operation with incremented retry count
-                    if device_key not in self._request_queues:
-                        self._request_queues[device_key] = queue.Queue()
-                    
-                    self._request_queues[device_key].put({
-                        'operation_func': operation_func,
-                        'future': future,
-                        'timeout': None,
-                        'device_info': getattr(future, '_device_info', None),
-                        'retry_count': retry_count + 1
-                    })
-                    self._debug_log(f"Resubmitted failed operation (retry #{retry_count + 1})", device_key)
-                    
-                    # Ensure queue processing is running
-                    self._ensure_queue_processing(device_key)
-                    
-                except Exception as e:
-                    self._debug_log(f"Error resubmitting failed operation: {e}", device_key)
-                    if not future.done():
-                        future.set_exception(e)
 
-    def _release_connection(self, device_info: DeviceConnectionInfo):
-        """Release a device - mark it as available for the next operation."""
-        device_key = device_info.get_key()
-        with self._connection_conditions[device_key]:
-            # Mark device as available
-            self._device_busy[device_key] = False
-            # Notify waiting threads that the device is available
-            self._connection_conditions[device_key].notify_all()
-            self._debug_log("Device released and available", device_key)
-
-    def _ensure_queue_processing(self, device_key: str):
-        """Ensure that queue processing is running for a device."""
-        if not hasattr(self, '_queue_processing'):
-            self._queue_processing = {}
-            
-        if device_key not in self._queue_processing or not self._queue_processing[device_key]:
-            self._queue_processing[device_key] = True
-            self._executor.submit(self._process_device_queue, device_key)
-
-    def _execute_with_queue(self, device_info: DeviceConnectionInfo, operation_func, timeout: int = None):
+    def _execute_operation_with_connection(self, future: Future, operation_func, device_info: DeviceConnectionInfo, timeout: int = None, current_retry: int = 0):
         """
-        Execute an operation with strict serialization per device.
+        Execute a single operation with connection from the pool and automatic retry on Netmiko errors.
         """
         device_key = device_info.get_key()
-        self._debug_log("Submitting operation to queue", device_key)
-        
-        future = Future()
-        
-        request_item = {
-            'operation_func': operation_func,
-            'future': future,
-            'timeout': timeout,
-            'device_info': device_info,
-            'retry_count': 0  # Initial request
-        }
-        
-        # Ensure queue exists for this device
-        if device_key not in self._request_queues:
-            self._request_queues[device_key] = queue.Queue()
-        
-        # Add to device-specific queue
-        self._request_queues[device_key].put(request_item)
-        
-        # Start queue processing if not already running
-        self._ensure_queue_processing(device_key)
-        
-        self._debug_log(f"Operation queued (queue size: {self._request_queues[device_key].qsize()})", device_key)
-        return future
 
-    def _process_device_queue(self, device_key: str):
-        """
-        Process the request queue for a specific device - SERIALLY, one at a time.
-        This is the KEY FIX: Process operations sequentially in THIS thread, not by submitting to executor.
-        """
-        self._debug_log("Starting queue processing", device_key)
-        
-        if device_key not in self._request_queues:
-            self._queue_processing[device_key] = False
-            return
-            
-        queue_for_device = self._request_queues[device_key]
-        
-        # Process requests ONE AT A TIME for this device IN THIS THREAD
-        while True:
-            try:
-                # Use get with timeout to allow clean shutdown
-                request_item = queue_for_device.get(timeout=1.0)
-                future = request_item['future']
-                operation_func = request_item['operation_func']
-                timeout = request_item['timeout']
-                device_info = request_item['device_info']
-                retry_count = request_item.get('retry_count', 0)
-                
-                # Store device info on future for retry purposes
-                future._device_info = device_info
-                future._retry_count = retry_count
-                
-                self._debug_log(f"Processing operation (retry #{retry_count})", device_key)
-                
-                # EXECUTE IN CURRENT THREAD - This ensures true serialization
-                self._execute_single_operation_with_retry(future, operation_func, device_info, timeout, retry_count)
-                
-                self._debug_log(f"Operation completed (queue size: {queue_for_device.qsize()})", device_key)
-                
-            except queue.Empty:
-                # No more items in queue, exit processing
-                break
-            except Exception as e:
-                self._debug_log(f"Unexpected error in queue processing: {e}", device_key)
-                # Continue processing other items despite errors
-        
-        # Mark that we're no longer processing this device's queue
-        self._queue_processing[device_key] = False
-        self._debug_log("Queue processing completed", device_key)
-
-    def _execute_single_operation_with_retry(self, future: Future, operation_func, device_info: DeviceConnectionInfo, timeout: int = None, current_retry: int = 0):
-        """
-        Execute a single operation with automatic retry on Netmiko errors.
-        """
-        device_key = device_info.get_key()
-        
         if future.done():
             self._debug_log("Future already done, skipping", device_key)
             return
-            
+
+        connection = None
+        connection_index = None
+
         try:
-            self._debug_log(f"Executing operation (retry #{current_retry})", device_key)
-            
-            # This will acquire the device lock and wait if device is busy
-            result = operation_func()
+            self._debug_log(f"Acquiring connection from pool and executing operation (retry #{current_retry})", device_key)
+
+            # Get a connection from the pool
+            connection, connection_index = self._get_connection_from_pool(device_info,
+                                                                         NETMIKO_DEVICE_TYPE_MAP.get(device_info.device_type, device_info.device_type))
+
+            # Execute the operation function with the acquired connection
+            result = operation_func(connection)
+
             if not future.done():
                 future.set_result(result)
                 self._debug_log("Operation completed successfully", device_key)
-                
+                self._mark_connection_success(device_key)
+
         except Exception as e:
             self._debug_log(f"Operation failed (retry #{current_retry}): {e}", device_key)
             self._debug_log(f"Full error: {traceback.format_exc()}", device_key)
-            
+
             # Check if this error is retryable
             is_retryable = self._is_netmiko_error_retryable(e)
-            
+
             if current_retry < self._max_operation_retries and is_retryable:
                 self._debug_log(f"Error is retryable, scheduling retry #{current_retry + 1}", device_key)
-                
-                # Clean up the connection on failure
-                self._cleanup_stale_connection(device_key)
-                
-                # Store for retry
-                if device_key not in self._failed_operations:
-                    self._failed_operations[device_key] = []
-                
-                self._failed_operations[device_key].append((operation_func, future, current_retry))
-                
+
                 # Wait before the next connection attempt (exponential backoff)
                 wait_time = min(2 ** current_retry, 10)
                 self._debug_log(f"Waiting {wait_time}s before retry", device_key)
                 time.sleep(wait_time)
-                
+
+                # Retry the operation directly by calling it again
+                self._execute_operation_with_connection(future, operation_func, device_info, timeout, current_retry + 1)
+                return
+
             else:
                 # Not retryable or max retries exceeded
                 if not is_retryable:
                     self._debug_log("Error is NOT retryable, failing operation", device_key)
                 else:
                     self._debug_log(f"Max retries ({self._max_operation_retries}) exceeded, failing operation", device_key)
-                    
+
+                self._mark_connection_failure(device_key)
                 if not future.done():
                     future.set_exception(e)
         finally:
-            # Always release the device
-            self._release_connection(device_info)
+            if connection is not None and connection_index is not None:
+                self._return_connection_to_pool(device_info, connection_index)
 
     def get_connection(self, device_info: DeviceConnectionInfo, netmiko_device_type: str):
-        """Submits a connection request with per-device queuing and returns a Future."""
+        """Submits a connection request and returns a Future that resolves to the connection."""
         if self._executor_shutdown:
             raise RuntimeError("Cannot schedule new futures after shutdown")
-            
-        def retry_connect_device():
-            max_retries = 3
-            for attempt in range(max_retries):
-                try:
-                    return self._connect_device(device_info, netmiko_device_type)
-                except (NetmikoTimeoutException, NetmikoAuthenticationException, DeviceUnreachableError) as e:
-                    if attempt == max_retries - 1:
-                        self._debug_log(f"Connection failed after {max_retries} attempts: {e}", device_info.get_key())
-                        raise e
-                    wait_time = 2 ** attempt
-                    self._debug_log(f"Connection failed, attempt {attempt + 1}, retrying in {wait_time}s: {e}", device_info.get_key())
-                    time.sleep(wait_time)
-                except Exception as e:
-                    self._debug_log(f"Non-retryable error during connection: {e}", device_info.get_key())
-                    raise e
-        
-        return self._execute_with_queue(device_info, retry_connect_device)
+
+        future = Future()
+
+        def operation_func(connection):
+            # Return the connection object directly
+            return connection
+
+        self._execute_operation_with_connection(future, operation_func, device_info)
+        return future
 
     def send_command(self, device_info: DeviceConnectionInfo, command: str, netmiko_device_type: str, timeout: int = None, **kwargs):
-        """Submits a command execution request with per-device queuing and returns a Future."""
+        """Submits a command execution request and returns a Future."""
         if self._executor_shutdown:
             raise RuntimeError("Cannot schedule new futures after shutdown")
-            
-        def _execute_command():
-            connection = None
+
+        future = Future()
+
+        def operation_func(connection):
             device_key = device_info.get_key()
             try:
-                connection = self._connect_device(device_info, netmiko_device_type)
-                
                 if not connection.check_enable_mode():
                     connection.enable()
-                
+
                 # Clear buffer multiple times to ensure clean state
                 for _ in range(3):
                     connection.clear_buffer()
                     time.sleep(0.05)
-                
+
                 self._debug_log(f"Executing command: {command}", device_key)
                 cmd_timeout = timeout or settings.NETMIKO_READ_TIMEOUT
-                
+
                 # Enhanced command execution with better error handling
                 output = connection.send_command(
-                    command, 
-                    read_timeout=cmd_timeout, 
+                    command,
+                    read_timeout=cmd_timeout,
                     expect_string=None,
                     delay_factor=2.0,  # Added for stability
                     max_loops=1000,    # Increased for long outputs
                     **kwargs
                 )
-                self._mark_connection_success(device_key)
                 self._debug_log(f"Command executed successfully: {command}", device_key)
                 return output
-                
+
             except Exception as e:
                 self._debug_log(f"Error executing command '{command}': {e}", device_key)
-                self._mark_connection_failure(device_key)
                 raise
-        
-        return self._execute_with_queue(device_info, _execute_command, timeout)
+
+        self._execute_operation_with_connection(future, operation_func, device_info, timeout)
+        return future
 
     def send_config_set(self, device_info: DeviceConnectionInfo, commands: list[str], netmiko_device_type: str, timeout: int = None, **kwargs):
-        """Submits a config set execution request with per-device queuing and returns a Future."""
+        """Submits a config set execution request and returns a Future."""
         if self._executor_shutdown:
             raise RuntimeError("Cannot schedule new futures after shutdown")
-            
-        def _execute_config_set():
-            connection = None
+
+        future = Future()
+
+        def operation_func(connection):
             device_key = device_info.get_key()
             try:
-                connection = self._connect_device(device_info, netmiko_device_type)
-                
                 if not connection.check_enable_mode():
                     connection.enable()
-                
+
                 self._debug_log(f"Executing {len(commands)} config commands", device_key)
                 cmd_timeout = timeout or settings.NETMIKO_READ_TIMEOUT
                 output = connection.send_config_set(
-                    commands, 
-                    cmd_timeout=cmd_timeout, 
+                    commands,
+                    read_timeout=cmd_timeout,  # Use read_timeout instead of cmd_timeout
                     delay_factor=2.0,  # Added for stability
                     **kwargs
                 )
-                self._mark_connection_success(device_key)
                 self._debug_log("Config commands executed successfully", device_key)
                 return output
-                
+
             except Exception as e:
                 self._debug_log(f"Error executing config commands: {e}", device_key)
-                self._mark_connection_failure(device_key)
                 raise
 
-        return self._execute_with_queue(device_info, _execute_config_set, timeout)
+        self._execute_operation_with_connection(future, operation_func, device_info, timeout)
+        return future
 
     def send_multiline_commands(self, device_info: DeviceConnectionInfo, command_patterns: list[list[str]], netmiko_device_type: str, timeout: int = None, **kwargs):
-        """Submits a multiline command execution request with per-device queuing and returns a Future."""
+        """Submits a multiline command execution request and returns a Future."""
         if self._executor_shutdown:
             raise RuntimeError("Cannot schedule new futures after shutdown")
-            
-        def _execute_multiline_commands():
-            connection = None
+
+        future = Future()
+
+        def operation_func(connection):
             device_key = device_info.get_key()
             try:
-                connection = self._connect_device(device_info, netmiko_device_type)
-                
                 if not connection.check_enable_mode():
                     connection.enable()
-                
+
                 self._debug_log(f"Executing {len(command_patterns)} multiline commands", device_key)
                 cmd_timeout = timeout or settings.NETMIKO_READ_TIMEOUT
                 output = connection.send_multiline(
-                    command_patterns, 
-                    read_timeout=cmd_timeout, 
+                    command_patterns,
+                    read_timeout=cmd_timeout,
                     delay_factor=2.0,  # Added for stability
                     **kwargs
                 )
-                self._mark_connection_success(device_key)
                 self._debug_log("Multiline commands executed successfully", device_key)
                 return output
-                
+
             except Exception as e:
                 self._debug_log(f"Error executing multiline commands: {e}", device_key)
-                self._mark_connection_failure(device_key)
                 raise
 
-        return self._execute_with_queue(device_info, _execute_multiline_commands, timeout)
+        self._execute_operation_with_connection(future, operation_func, device_info, timeout)
+        return future
 
     def _update_device_reachability(self, device_info: DeviceConnectionInfo, is_reachable: bool):
         """Update device reachability status."""
@@ -628,33 +519,32 @@ class ConnectionManager:
     def disconnect_all(self):
         """Disconnects all active Netmiko connections."""
         with self._lock:
-            # Mark all queues as not processing
-            if hasattr(self, '_queue_processing'):
-                for device_key in list(self._queue_processing.keys()):
-                    self._queue_processing[device_key] = False
-            
             # Fail all pending operations
             for device_key in list(self._failed_operations.keys()):
                 for _, future, _ in self._failed_operations[device_key]:
                     if not future.done():
                         future.set_exception(Exception("Connection manager shutdown"))
                 self._failed_operations[device_key].clear()
-            
-            # Disconnect all connections
-            for device_key, connection in list(self._connections.items()):
-                if connection:
-                    try:
-                        connection.disconnect()
-                        self._debug_log("Disconnected", device_key)
-                    except Exception as e:
-                        self._debug_log(f"Error disconnecting: {e}", device_key)
-                self._connections[device_key] = None
-            
+
+            # Disconnect all connections in all pools
+            for device_key, pool in list(self._connection_pools.items()):
+                for connection_info in pool:
+                    connection = connection_info['connection']
+                    if connection:
+                        try:
+                            connection.disconnect()
+                            self._debug_log("Disconnected", device_key)
+                        except Exception as e:
+                            self._debug_log(f"Error disconnecting: {e}", device_key)
+
+            # Clear all pools
+            self._connection_pools.clear()
+
             # Clear all tracking
             self._connection_failures.clear()
             self._connection_last_success.clear()
             self._failed_operations.clear()
-            
+
             # Shutdown executor
             if not self._executor_shutdown:
                 self._executor.shutdown(wait=True)

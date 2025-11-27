@@ -4,26 +4,19 @@ Module for checking device reachability.
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from sqlalchemy.orm import Session
+import socket
+from contextlib import closing
 
 from .crud import crud
 from .schemas import DeviceUpdate
-from .exceptions import (
-    DeviceTimeoutError,
-    DeviceUnreachableError,
-    DeviceConnectionError,
-    DeviceAuthenticationError
-)
-from .config import settings
-from .api.utils import get_handler_from_device_id
+from .device_info import DeviceConnectionInfo
 
 
 async def check_device_reachability(device_id: int, db: Session):
     """
-    Asynchronously checks if a device is reachable.
-    
-    This function attempts to establish a connection to the device using its handler.
-    It implements a timeout to prevent hanging connections and updates the device's
-    reachability status in the database.
+    Asynchronously checks if a device is reachable using a fast TCP check.
+    This function does a direct TCP check without using the connection manager
+    to avoid any blocking or resource contention.
     """
     is_reachable = False
     try:
@@ -31,31 +24,11 @@ async def check_device_reachability(device_id: int, db: Session):
         if not db_device:
             raise Exception("Device not found")
 
-        handler = get_handler_from_device_id(device_id, db)
-        
-        # Use asyncio.wait_for to add a timeout to the connection attempt
-        # The underlying ConnectionManager will use the fast TCP check.
+        # Perform the TCP port check directly in a separate thread to avoid blocking
+        is_reachable = await _async_tcp_check(db_device.ip_address, db_device.port)
 
-        
-        def connect_handler():
-            with handler:
-                return True
-                
-        loop = asyncio.get_event_loop()
-        with ThreadPoolExecutor() as executor:
-            result = await asyncio.wait_for(
-                loop.run_in_executor(executor, connect_handler),
-                timeout=settings.NETMIKO_TIMEOUT # Use general Netmiko timeout
-            )
-        is_reachable = result
-    except (asyncio.TimeoutError, DeviceTimeoutError):
-        print(f"Timeout checking reachability for device {device_id}")
-        is_reachable = False
-    except (DeviceUnreachableError, DeviceConnectionError, DeviceAuthenticationError) as e:
-        print(f"Error checking reachability for device {device_id}: {str(e)}")
-        is_reachable = False
     except Exception as e:
-        print(f"An unexpected error occurred during reachability check for device {device_id}: {str(e)}")
+        print(f"An unexpected error occurred during quick reachability check for device {device_id}: {str(e)}")
         is_reachable = False
 
     try:
@@ -65,11 +38,38 @@ async def check_device_reachability(device_id: int, db: Session):
             device_update = DeviceUpdate(is_reachable=is_reachable)
             updated_device = crud.update_device(db, device_id, device_update)
             print(f"Updated reachability for device {device_id} to {is_reachable}")
-            
+
             # Return the updated status directly from the database
             return updated_device.is_reachable if updated_device else is_reachable
 
     except Exception as e:
         print(f"Failed to update reachability status for device {device_id}: {str(e)}")
-        
+
     return is_reachable
+
+
+async def _async_tcp_check(ip_address: str, port: int, timeout: float = 2.0) -> bool:
+    """Asynchronously perform TCP port check using thread pool to avoid blocking."""
+
+    def sync_tcp_check():
+        try:
+            with closing(socket.create_connection((ip_address, port), timeout=timeout)) as sock:
+                return True
+        except socket.timeout:
+            print(f"TCP port {port} on {ip_address} is CLOSED: connection timed out")
+            return False
+        except ConnectionRefusedError:
+            print(f"TCP port {port} on {ip_address} is CLOSED: connection refused")
+            return False
+        except OSError as e:
+            print(f"TCP port {port} on {ip_address} is CLOSED: OS error - {e}")
+            return False
+        except Exception as e:
+            print(f"TCP port {port} on {ip_address} is CLOSED: unexpected error - {e}")
+            return False
+
+    # Run the potentially blocking operation in a thread pool
+    loop = asyncio.get_event_loop()
+    with ThreadPoolExecutor() as executor:
+        result = await loop.run_in_executor(executor, sync_tcp_check)
+        return result

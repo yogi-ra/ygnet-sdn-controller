@@ -105,17 +105,14 @@ class BaseDevice(ABC):
 
     def send_command(self, command: str, timeout: int = None, **kwargs) -> str:
         """
-        Sends a single command to the device.
+        Sends a single command to the device using the connection manager's retry mechanism.
         """
-        if not self.connection:
-            self.connect()
         try:
-            # Ensure we are in privileged EXEC mode before sending the command
-            if not self.connection.check_enable_mode():
-                self.connection.enable()
-            # Set a reasonable timeout for command execution
-            cmd_timeout = timeout or settings.NETMIKO_READ_TIMEOUT
-            output = self.connection.send_command(command, read_timeout=cmd_timeout, **kwargs)
+            # Use connection manager's send_command method for retry logic and queuing
+            future = connection_manager.send_command(
+                self.device_info, command, self.netmiko_device_type, timeout, **kwargs
+            )
+            output = future.result(timeout=timeout or settings.NETMIKO_READ_TIMEOUT)
             self.logger.debug(f"Raw output from Netmiko for command '{command}':\n{output}")
             return output
         except Exception as e:
@@ -128,30 +125,17 @@ class BaseDevice(ABC):
 
     def send_config_set(self, commands: List[str], timeout: int = None, **kwargs) -> str:
         """
-        Sends a list of configuration commands to the device, ensuring proper mode transitions.
+        Sends a list of configuration commands to the device using the connection manager's retry mechanism.
         """
-        if not self.connection:
-            self.connect()
         try:
-            # Ensure we are in privileged EXEC mode
-            if not self.connection.check_enable_mode():
-                self.connection.enable()
-
-            # Set a reasonable timeout for command execution
-            cmd_timeout = timeout or settings.NETMIKO_READ_TIMEOUT
-            # Netmiko's send_config_set handles entering and exiting config mode by default
-            output = self.connection.send_config_set(commands, read_timeout=cmd_timeout, exit_config_mode=True, **kwargs)
-            
+            # Use connection manager's send_config_set method for retry logic and queuing
+            future = connection_manager.send_config_set(
+                self.device_info, commands, self.netmiko_device_type, timeout, **kwargs
+            )
+            output = future.result(timeout=timeout or settings.NETMIKO_READ_TIMEOUT)
             self.logger.debug(f"Raw output from Netmiko for config commands '{commands}':\n{output}")
             return output
         except Exception as e:
-            # Attempt to exit config mode only if we are currently in it
-            try:
-                if self.connection.check_config_mode():
-                    self.connection.exit_config_mode()
-            except Exception as exit_e:
-                self.logger.error(f"Error attempting to exit config mode: {exit_e}")
-
             self.logger.error(
                 f"Failed to send config commands '{commands}' to {self.device_info.ip_address}: {e}"
             )
@@ -159,17 +143,16 @@ class BaseDevice(ABC):
                 f"Failed to send config commands '{commands}' to {self.device_info.ip_address}: {e}"
             )
 
-    def send_multiline_commands(self, command_patterns: List[List[str]], timeout: int = None) -> str:
+    def send_multiline_commands(self, command_patterns: List[List[str]], timeout: int = None, **kwargs) -> str:
         """
-        Sends multiple commands to the device, handling additional prompts based on patterns.
+        Sends multiple commands to the device using the connection manager's retry mechanism.
         """
-        if not self.connection:
-            self.connect()
-
         try:
-            # Set a reasonable timeout for command execution
-            cmd_timeout = timeout or settings.NETMIKO_READ_TIMEOUT
-            output = self.connection.send_multiline(command_patterns, read_timeout=cmd_timeout)
+            # Use connection manager's send_multiline_commands method for retry logic and queuing
+            future = connection_manager.send_multiline_commands(
+                self.device_info, command_patterns, self.netmiko_device_type, timeout, **kwargs
+            )
+            output = future.result(timeout=timeout or settings.NETMIKO_READ_TIMEOUT)
             self.logger.debug(
                 f"Raw output from Netmiko for multiline commands: {command_patterns}\n{output}"
             )
