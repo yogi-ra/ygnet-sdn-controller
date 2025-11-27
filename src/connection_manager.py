@@ -405,21 +405,16 @@ class ConnectionManager:
                 if not connection.check_enable_mode():
                     connection.enable()
 
-                # Clear buffer multiple times to ensure clean state
-                for _ in range(3):
-                    connection.clear_buffer()
-                    time.sleep(0.05)
+                # Clear buffer once (reduce overhead)
+                connection.clear_buffer()
 
                 self._debug_log(f"Executing command: {command}", device_key)
                 cmd_timeout = timeout or settings.NETMIKO_READ_TIMEOUT
 
-                # Enhanced command execution with better error handling
+                # Simplified command execution with reduced overhead
                 output = connection.send_command(
                     command,
                     read_timeout=cmd_timeout,
-                    expect_string=None,
-                    delay_factor=2.0,  # Added for stability
-                    max_loops=1000,    # Increased for long outputs
                     **kwargs
                 )
                 self._debug_log(f"Command executed successfully: {command}", device_key)
@@ -450,7 +445,6 @@ class ConnectionManager:
                 output = connection.send_config_set(
                     commands,
                     read_timeout=cmd_timeout,  # Use read_timeout instead of cmd_timeout
-                    delay_factor=2.0,  # Added for stability
                     **kwargs
                 )
                 self._debug_log("Config commands executed successfully", device_key)
@@ -481,7 +475,6 @@ class ConnectionManager:
                 output = connection.send_multiline(
                     command_patterns,
                     read_timeout=cmd_timeout,
-                    delay_factor=2.0,  # Added for stability
                     **kwargs
                 )
                 self._debug_log("Multiline commands executed successfully", device_key)
