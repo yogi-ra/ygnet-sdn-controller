@@ -41,7 +41,17 @@ async def read_devices(
     """
     db_devices = crud.get_devices(db, skip=skip, limit=limit)
 
-    return db_devices 
+    return [
+        {
+            "id": row.id,
+            "name": row.name,
+            "device_type": row.device_type,
+            "ip_address": row.ip_address,
+            "port": row.port,
+            "is_reachable": row.is_reachable
+        }
+        for row in db_devices 
+    ]
 
 @router.get(
     "/stats", response_model=Dict[str, int], dependencies=[Depends(require_read_privileges)]
