@@ -22,6 +22,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAssignPortToVlan, useChangeVlanName, useCreateVlan, useDeleteVlan } from '../../api/vlans';
 import { useConfigureInterfaceVlan, useSetInterfaceDescription } from '../../api/interfaces';
 import { useTaskPolling } from "../../hooks/useTaskPolling";
+import { API_BASE_URL } from '../../api';
 
 // Separate hook for system information with lazy loading
 const useSystemInfo = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean, deviceData: any) => {
@@ -91,7 +92,7 @@ const useClockInfo = (deviceId: string | undefined, enabled: boolean, isDeviceRe
         }
       }
       
-      const response = await fetch(`/api/devices/${deviceId}/system/clock`, {
+      const response = await fetch(`${API_BASE_URL}/devices/${deviceId}/system/clock`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -225,7 +226,7 @@ const useInterfaces = (deviceId: string | undefined, enabled: boolean, isDeviceR
         }
       }
       
-      const response = await fetch(`/api/devices/${deviceId}/interfaces/brief`, {
+      const response = await fetch(`${API_BASE_URL}/devices/${deviceId}/interfaces/brief`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -362,7 +363,7 @@ const useInterfaceDescriptions = (deviceId: string | undefined, enabled: boolean
         }
       }
       
-      const response = await fetch(`/api/devices/${deviceId}/interfaces/description`, {
+      const response = await fetch(`${API_BASE_URL}/devices/${deviceId}/interfaces/description`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -499,7 +500,7 @@ const useVlanInfo = (deviceId: string | undefined, enabled: boolean, isDeviceRea
         }
       }
       
-      const response = await fetch(`/api/devices/${deviceId}/vlans/brief`, {
+      const response = await fetch(`${API_BASE_URL}/devices/${deviceId}/vlans/brief`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -636,7 +637,7 @@ const useArpTable = (deviceId: string | undefined, enabled: boolean, isDeviceRea
         }
       }
       
-      const response = await fetch(`/api/devices/${deviceId}/arp`, {
+      const response = await fetch(`${API_BASE_URL}/devices/${deviceId}/arp`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -767,7 +768,7 @@ const useCdpNeighbors = (deviceId: string | undefined, enabled: boolean, isDevic
         }
       }
       
-      const response = await fetch(`/api/devices/${deviceId}/cdp`, {
+      const response = await fetch(`${API_BASE_URL}/devices/${deviceId}/cdp`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -890,7 +891,7 @@ const useLldpNeighbors = (deviceId: string | undefined, enabled: boolean, isDevi
         }
       }
       
-      const response = await fetch(`/api/devices/${deviceId}/lldp`, {
+      const response = await fetch(`${API_BASE_URL}/devices/${deviceId}/lldp`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -988,7 +989,7 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
         throw new Error("No authentication token found.");
       }
 
-      const response = await fetch(`/api/devices/${id}/check-reachability`, {
+      const response = await fetch(`${API_BASE_URL}/devices/${id}/check-reachability`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -1216,7 +1217,7 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
     const newState = !isInterfaceAdminUp(currentState);
     
     try {
-      const response = await fetch(`/api/devices/${id}/interfaces/state`, {
+      const response = await fetch(`${API_BASE_URL}/devices/${id}/interfaces/state`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1357,7 +1358,7 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
     setCommandError(null);
     setTaskAction('executeCommand');
 
-    const endpoint = `/api/devices/${id}/execute-command`;
+    const endpoint = `${API_BASE_URL}/devices/${id}/execute-command`;
     const payload = { command, is_config: isConfigCommand };
 
     try {

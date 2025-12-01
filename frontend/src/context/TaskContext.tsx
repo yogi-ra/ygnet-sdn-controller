@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
-import { useAuth } from './AuthContext';
+import { useAuth } from '../hooks/useAuth';
+import { API_BASE_URL } from '../api';
 
 // Task types
 export type TaskStatus = 'PENDING' | 'PROCESSING' | 'SUCCESS' | 'FAILURE';
@@ -120,7 +121,7 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Poll for each active task
       for (const task of activeTasks) {
         try {
-          const response = await fetch(`/api/tasks/${task.id}`, {
+          const response = await fetch(`${API_BASE_URL}/tasks/${task.id}`, {
             headers: {
               Authorization: `Bearer ${token}`,
             },

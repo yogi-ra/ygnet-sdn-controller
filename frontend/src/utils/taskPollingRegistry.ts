@@ -1,6 +1,8 @@
 // Global registry to track active task polling
 // This prevents multiple components from polling the same task ID simultaneously
 
+import { API_BASE_URL } from '../api';
+
 interface TaskPollingEntry {
   intervalId: NodeJS.Timeout;
   subscribers: Map<string, (status: any, error: string | null) => void>; // Map of component IDs to their callbacks
@@ -49,7 +51,7 @@ class TaskPollingRegistry {
           return;
         }
 
-        const response = await fetch(`/api/tasks/${taskId}`, {
+        const response = await fetch(`${API_BASE_URL}/tasks/${taskId}`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },

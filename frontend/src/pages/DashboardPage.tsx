@@ -2,6 +2,7 @@ import { Container, Card, Row, Col } from 'react-bootstrap';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom'; // Import useNavigate
 import { useAuth } from '../hooks/useAuth'; // Import useAuth
+import { API_BASE_URL } from '../api';
 
 const DashboardPage = () => {
   const [totalDevices, setTotalDevices] = useState(0);
@@ -24,7 +25,7 @@ const DashboardPage = () => {
 
       try {
         // Fetch all devices
-        const devicesResponse = await fetch('/api/devices/stats', {
+        const devicesResponse = await fetch(`${API_BASE_URL}/devices/stats`, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'

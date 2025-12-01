@@ -6,6 +6,7 @@ import { Container, Spinner, Alert } from "react-bootstrap";
 import OfflineBanner from "../components/OfflineBanner";
 import CiscoIosRouterDetailPage from "./device-types/CiscoIosRouterDetailPage";
 import CiscoIosSwitchDetailPage from "./device-types/CiscoIosSwitchDetailPage";
+import { API_BASE_URL } from "../api";
 
 const DeviceDetailPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -27,7 +28,7 @@ const DeviceDetailPage = () => {
         throw new Error("Missing token or device ID");
       }
 
-      const response = await fetch(`/api/devices/${id}`, {
+      const response = await fetch(`${API_BASE_URL}/devices/${id}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -57,7 +58,7 @@ const DeviceDetailPage = () => {
         throw new Error("Missing token or device ID");
       }
 
-      const response = await fetch(`/api/devices/${id}/check-reachability`, {
+      const response = await fetch(`${API_BASE_URL}/devices/${id}/check-reachability`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },

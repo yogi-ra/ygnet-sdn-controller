@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Container, Alert, Row, Col, Card } from "react-bootstrap";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import { API_BASE_URL } from "../api";
 import DeviceForm from "../components/DeviceForm";
 
 const AddDevicePage = () => {
@@ -22,7 +23,7 @@ const AddDevicePage = () => {
     }
 
     try {
-      const response = await fetch("/api/devices/", {
+      const response = await fetch(`${API_BASE_URL}/devices/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

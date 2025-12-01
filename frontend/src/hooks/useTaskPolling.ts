@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from './useAuth';
 import { taskPollingRegistry } from '../utils/taskPollingRegistry';
+import { API_BASE_URL } from '../api';
 
 export type TaskStatus = {
   task_id: string;
@@ -77,7 +78,7 @@ export const useTaskPolling = (taskId: string | null, options: UseTaskPollingOpt
     if (!taskId || !token) return;
 
     try {
-      const response = await fetch(`/api/tasks/${taskId}`, {
+      const response = await fetch(`${API_BASE_URL}/tasks/${taskId}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },

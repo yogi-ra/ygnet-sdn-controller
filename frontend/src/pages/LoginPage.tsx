@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Form, Button, Container, Row, Col, Alert, Spinner } from 'react-bootstrap';
 import { useAuth } from '../hooks/useAuth';
 import { isTokenExpired } from '../utils/authUtils';
+import { API_BASE_URL } from '../api';
 
 const LoginPage = () => {
   const [username, setUsername] = useState('');
@@ -37,7 +38,7 @@ const LoginPage = () => {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch('/api/auth/token', {
+      const response = await fetch(`${API_BASE_URL}/auth/token`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

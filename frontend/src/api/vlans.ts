@@ -1,6 +1,7 @@
 import { useMutation } from '@tanstack/react-query';
 import { useAuth } from '../hooks/useAuth';
 import { queryClient } from '../hooks/useAuthQueryClient';
+import { API_BASE_URL } from '../api';
 
 export const useAssignPortToVlan = (deviceId: string | undefined) => {
   const { token } = useAuth();
@@ -14,7 +15,7 @@ export const useAssignPortToVlan = (deviceId: string | undefined) => {
         throw new Error('Missing token or device ID');
       }
 
-      const response = await fetch(`/api/devices/${deviceId}/vlans/${vlanId}/assign-port`, {
+      const response = await fetch(`${API_BASE_URL}/devices/${deviceId}/vlans/${vlanId}/assign-port`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -46,7 +47,7 @@ export const useChangeVlanName = (deviceId: string | undefined) => {
         throw new Error('Missing token or device ID');
       }
 
-      const response = await fetch(`/api/devices/${deviceId}/vlans/${vlanId}/change-name`, {
+      const response = await fetch(`${API_BASE_URL}/devices/${deviceId}/vlans/${vlanId}/change-name`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -77,7 +78,7 @@ export const useCreateVlan = (deviceId: string | undefined) => {
         throw new Error('Missing token or device ID');
       }
 
-      const response = await fetch(`/api/devices/${deviceId}/vlans`, {
+      const response = await fetch(`${API_BASE_URL}/devices/${deviceId}/vlans`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -108,7 +109,7 @@ export const useDeleteVlan = (deviceId: string | undefined) => {
         throw new Error('Missing token or device ID');
       }
 
-      const response = await fetch(`/api/devices/${deviceId}/vlans/${vlanId}`, {
+      const response = await fetch(`${API_BASE_URL}/devices/${deviceId}/vlans/${vlanId}`, {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${token}`,

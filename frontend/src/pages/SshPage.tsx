@@ -4,6 +4,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { Rnd } from "react-rnd";
 import "@xterm/xterm/css/xterm.css";
 import toast from "react-hot-toast";
+import { API_BASE_URL } from "../api";
 
 interface Connection {
   id: string;
@@ -244,9 +245,24 @@ const SshTerminal: React.FC<{
   const { id, connected, connecting, host, port, username, password } =
     connection;
 
+  // Convert HTTP API URL to WebSocket URL
+  const getWebSocketUrl = () => {
+    const apiBaseUrl = import.meta.env.VITE_API_URL || `${window.location.origin}/api`;
+    if (apiBaseUrl.startsWith('http')) {
+      return apiBaseUrl
+        .replace(/^http/, 'ws')
+        .replace(/\/api$/, '/ws/ssh');
+    }
+    // Fallback if the API URL doesn't start with http
+    return API_BASE_URL
+      .replace(/^http/, 'ws')
+      .replace(/\/api$/, '/ws/ssh');
+  };
+
   useEffect(() => {
     if (!connected) return;
-    const ws = new WebSocket("ws://localhost:8000/api/ws/ssh");
+
+    const ws = new WebSocket(getWebSocketUrl());
     ws.binaryType = "arraybuffer";
 
     const term = new Terminal({

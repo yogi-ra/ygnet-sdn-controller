@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../hooks/useAuth';
+import { API_BASE_URL } from '../api';
 
 interface InterfaceVlanConfig {
   interface_name: string;
@@ -17,7 +18,7 @@ export const useShutdownInterface = (deviceId: string | undefined) => {
       if (!token || !deviceId) {
         throw new Error('Missing token or device ID');
       }
-      const response = await fetch(`/api/devices/${deviceId}/interfaces/${interfaceName}/shutdown`, {
+      const response = await fetch(`${API_BASE_URL}/devices/${deviceId}/interfaces/${interfaceName}/shutdown`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -44,7 +45,7 @@ export const useNoShutdownInterface = (deviceId: string | undefined) => {
       if (!token || !deviceId) {
         throw new Error('Missing token or device ID');
       }
-      const response = await fetch(`/api/devices/${deviceId}/interfaces/${interfaceName}/no-shutdown`, {
+      const response = await fetch(`${API_BASE_URL}/devices/${deviceId}/interfaces/${interfaceName}/no-shutdown`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -73,7 +74,7 @@ export const useConfigureInterfaceVlan = (deviceId: string | undefined) => {
         throw new Error('Missing token or device ID');
       }
 
-      const response = await fetch(`/api/devices/${deviceId}/interfaces/vlan-config`, {
+      const response = await fetch(`${API_BASE_URL}/devices/${deviceId}/interfaces/vlan-config`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -107,7 +108,7 @@ export const useSetInterfaceDescription = (deviceId: string | undefined) => {
         throw new Error('Missing token or device ID');
       }
 
-      const response = await fetch(`/api/devices/${deviceId}/interfaces/description`, {
+      const response = await fetch(`${API_BASE_URL}/devices/${deviceId}/interfaces/description`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

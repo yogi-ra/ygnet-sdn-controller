@@ -1,6 +1,9 @@
 import { QueryClient } from "@tanstack/react-query";
 import type { DeviceTypeInfo } from "./types/deviceTypes.ts";
 
+// Use the environment variable for API base URL, default to current origin with /api
+export const API_BASE_URL = import.meta.env.VITE_API_URL || `${window.location.origin}/api`;
+
 export const queryClient = new QueryClient();
 
 export class UnauthorizedError extends Error {}
@@ -15,6 +18,12 @@ export interface Device {
   is_reachable?: boolean;
 }
 
+// Define the missing DevicesResponse type
+interface DevicesResponse {
+  devices: Device[];
+  total: number;
+}
+
 const getAuthHeaders = (token: string | null) => {
   const headers: HeadersInit = {
     "Content-Type": "application/json",
@@ -27,7 +36,7 @@ const getAuthHeaders = (token: string | null) => {
 
 export const fetchSupportedFeatures = async (token: string | null): Promise<Record<string, string[]>> => {
   const headers = getAuthHeaders(token);
-  const response = await fetch("/api/devices/supported-features", { headers });
+  const response = await fetch(`${API_BASE_URL}/devices/supported-features`, { headers });
 
   if (!response.ok) {
     if (response.status === 401) {
@@ -43,7 +52,7 @@ export type { DeviceTypeInfo };
 
 export const fetchDeviceTypes = async (token: string | null): Promise<DeviceTypeInfo[]> => {
   const headers = getAuthHeaders(token);
-  const response = await fetch("/api/devices/device-types", { headers });
+  const response = await fetch(`${API_BASE_URL}/devices/device-types`, { headers });
 
   if (!response.ok) {
     if (response.status === 401) {
@@ -61,7 +70,7 @@ export const fetchDevices = async (
   limit: number = 5
 ): Promise<DevicesResponse> => {
   const headers = getAuthHeaders(token);
-  const response = await fetch(`/api/devices/?skip=${skip}&limit=${limit}`, { headers });
+  const response = await fetch(`${API_BASE_URL}/devices/?skip=${skip}&limit=${limit}`, { headers });
 
   if (!response.ok) {
     if (response.status === 401) {
@@ -72,7 +81,7 @@ export const fetchDevices = async (
 
   const devices = await response.json();
   // Get the total count from the stats endpoint
-  const statsResponse = await fetch('/api/devices/stats', { headers });
+  const statsResponse = await fetch(`${API_BASE_URL}/devices/stats`, { headers });
   if (!statsResponse.ok) {
     if (statsResponse.status === 401) {
       throw new UnauthorizedError("Unauthorized");
@@ -93,7 +102,7 @@ export const deleteDevice = async (
   token: string | null
 ): Promise<void> => {
   const headers = getAuthHeaders(token);
-  const response = await fetch(`/api/devices/${deviceId}`, {
+  const response = await fetch(`${API_BASE_URL}/devices/${deviceId}`, {
     method: "DELETE",
     headers,
   });
@@ -110,7 +119,7 @@ export const deleteDevice = async (
 
 export const checkDevicesReachability = async (token: string | null): Promise<{ task_id: string }> => {
   const headers = getAuthHeaders(token);
-  const response = await fetch(`/api/devices/check-reachability`, {
+  const response = await fetch(`${API_BASE_URL}/devices/check-reachability`, {
     method: "POST",
     headers,
   });
@@ -130,7 +139,7 @@ export const backupDevices = async (
   token: string | null
 ): Promise<{ task_id: string }> => {
   const headers = getAuthHeaders(token);
-  const response = await fetch('/api/devices/backup', {
+  const response = await fetch(`${API_BASE_URL}/devices/backup`, {
     method: 'POST',
     headers,
     body: JSON.stringify(deviceIds),

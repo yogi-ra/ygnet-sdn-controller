@@ -1,6 +1,7 @@
 /**
  * Utility functions for polling task status
  */
+import { API_BASE_URL } from '../api';
 
 export interface TaskStatus {
   task_id: string;
@@ -29,7 +30,7 @@ export async function pollTaskStatus(
   
   while (attempts < maxAttempts) {
     try {
-      const response = await fetch(`/api/tasks/${taskId}`, {
+      const response = await fetch(`${API_BASE_URL}/tasks/${taskId}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },

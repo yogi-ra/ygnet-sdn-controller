@@ -3,6 +3,7 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Container, Card, Row, Col, Alert, Spinner } from "react-bootstrap";
 import { useAuth } from "../hooks/useAuth";
 import DeviceForm from "../components/DeviceForm";
+import { API_BASE_URL } from "../api";
 
 interface Device {
   id: number; // Changed from string to number to match backend schema
@@ -48,7 +49,7 @@ const EditDevicePage = () => {
     }
 
     try {
-      const response = await fetch(`/api/devices/${id}`, {
+      const response = await fetch(`${API_BASE_URL}/devices/${id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
