@@ -46,6 +46,7 @@ async def read_devices(
             "id": row.id,
             "name": row.name,
             "device_type": row.device_type,
+            "username": row.username,
             "ip_address": row.ip_address,
             "port": row.port,
             "is_reachable": row.is_reachable
