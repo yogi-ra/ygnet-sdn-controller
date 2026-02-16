@@ -66,19 +66,10 @@ class CiscoIosVlans(BaseVlans):
                 f"switchport access vlan {vlan_id}",
             ]
             self.device_handler.send_config_set(commands)
-            # Clear cache asynchronously to avoid blocking the response
-            threading.Thread(target=self._clear_vlan_cache_async).start()
             return True
         except Exception as e:
             self.device_handler.logger.error(f"Error assigning port {port} to VLAN {vlan_id}: {e}")
             return False
-
-    def _clear_vlan_cache_async(self):
-        """Asynchronously clear VLAN-related cache entries."""
-        try:
-            self.device_handler.clear_cache(["device_vlans_brief"])
-        except Exception as e:
-            self.device_handler.logger.error(f"Error clearing VLAN cache: {e}")
 
     def configure_interface_vlan(self, interface_config: dict) -> bool:
         try:
@@ -87,30 +78,27 @@ class CiscoIosVlans(BaseVlans):
             ]
 
             if interface_config['mode'] == "access":
+                commands.append("no switchport trunk encapsulation")
+                commands.append("no switchport mode trunk")
+                commands.append("no switchport trunk native vlan")
+                commands.append("no switchport trunk allowed vlan")
                 commands.append("switchport mode access")
                 if interface_config.get('access_vlan'):
                     commands.append(f"switchport access vlan {interface_config['access_vlan']}")
             elif interface_config['mode'] == "trunk":
+                commands.append("no switchport access vlan")
+                commands.append("switchport trunk encapsulation dot1q")
                 commands.append("switchport mode trunk")
-                if interface_config.get('allowed_vlans'):
-                    commands.append(f"switchport trunk allowed vlan {interface_config['allowed_vlans']}")
                 if interface_config.get('native_vlan'):
                     commands.append(f"switchport trunk native vlan {interface_config['native_vlan']}")
+                if interface_config.get('allowed_vlans'):
+                    commands.append(f"switchport trunk allowed vlan {",".join(map(str, interface_config['allowed_vlans']))}")
             
             self.device_handler.send_config_set(commands)
-            # Clear cache asynchronously to avoid blocking the response
-            threading.Thread(target=self._clear_interface_vlan_cache_async).start()
             return True
         except Exception as e:
             self.device_handler.logger.error(f"Error configuring interface VLAN for {interface_config.get('interface_name')}: {e}")
             return False
-
-    def _clear_interface_vlan_cache_async(self):
-        """Asynchronously clear interface and VLAN-related cache entries."""
-        try:
-            self.device_handler.clear_cache(["device_vlans_brief", "device_interfaces_brief"])
-        except Exception as e:
-            self.device_handler.logger.error(f"Error clearing interface/VLAN cache: {e}")
 
     def create_vlan(self, vlan_id: int, name: str = None) -> bool:
         """Create a new VLAN."""
@@ -119,8 +107,6 @@ class CiscoIosVlans(BaseVlans):
             if name:
                 commands.append(f"name {name}")
             self.device_handler.send_config_set(commands)
-            # Clear VLAN cache asynchronously
-            threading.Thread(target=self._clear_vlan_cache_async).start()
             return True
         except Exception as e:
             self.device_handler.logger.error(f"Error creating VLAN {vlan_id}: {e}")
@@ -134,8 +120,6 @@ class CiscoIosVlans(BaseVlans):
                 f"name {new_name}",
             ]
             self.device_handler.send_config_set(commands)
-            # Clear VLAN cache asynchronously
-            threading.Thread(target=self._clear_vlan_cache_async).start()
             return True
         except Exception as e:
             self.device_handler.logger.error(f"Error changing VLAN {vlan_id} name to {new_name}: {e}")
@@ -146,8 +130,6 @@ class CiscoIosVlans(BaseVlans):
         try:
             commands = [f"no vlan {vlan_id}"]
             self.device_handler.send_config_set(commands)
-            # Clear VLAN cache asynchronously
-            threading.Thread(target=self._clear_vlan_cache_async).start()
             return True
         except Exception as e:
             self.device_handler.logger.error(f"Error deleting VLAN {vlan_id}: {e}")

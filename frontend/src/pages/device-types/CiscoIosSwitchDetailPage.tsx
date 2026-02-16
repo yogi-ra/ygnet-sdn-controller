@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo} from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   Container,
@@ -19,14 +19,13 @@ import {
 } from "react-bootstrap";
 import { useAuth } from "../../hooks/useAuth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useAssignPortToVlan, useChangeVlanName, useCreateVlan, useDeleteVlan } from '../../api/vlans';
+import { useChangeVlanName, useCreateVlan, useDeleteVlan } from '../../api/vlans';
 import { useConfigureInterfaceVlan, useSetInterfaceDescription } from '../../api/interfaces';
 import { useTaskPolling } from "../../hooks/useTaskPolling";
 import { API_BASE_URL } from '../../api';
 
-// Separate hook for system information with lazy loading
+// ============= HOOKS (tetap sama) =============
 const useSystemInfo = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean, deviceData: any) => {
-  // Return the version information from the passed device data instead of making another request
   return {
     data: deviceData?.version || {},
     isLoading: false,
@@ -34,7 +33,6 @@ const useSystemInfo = (deviceId: string | undefined, enabled: boolean, isDeviceR
   };
 };
 
-// Separate hook for clock information with task-based fetching and localStorage caching
 const useClockInfo = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
@@ -48,14 +46,12 @@ const useClockInfo = (deviceId: string | undefined, enabled: boolean, isDeviceRe
   const { taskStatus, loading: taskLoading, error: taskError } = useTaskPolling(taskId, {
     interval: 250,
     onSuccess: (result) => {
-      // Handle the case where result is a string directly (clock data)
       if (typeof result === 'string') {
         setClockData(result || "N/A");
         if (cacheKey) {
             localStorage.setItem(cacheKey, result || "N/A");
         }
       } else if (result && typeof result === 'object' && result.clock) {
-        // Handle the case where result is an object with a clock property
         setClockData(result.clock || "N/A");
         if (cacheKey) {
             localStorage.setItem(cacheKey, result.clock || "N/A");
@@ -63,13 +59,11 @@ const useClockInfo = (deviceId: string | undefined, enabled: boolean, isDeviceRe
       } else {
         setClockData("N/A");
       }
-      // Clear the task ID to stop polling
       setTaskId(null);
       setLoading(false);
     },
     onError: (err) => {
       setError(err);
-      // Clear the task ID to stop polling
       setTaskId(null);
       setLoading(false);
     }
@@ -81,7 +75,7 @@ const useClockInfo = (deviceId: string | undefined, enabled: boolean, isDeviceRe
     try {
       setLoading(true);
       setError(null);
-      setTaskId(null); // Reset task ID before new request
+      setTaskId(null);
 
       if (cacheKey) {
         const cachedData = localStorage.getItem(cacheKey);
@@ -110,18 +104,15 @@ const useClockInfo = (deviceId: string | undefined, enabled: boolean, isDeviceRe
       
       const data = await response.json();
       
-      // If we get a task_id, start polling
       if (data && data.task_id) {
         setTaskId(data.task_id);
       } else if (data && data.clock) {
-        // If we get direct data, use it
         setClockData(data.clock || "N/A");
         if (cacheKey) {
             localStorage.setItem(cacheKey, data.clock || "N/A");
         }
         setLoading(false);
       } else {
-        // Handle case where we get an unexpected response
         setClockData("N/A");
         setLoading(false);
       }
@@ -131,7 +122,6 @@ const useClockInfo = (deviceId: string | undefined, enabled: boolean, isDeviceRe
     }
   }, [token, deviceId, enabled, isDeviceReachable, logout, navigate, cacheKey]);
 
-  // Reset state when deviceId or enabled changes
   useEffect(() => {
     setTaskId(null);
     if (cacheKey) {
@@ -148,7 +138,6 @@ const useClockInfo = (deviceId: string | undefined, enabled: boolean, isDeviceRe
     setError(null);
   }, [deviceId, enabled, cacheKey]);
 
-  // Fetch data when enabled and device is reachable
   useEffect(() => {
     if (enabled && isDeviceReachable && deviceId) {
       fetchClockInfo();
@@ -171,7 +160,6 @@ const useClockInfo = (deviceId: string | undefined, enabled: boolean, isDeviceRe
   };
 };
 
-// Separate hook for interfaces with task-based fetching and localStorage caching
 const useInterfaces = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
@@ -185,23 +173,19 @@ const useInterfaces = (deviceId: string | undefined, enabled: boolean, isDeviceR
   const { taskStatus, loading: taskLoading, error: taskError } = useTaskPolling(taskId, {
     interval: 250,
     onSuccess: (result) => {
-      // Handle the case where result is an array directly (interfaces data)
       if (Array.isArray(result)) {
         setInterfacesData(result);
-        // Cache the result in localStorage
         if (cacheKey) {
           localStorage.setItem(cacheKey, JSON.stringify(result));
         }
       } else {
         setInterfacesData([]);
       }
-      // Clear the task ID to stop polling
       setTaskId(null);
       setLoading(false);
     },
     onError: (err) => {
       setError(err);
-      // Clear the task ID to stop polling
       setTaskId(null);
       setLoading(false);
     }
@@ -213,9 +197,8 @@ const useInterfaces = (deviceId: string | undefined, enabled: boolean, isDeviceR
     try {
       setLoading(true);
       setError(null);
-      setTaskId(null); // Reset task ID before new request
+      setTaskId(null);
 
-      // Check if data exists in localStorage cache
       if (cacheKey) {
         const cachedData = localStorage.getItem(cacheKey);
         if (cachedData) {
@@ -244,19 +227,15 @@ const useInterfaces = (deviceId: string | undefined, enabled: boolean, isDeviceR
       
       const data = await response.json();
       
-      // If we get a task_id, start polling
       if (data && data.task_id) {
         setTaskId(data.task_id);
       } else if (Array.isArray(data)) {
-        // If we get direct data, use it
         setInterfacesData(data);
-        // Cache the result in localStorage
         if (cacheKey) {
           localStorage.setItem(cacheKey, JSON.stringify(data));
         }
         setLoading(false);
       } else {
-        // Handle case where we get an unexpected response
         setInterfacesData([]);
         setLoading(false);
       }
@@ -266,10 +245,8 @@ const useInterfaces = (deviceId: string | undefined, enabled: boolean, isDeviceR
     }
   }, [token, deviceId, enabled, isDeviceReachable, logout, navigate, cacheKey]);
 
-  // Reset state when deviceId or enabled changes
   useEffect(() => {
     setTaskId(null);
-    // Check for cached data when component mounts
     if (cacheKey) {
       const cachedData = localStorage.getItem(cacheKey);
       if (cachedData) {
@@ -284,18 +261,16 @@ const useInterfaces = (deviceId: string | undefined, enabled: boolean, isDeviceR
     setError(null);
   }, [deviceId, enabled, cacheKey]);
 
-  // Fetch data when enabled and device is reachable
   useEffect(() => {
     if (enabled && isDeviceReachable && deviceId) {
       fetchInterfaces();
     }
   }, [enabled, isDeviceReachable, deviceId, fetchInterfaces]);
 
-  // Function to clear cache
   const clearCache = useCallback(() => {
     if (cacheKey) {
       localStorage.removeItem(cacheKey);
-      setInterfacesData(null); // Reset to null to trigger a refetch
+      setInterfacesData(null);
     }
   }, [cacheKey]);
 
@@ -308,7 +283,6 @@ const useInterfaces = (deviceId: string | undefined, enabled: boolean, isDeviceR
   };
 };
 
-// Separate hook for interface descriptions with task-based fetching and localStorage caching
 const useInterfaceDescriptions = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
@@ -322,23 +296,19 @@ const useInterfaceDescriptions = (deviceId: string | undefined, enabled: boolean
   const { taskStatus, loading: taskLoading, error: taskError } = useTaskPolling(taskId, {
     interval: 250,
     onSuccess: (result) => {
-      // Handle the case where result is an array directly (interface descriptions data)
       if (Array.isArray(result)) {
         setDescriptionsData(result);
-        // Cache the result in localStorage
         if (cacheKey) {
           localStorage.setItem(cacheKey, JSON.stringify(result));
         }
       } else {
         setDescriptionsData([]);
       }
-      // Clear the task ID to stop polling
       setTaskId(null);
       setLoading(false);
     },
     onError: (err) => {
       setError(err);
-      // Clear the task ID to stop polling
       setTaskId(null);
       setLoading(false);
     }
@@ -350,9 +320,8 @@ const useInterfaceDescriptions = (deviceId: string | undefined, enabled: boolean
     try {
       setLoading(true);
       setError(null);
-      setTaskId(null); // Reset task ID before new request
+      setTaskId(null);
 
-      // Check if data exists in localStorage cache
       if (cacheKey) {
         const cachedData = localStorage.getItem(cacheKey);
         if (cachedData) {
@@ -381,19 +350,15 @@ const useInterfaceDescriptions = (deviceId: string | undefined, enabled: boolean
       
       const data = await response.json();
       
-      // If we get a task_id, start polling
       if (data && data.task_id) {
         setTaskId(data.task_id);
       } else if (Array.isArray(data)) {
-        // If we get direct data, use it
         setDescriptionsData(data);
-        // Cache the result in localStorage
         if (cacheKey) {
           localStorage.setItem(cacheKey, JSON.stringify(data));
         }
         setLoading(false);
       } else {
-        // Handle case where we get an unexpected response
         setDescriptionsData([]);
         setLoading(false);
       }
@@ -403,10 +368,8 @@ const useInterfaceDescriptions = (deviceId: string | undefined, enabled: boolean
     }
   }, [token, deviceId, enabled, isDeviceReachable, logout, navigate, cacheKey]);
 
-  // Reset state when deviceId or enabled changes
   useEffect(() => {
     setTaskId(null);
-    // Check for cached data when component mounts
     if (cacheKey) {
       const cachedData = localStorage.getItem(cacheKey);
       if (cachedData) {
@@ -421,18 +384,16 @@ const useInterfaceDescriptions = (deviceId: string | undefined, enabled: boolean
     setError(null);
   }, [deviceId, enabled, cacheKey]);
 
-  // Fetch data when enabled and device is reachable
   useEffect(() => {
     if (enabled && isDeviceReachable && deviceId) {
       fetchInterfaceDescriptions();
     }
   }, [enabled, isDeviceReachable, deviceId, fetchInterfaceDescriptions]);
 
-  // Function to clear cache
   const clearCache = useCallback(() => {
     if (cacheKey) {
       localStorage.removeItem(cacheKey);
-      setDescriptionsData(null); // Reset to null to trigger a refetch
+      setDescriptionsData(null);
     }
   }, [cacheKey]);
 
@@ -445,7 +406,6 @@ const useInterfaceDescriptions = (deviceId: string | undefined, enabled: boolean
   };
 };
 
-// Separate hook for VLAN information with task-based fetching and localStorage caching
 const useVlanInfo = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
@@ -459,23 +419,19 @@ const useVlanInfo = (deviceId: string | undefined, enabled: boolean, isDeviceRea
   const { taskStatus, loading: taskLoading, error: taskError } = useTaskPolling(taskId, {
     interval: 250,
     onSuccess: (result) => {
-      // Handle the case where result is an array directly (VLAN data)
       if (Array.isArray(result)) {
         setVlanData(result);
-        // Cache the result in localStorage
         if (cacheKey) {
           localStorage.setItem(cacheKey, JSON.stringify(result));
         }
       } else {
         setVlanData([]);
       }
-      // Clear the task ID to stop polling
       setTaskId(null);
       setLoading(false);
     },
     onError: (err) => {
       setError(err);
-      // Clear the task ID to stop polling
       setTaskId(null);
       setLoading(false);
     }
@@ -487,9 +443,8 @@ const useVlanInfo = (deviceId: string | undefined, enabled: boolean, isDeviceRea
     try {
       setLoading(true);
       setError(null);
-      setTaskId(null); // Reset task ID before new request
+      setTaskId(null);
 
-      // Check if data exists in localStorage cache
       if (cacheKey) {
         const cachedData = localStorage.getItem(cacheKey);
         if (cachedData) {
@@ -518,19 +473,15 @@ const useVlanInfo = (deviceId: string | undefined, enabled: boolean, isDeviceRea
       
       const data = await response.json();
       
-      // If we get a task_id, start polling
       if (data && data.task_id) {
         setTaskId(data.task_id);
       } else if (Array.isArray(data)) {
-        // If we get direct data, use it
         setVlanData(data);
-        // Cache the result in localStorage
         if (cacheKey) {
           localStorage.setItem(cacheKey, JSON.stringify(data));
         }
         setLoading(false);
       } else {
-        // Handle case where we get an unexpected response
         setVlanData([]);
         setLoading(false);
       }
@@ -540,10 +491,8 @@ const useVlanInfo = (deviceId: string | undefined, enabled: boolean, isDeviceRea
     }
   }, [token, deviceId, enabled, isDeviceReachable, logout, navigate, cacheKey]);
 
-  // Reset state when deviceId or enabled changes
   useEffect(() => {
     setTaskId(null);
-    // Check for cached data when component mounts
     if (cacheKey) {
       const cachedData = localStorage.getItem(cacheKey);
       if (cachedData) {
@@ -558,18 +507,16 @@ const useVlanInfo = (deviceId: string | undefined, enabled: boolean, isDeviceRea
     setError(null);
   }, [deviceId, enabled, cacheKey]);
 
-  // Fetch data when enabled and device is reachable
   useEffect(() => {
     if (enabled && isDeviceReachable && deviceId) {
       fetchVlanInfo();
     }
   }, [enabled, isDeviceReachable, deviceId, fetchVlanInfo]);
 
-  // Function to clear cache
   const clearCache = useCallback(() => {
     if (cacheKey) {
       localStorage.removeItem(cacheKey);
-      setVlanData(null); // Reset to null to trigger a refetch
+      setVlanData(null);
     }
   }, [cacheKey]);
 
@@ -582,7 +529,6 @@ const useVlanInfo = (deviceId: string | undefined, enabled: boolean, isDeviceRea
   };
 };
 
-// Separate hook for ARP table with task-based fetching and localStorage caching
 const useArpTable = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
@@ -596,23 +542,19 @@ const useArpTable = (deviceId: string | undefined, enabled: boolean, isDeviceRea
   const { taskStatus, loading: taskLoading, error: taskError } = useTaskPolling(taskId, {
     interval: 250,
     onSuccess: (result) => {
-      // Handle the case where result is an array directly (ARP data)
       if (Array.isArray(result)) {
         setArpData(result);
-        // Cache the result in localStorage
         if (cacheKey) {
           localStorage.setItem(cacheKey, JSON.stringify(result));
         }
       } else {
         setArpData([]);
       }
-      // Clear the task ID to stop polling
       setTaskId(null);
       setLoading(false);
     },
     onError: (err) => {
       setError(err);
-      // Clear the task ID to stop polling
       setTaskId(null);
       setLoading(false);
     }
@@ -624,9 +566,8 @@ const useArpTable = (deviceId: string | undefined, enabled: boolean, isDeviceRea
     try {
       setLoading(true);
       setError(null);
-      setTaskId(null); // Reset task ID before new request
+      setTaskId(null);
 
-      // Check if data exists in localStorage cache
       if (cacheKey) {
         const cachedData = localStorage.getItem(cacheKey);
         if (cachedData) {
@@ -655,19 +596,15 @@ const useArpTable = (deviceId: string | undefined, enabled: boolean, isDeviceRea
       
       const data = await response.json();
       
-      // If we get a task_id, start polling
       if (data && data.task_id) {
         setTaskId(data.task_id);
       } else if (Array.isArray(data)) {
-        // If we get direct data, use it
         setArpData(data);
-        // Cache the result in localStorage
         if (cacheKey) {
           localStorage.setItem(cacheKey, JSON.stringify(data));
         }
         setLoading(false);
       } else {
-        // Handle case where we get an unexpected response
         setArpData([]);
         setLoading(false);
       }
@@ -677,10 +614,8 @@ const useArpTable = (deviceId: string | undefined, enabled: boolean, isDeviceRea
     }
   }, [token, deviceId, enabled, isDeviceReachable, logout, navigate, cacheKey]);
 
-  // Reset state when deviceId or enabled changes
   useEffect(() => {
     setTaskId(null);
-    // Check for cached data when component mounts
     if (cacheKey) {
       const cachedData = localStorage.getItem(cacheKey);
       if (cachedData) {
@@ -695,18 +630,16 @@ const useArpTable = (deviceId: string | undefined, enabled: boolean, isDeviceRea
     setError(null);
   }, [deviceId, enabled, cacheKey]);
 
-  // Fetch data when enabled and device is reachable
   useEffect(() => {
     if (enabled && isDeviceReachable && deviceId) {
       fetchArpTable();
     }
   }, [enabled, isDeviceReachable, deviceId, fetchArpTable]);
 
-  // Function to clear cache
   const clearCache = useCallback(() => {
     if (cacheKey) {
       localStorage.removeItem(cacheKey);
-      setArpData(null); // Reset to null to trigger a refetch
+      setArpData(null);
     }
   }, [cacheKey]);
 
@@ -719,7 +652,6 @@ const useArpTable = (deviceId: string | undefined, enabled: boolean, isDeviceRea
   };
 };
 
-// Separate hook for CDP neighbors with task-based fetching and localStorage caching
 const useCdpNeighbors = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
@@ -842,7 +774,6 @@ const useCdpNeighbors = (deviceId: string | undefined, enabled: boolean, isDevic
   };
 };
 
-// Separate hook for LLDP neighbors with task-based fetching and localStorage caching
 const useLldpNeighbors = (deviceId: string | undefined, enabled: boolean, isDeviceReachable: boolean) => {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
@@ -965,23 +896,45 @@ const useLldpNeighbors = (deviceId: string | undefined, enabled: boolean, isDevi
   };
 };
 
-// Helper function to determine if interface is administratively up
+// ============= HELPER FUNCTIONS =============
+const isPhysicalInterface = (interfaceName: string) => {
+  if (!interfaceName) return false;
+  return /^(FastEthernet|Fa|GigabitEthernet|Gi|Ethernet|Eth)/i.test(interfaceName);
+};
+
+const formatInterfaceName = (name: string) => {
+  if (name.startsWith('FastEthernet')) return name.replace('FastEthernet', 'Fa');
+  if (name.startsWith('GigabitEthernet')) return name.replace('GigabitEthernet', 'Gi');
+  if (name.startsWith('Ethernet')) return name.replace('Ethernet', 'Eth');
+  return name;
+};
+
 const isInterfaceAdminUp = (status: string) => {
-  // Interface is administratively down only if explicitly marked as such
   return !status?.toLowerCase().includes("administratively down");
 };
 
+// ============= TYPE DEFINITIONS =============
+interface VlanInterfaceConfig {
+  interface_name: string;
+  mode: 'access' | 'trunk';
+  access_vlan?: number;
+  native_vlan?: number;
+  allowed_vlans?: string;
+}
+
+// ============= MAIN COMPONENT =============
 const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { token, logout } = useAuth();
   const queryClient = useQueryClient();
   
+  // ============= TAB STATE =============
   const [activeTab, setActiveTab] = useState("overview");
   const [activeDiscoveryTab, setActiveDiscoveryTab] = useState('arp');
-  const [activeVlanTab, setActiveVlanTab] = useState('create-vlan');
+  const [activeVlanTab, setActiveVlanTab] = useState('vlan-settings');
   
-  // Device reachability (always loaded)
+  // ============= DEVICE REACHABILITY =============
   const { data: isReachable = false } = useQuery<boolean, Error>({
     queryKey: ["deviceReachability", id],
     queryFn: async () => {
@@ -1001,36 +954,30 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
 
       return response.json();
     },
-    enabled: !!id && device?.is_reachable !== false, // Only enabled if device is not explicitly offline
-    initialData: device?.is_reachable, // Use initial data from passed device object
-    refetchInterval: 5000, // Poll reachability every 5 seconds
+    enabled: !!id && device?.is_reachable !== false,
+    initialData: device?.is_reachable,
+    refetchInterval: 5000,
   });
   
-  // Task state
+  // ============= TASK STATE =============
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
   const [taskAction, setTaskAction] = useState<string | null>(null);
   
-  // Use task polling hook
   const { taskStatus, loading: taskLoading, error: taskError } = useTaskPolling(currentTaskId, {
     interval: 1000,
     onSuccess: () => {
-      // Invalidate relevant queries to refresh data after task completion
       if (taskAction === 'toggleInterface') {
         queryClient.invalidateQueries({ queryKey: ["interfacesBrief", id] });
       } else if (taskAction === 'assignPortToVlan' || taskAction === 'changeVlanName' || 
                  taskAction === 'createVlan' || taskAction === 'deleteVlan' || 
-                 taskAction === 'configureInterfaceVlan') {
+                 taskAction === 'configureInterfaceVlan' || taskAction === 'addVlanMember') {
         queryClient.invalidateQueries({ queryKey: ["vlanInfo", id] });
-      } else if (taskAction === 'executeCommand') {
-        // No specific invalidation needed for command execution
       }
     }
   });
   
-  // Fetch interfaces once for both interfaces and VLANs tabs to avoid duplicate API calls
+  // ============= DATA FETCHING =============
   const { data: interfaces, isFetching: interfacesLoading, error: interfacesError, refetch: refetchInterfaces, clearCache: clearInterfacesCache } = useInterfaces(id, activeTab === "interfaces" || activeTab === "vlans", isReachable);
-  
-  // Lazy load data based on active tab
   const { data: systemInfo, isLoading: systemLoading, error: systemError } = useSystemInfo(id, activeTab === "overview", isReachable, device);
   const { data: clockInfo, isFetching: clockLoading, error: clockError, refetch: refetchClockInfo, clearCache: clearClockCache } = useClockInfo(id, activeTab === "overview", isReachable);
   const { data: vlanInfo, isFetching: vlanLoading, error: vlanError, refetch: refetchVlanInfo, clearCache: clearVlanInfoCache } = useVlanInfo(id, activeTab === "vlans", isReachable);
@@ -1039,45 +986,115 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
   const { data: lldpNeighbors, isFetching: lldpLoading, error: lldpError, refetch: refetchLldpNeighbors, clearCache: clearLldpCache } = useLldpNeighbors(id, activeTab === 'discovery' && activeDiscoveryTab === 'lldp', isReachable);
   const { data: interfaceDescriptions, isFetching: interfaceDescriptionsLoading, error: interfaceDescriptionsError, refetch: refetchInterfaceDescriptions, clearCache: clearInterfaceDescriptionsCache } = useInterfaceDescriptions(id, activeTab === "interfaces", isReachable);
   
-  // Command execution state
+  // ============= COMMAND EXECUTION STATE =============
   const [command, setCommand] = useState("");
   const [isConfigCommand, setIsConfigCommand] = useState(false);
   const [commandOutput, setCommandOutput] = useState<string | null>(null);
   const [deviceLevel, setDeviceLevel] = useState<string | null>(null);
   const [executingCommand, setExecutingCommand] = useState(false);
   const [commandError, setCommandError] = useState<string | null>(null);
-  const [selectedPorts, setSelectedPorts] = useState<{ [key: string]: string }>({});
   
-  // Interface toggle loading states
+  // ============= INTERFACE STATES =============
   const [togglingInterfaces, setTogglingInterfaces] = useState<{ [key: string]: boolean }>({});
+  const [descriptionEdits, setDescriptionEdits] = useState<{ [key: string]: string }>({});
+  const [savingDescription, setSavingDescription] = useState<{ [key: string]: boolean }>({});
   
-  // Toast state
+  // ============= TOAST STATE =============
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastVariant, setToastVariant] = useState<'success' | 'danger'>('success');
 
-  // VLAN specific state from VlanConfiguration
-  const [interfaceConfigs, setInterfaceConfigs] = useState<{ [key: string]: any }>({});
+  // ============= VLAN MEMBERS STATE =============
+  const [vlanMembers, setVlanMembers] = useState<any[]>([]);
+  const [newVlanMemberId, setNewVlanMemberId] = useState<string>('');
+  const [newVlanMemberName, setNewVlanMemberName] = useState<string>('');
+  const [isAddingVlanMember, setIsAddingVlanMember] = useState(false);
+  const [selectedVlanMembers, setSelectedVlanMembers] = useState<string[]>([]);
+  const [showDeleteVlanMemberModal, setShowDeleteVlanMemberModal] = useState(false);
+  const [vlanMemberToDelete, setVlanMemberToDelete] = useState<string | null>(null);
+  const [isDeletingVlanMember, setIsDeletingVlanMember] = useState(false);
+  const [permitVlanSearch, setPermitVlanSearch] = useState<{ [key: string]: string }>({});
+  const [showPermitVlanDropdown, setShowPermitVlanDropdown] = useState<{ [key: string]: boolean }>({});
+
+  // ============= VLAN SETTINGS STATE - PER PORT CONFIG =============
+  const physicalInterfaces = useMemo(() => {
+    return interfaces?.filter((iface: any) => {
+      const ifaceName = iface.interface || iface.intf || '';
+      return isPhysicalInterface(ifaceName);
+    }) || [];
+  }, [interfaces]);
+
+  const [selectedPorts, setSelectedPorts] = useState<string[]>([]);
+  const [portSearchTerm, setPortSearchTerm] = useState<string>('');
+  const [showPortDropdown, setShowPortDropdown] = useState<boolean>(false);
+  const [portConfigs, setPortConfigs] = useState<{ [key: string]: any }>({});
+  const [applyingPortConfig, setApplyingPortConfig] = useState(false);
+
+  // ============= VLAN MANAGEMENT STATE =============
   const [vlanNameEdits, setVlanNameEdits] = useState<{ [key: string]: string }>({});
-  const [newVlanId, setNewVlanId] = useState<string>('');
-  const [newVlanName, setNewVlanName] = useState<string>('');
-  const [isCreatingVlan, setIsCreatingVlan] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [vlanToDelete, setVlanToDelete] = useState<string | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [applyingConfigs, setApplyingConfigs] = useState<{ [key: string]: boolean }>({});
-  const [descriptionEdits, setDescriptionEdits] = useState<{ [key: string]: string }>({});
-  const [savingDescription, setSavingDescription] = useState<{ [key: string]: boolean }>({});
 
-  // API hooks
-  const assignPortToVlan = useAssignPortToVlan(id);
-  const changeVlanName = useChangeVlanName(id);
-  const createVlan = useCreateVlan(id);
-  const deleteVlan = useDeleteVlan(id);
-  const configureInterfaceVlan = useConfigureInterfaceVlan(id);
-  const setInterfaceDescription = useSetInterfaceDescription(id);
+  // ============= API HOOKS =============
+  const changeVlanName = useChangeVlanName(id || '');
+  const createVlan = useCreateVlan(id || '');
+  const deleteVlan = useDeleteVlan(id || '');
+  const configureInterfaceVlan = useConfigureInterfaceVlan(id || '');
+  const setInterfaceDescription = useSetInterfaceDescription(id || '');
 
-  const handleRefresh = () => {
+  // ============= MEMOIZED VALUES =============
+  const vlanOptions = useMemo(() => {
+    return vlanMembers?.filter((v: any) => (v.vlan_id || v.id) !== 1) || [];
+  }, [vlanMembers]);
+
+  const filteredPorts = useMemo(() => {
+    return physicalInterfaces
+      .map((iface: any) => iface.interface || iface.intf)
+      .filter((port: string) => 
+        !selectedPorts.includes(port) && 
+        port.toLowerCase().includes(portSearchTerm.toLowerCase())
+      );
+  }, [physicalInterfaces, selectedPorts, portSearchTerm]);
+
+  // ============= EFFECTS =============
+  useEffect(() => {
+    if (vlanInfo && vlanInfo.length > 0) {
+      setVlanMembers(vlanInfo);
+    }
+  }, [vlanInfo]);
+
+  // Initialize port configs for selected ports only
+  useEffect(() => {
+    const newConfigs = { ...portConfigs };
+    let changed = false;
+
+    selectedPorts.forEach(portName => {
+      if (!newConfigs[portName]) {
+        newConfigs[portName] = {
+          vlanType: 'Access',
+          accessVlan: '1',
+          nativeVlan: '1',
+          permitVlan: [],
+        };
+        changed = true;
+      }
+    });
+
+    if (changed) {
+      setPortConfigs(newConfigs);
+    }
+  }, [selectedPorts]);
+
+  // Reset when leaving VLAN Settings tab
+  useEffect(() => {
+    if (activeVlanTab !== 'vlan-settings') {
+      setSelectedPorts([]);
+      setPortSearchTerm('');
+      setShowPortDropdown(false);
+      setPortConfigs({});
+    }
+  }, [activeVlanTab]);
+
+  // ============= HANDLERS =============
+  const handleRefresh = useCallback(() => {
     clearInterfacesCache();
     clearInterfaceDescriptionsCache();
     clearVlanInfoCache();
@@ -1092,43 +1109,297 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
     refetchCdpNeighbors();
     refetchLldpNeighbors();
     refetchClockInfo();
-  };
+  }, [
+    clearInterfacesCache, clearInterfaceDescriptionsCache, clearVlanInfoCache,
+    clearArpTableCache, clearCdpCache, clearLldpCache, clearClockCache,
+    refetchInterfaces, refetchInterfaceDescriptions, refetchVlanInfo,
+    refetchArpTable, refetchCdpNeighbors, refetchLldpNeighbors, refetchClockInfo
+  ]);
 
-  useEffect(() => {
-    if (interfaces && interfaces.length > 0) {
-      const initialConfigs: { [key: string]: any } = {};
-      interfaces.forEach(iface => {
-        const ifaceName = iface.interface || iface.intf;
-        if (ifaceName) {
-          initialConfigs[ifaceName] = {
-            mode: 'access', // Default to access mode
-            accessVlan: '',
-            allowedVlans: '',
-            nativeVlan: '',
-          };
-        }
-      });
-      setInterfaceConfigs(initialConfigs);
-    }
-  }, [interfaces]);
-
-  // Handle tab changes
   const handleTabSelect = (tabKey: string | null) => {
     if (tabKey) {
       setActiveTab(tabKey);
     }
   };
 
-  const handleInterfaceConfigChange = (ifaceName: string, field: string, value: string) => {
-    setInterfaceConfigs(prev => ({
-      ...prev,
-      [ifaceName]: {
-        ...prev[ifaceName],
-        [field]: value,
-      },
-    }));
+  // ============= VLAN MEMBERS HANDLERS =============
+  const handleAddVlanMember = async () => {
+    if (!id || !newVlanMemberId) return;
+
+    setIsAddingVlanMember(true);
+    try {
+      const vlanIdNum = parseInt(newVlanMemberId);
+      if (isNaN(vlanIdNum) || vlanIdNum < 1 || vlanIdNum > 4094) {
+        throw new Error("VLAN ID must be between 1 and 4094");
+      }
+
+      setTaskAction('createVlan');
+      const response = await createVlan.mutateAsync({ 
+        id: vlanIdNum, 
+        name: newVlanMemberName || `VLAN${vlanIdNum}` 
+      });
+      setCurrentTaskId(response.task_id);
+      
+      setNewVlanMemberId('');
+      setNewVlanMemberName('');
+    } catch (err: any) {
+      setToastMessage(`Error adding VLAN member: ${err.message || 'Unknown error'}`);
+      setToastVariant('danger');
+      setShowToast(true);
+    } finally {
+      setIsAddingVlanMember(false);
+    }
   };
 
+  const handleSelectVlanMember = (vlanId: string) => {
+    setSelectedVlanMembers(prev => {
+      if (prev.includes(vlanId)) {
+        return prev.filter(id => id !== vlanId);
+      } else {
+        return [...prev, vlanId];
+      }
+    });
+  };
+
+  const handleSelectAllVlanMembers = () => {
+    if (vlanMembers.length === selectedVlanMembers.length) {
+      setSelectedVlanMembers([]);
+    } else {
+      setSelectedVlanMembers(vlanMembers.map(v => v.vlan_id || v.id));
+    }
+  };
+
+  const handleDeleteVlanMember = async (vlanId: string) => {
+    setIsDeletingVlanMember(true);
+    try {
+      setTaskAction('deleteVlan');
+      const response = await deleteVlan.mutateAsync(vlanId);
+      setCurrentTaskId(response.task_id);
+      setToastMessage(`Successfully deleted VLAN ${vlanId}`);
+      setToastVariant('success');
+      setShowToast(true);
+    } catch (err: any) {
+      setToastMessage(`Error deleting VLAN: ${err.message || 'Unknown error'}`);
+      setToastVariant('danger');
+      setShowToast(true);
+    } finally {
+      setIsDeletingVlanMember(false);
+      setShowDeleteVlanMemberModal(false);
+      setVlanMemberToDelete(null);
+      setSelectedVlanMembers([]);
+    }
+  };
+
+  const handleBulkDeleteVlanMembers = async () => {
+    if (selectedVlanMembers.length === 0) return;
+    
+    setIsDeletingVlanMember(true);
+    try {
+      for (const vlanId of selectedVlanMembers) {
+        setTaskAction('deleteVlan');
+        await deleteVlan.mutateAsync(vlanId);
+      }
+      setToastMessage(`Successfully deleted ${selectedVlanMembers.length} VLAN(s)`);
+      setToastVariant('success');
+      setShowToast(true);
+    } catch (err: any) {
+      setToastMessage(`Error deleting VLANs: ${err.message || 'Unknown error'}`);
+      setToastVariant('danger');
+      setShowToast(true);
+    } finally {
+      setIsDeletingVlanMember(false);
+      setSelectedVlanMembers([]);
+    }
+  };
+
+  const handleAddPermitVlan = useCallback((portName: string, vlanId: string) => {
+    setPortConfigs(prev => {
+      const currentPermitVlans = prev[portName]?.permitVlans || [];
+      if (!currentPermitVlans.includes(vlanId) && vlanId !== '1') {
+        console.log(`Adding VLAN ${vlanId} to ${portName}, current:`, currentPermitVlans);
+        return {
+          ...prev,
+          [portName]: {
+            ...prev[portName],
+            permitVlans: [...currentPermitVlans, vlanId]
+          }
+        };
+      }
+      return prev;
+    });
+  }, []);
+
+  const handleRemovePermitVlan = useCallback((portName: string, vlanId: string) => {
+    setPortConfigs(prev => {
+      const newPermitVlans = (prev[portName]?.permitVlans || []).filter(id => id !== vlanId);
+      console.log(`Removing VLAN ${vlanId} from ${portName}, new:`, newPermitVlans);
+      return {
+        ...prev,
+        [portName]: {
+          ...prev[portName],
+          permitVlans: newPermitVlans
+        }
+      };
+    });
+  }, []);
+
+  const handleAddAllPermitVlans = useCallback((portName: string) => {
+    setPortConfigs(prev => {
+      const allVlanIds = vlanMembers
+        .map(v => v.vlan_id || v.id)
+        .filter((id: string) => id !== '1');
+      
+      return {
+        ...prev,
+        [portName]: {
+          ...prev[portName],
+          permitVlans: allVlanIds
+        }
+      };
+    });
+  }, [vlanMembers]);
+
+  const handleClearPermitVlans = useCallback((portName: string) => {
+    setPortConfigs(prev => ({
+      ...prev,
+      [portName]: {
+        ...prev[portName],
+        permitVlans: []
+      }
+    }));
+  }, []);
+
+  // ============= PORT FILTER HANDLERS =============
+  const handleAddPortToFilter = useCallback((portName: string) => {
+    setSelectedPorts(prev => {
+      if (!prev.includes(portName)) {
+        setPortConfigs(configs => ({
+          ...configs,
+          [portName]: {
+            vlanType: 'Access',
+            accessVlan: '1',
+            nativeVlan: '1',
+            permitVlans: [],
+          }
+        }));
+        return [...prev, portName];
+      }
+      return prev;
+    });
+  }, []);
+
+  const handleRemovePortFromFilter = useCallback((portName: string) => {
+    setSelectedPorts(prev => prev.filter(p => p !== portName));
+    setPortConfigs(prev => {
+      const newConfigs = { ...prev };
+      delete newConfigs[portName];
+      return newConfigs;
+    });
+  }, []);
+
+  // ============= PORT CONFIG HANDLERS =============
+  const handleVlanTypeChange = useCallback((portName: string, value: string) => {
+    setPortConfigs(prev => ({
+      ...prev,
+      [portName]: {
+        ...prev[portName],
+        vlanType: value,
+        accessVlan: value === 'Access' ? prev[portName]?.accessVlan || '1' : '',
+        nativeVlan: value === 'Trunk' ? prev[portName]?.nativeVlan || '1' : '1',
+        permitVlan: value === 'Trunk' ? prev[portName]?.permitVlan || '' : ''
+      }
+    }));
+  }, []);
+
+  const handleAccessVlanChange = useCallback((portName: string, value: string) => {
+    setPortConfigs(prev => ({
+      ...prev,
+      [portName]: {
+        ...prev[portName],
+        accessVlan: value
+      }
+    }));
+  }, []);
+
+  const handleNativeVlanChange = useCallback((portName: string, value: string) => {
+    setPortConfigs(prev => ({
+      ...prev,
+      [portName]: {
+        ...prev[portName],
+        nativeVlan: value
+      }
+    }));
+  }, []);
+
+  const handlePermitVlanChange = useCallback((portName: string, value: string) => {
+    setPortConfigs(prev => ({
+      ...prev,
+      [portName]: {
+        ...prev[portName],
+        permitVlan: value
+      }
+    }));
+  }, []);
+
+  const handleApplyPortConfig = async () => {
+    if (!id || selectedPorts.length === 0) return;
+
+    setApplyingPortConfig(true);
+    
+    try {
+      const configsArray: VlanInterfaceConfig[] = selectedPorts
+        .map(portName => {
+          const config = portConfigs[portName];
+          if (!config) return null;
+          
+          const vlanConfig: VlanInterfaceConfig = {
+            interface_name: portName,
+            mode: config.vlanType.toLowerCase() as 'access' | 'trunk',
+          };
+          
+          if (config.vlanType === 'Access') {
+            if (config.accessVlan && config.accessVlan !== '') {
+              vlanConfig.access_vlan = parseInt(config.accessVlan);
+            }
+          } else if (config.vlanType === 'Trunk') {
+            if (config.nativeVlan && config.nativeVlan !== '') {
+              vlanConfig.native_vlan = parseInt(config.nativeVlan);
+            }
+            
+            if (config.permitVlans && config.permitVlans.length > 0) {
+              if (config.permitVlans.includes('all')) {
+                vlanConfig.allowed_vlans = '1-4094';
+              } else {
+                vlanConfig.allowed_vlans = config.permitVlans;
+              }
+              console.log(`✅ Adding allowed_vlans for ${portName}:`, config.permitVlans);
+            }
+          }
+          
+          return vlanConfig;
+        })
+        .filter((config): config is VlanInterfaceConfig => config !== null);
+      
+      const response = await configureInterfaceVlan.mutateAsync({ 
+        configs: configsArray 
+      });
+      
+      if (response.task_ids && response.task_ids.length > 0) {
+        const lastTask = response.task_ids[response.task_ids.length - 1];
+        setCurrentTaskId(lastTask.task_id);
+      } else if (response.task_id) {
+        setCurrentTaskId(response.task_id);
+      }
+      
+      setTaskAction('configureInterfaceVlan');
+    } catch (err: any) {
+      console.error('❌ Error applying config:', err);
+    } finally {
+      setApplyingPortConfig(false);
+    }
+  };
+
+  // ============= VLAN NAME MANAGEMENT HANDLERS =============
   const handleVlanNameChange = (vlanId: string, newName: string) => {
     setVlanNameEdits(prev => ({
       ...prev,
@@ -1159,61 +1430,13 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
     }
   };
 
-  const handleCreateVlan = async () => {
-    if (!id || !newVlanId) return;
-
-    setIsCreatingVlan(true);
-    try {
-      const vlanIdNum = parseInt(newVlanId);
-      if (isNaN(vlanIdNum)) {
-        throw new Error("VLAN ID must be a number");
-      }
-
-      setTaskAction('createVlan');
-      const response = await createVlan.mutateAsync({ id: vlanIdNum, name: newVlanName || undefined });
-      setCurrentTaskId(response.task_id);
-    } catch (err: any) {
-      setToastMessage(`Error creating VLAN: ${err.message || 'Unknown error'}`);
-      setToastVariant('danger');
-      setShowToast(true);
-    } finally {
-      setIsCreatingVlan(false);
-    }
-  };
-
-  const openDeleteModal = (vlanId: string) => {
-    setVlanToDelete(vlanId);
-    setShowDeleteModal(true);
-  };
-
-  const confirmDeleteVlan = async () => {
-    if (!vlanToDelete) return;
-
-    setIsDeleting(true);
-    try {
-      setTaskAction('deleteVlan');
-      const response = await deleteVlan.mutateAsync(vlanToDelete);
-      setCurrentTaskId(response.task_id);
-    } catch (err: any) {
-      setToastMessage(`Error deleting VLAN: ${err.message || 'Unknown error'}`);
-      setToastVariant('danger');
-      setShowToast(true);
-    } finally {
-      setIsDeleting(false);
-      setShowDeleteModal(false);
-      setVlanToDelete(null);
-    }
-  };
-
-  // Handle interface toggle
+  // ============= INTERFACE HANDLERS =============
   const handleToggleInterface = async (interfaceName: string, currentState: string) => {
     if (!id || !token) return;
     
-    // Set loading state for this interface
     setTogglingInterfaces(prev => ({ ...prev, [interfaceName]: true }));
     setTaskAction('toggleInterface');
     
-    // Toggle based on administrative state, not operational state
     const newState = !isInterfaceAdminUp(currentState);
     
     try {
@@ -1239,82 +1462,14 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
       
       const data = await response.json();
       setCurrentTaskId(data.task_id);
-      
-      
     } catch (err: any) {
       console.error("Error toggling interface:", err);
-      // Show error toast
       setToastMessage(`Error toggling interface: ${err.message || "Unknown error"}`);
       setToastVariant('danger');
       setShowToast(true);
-      // Reset loading state for this interface
       setTogglingInterfaces(prev => {
         const newState = { ...prev };
         delete newState[interfaceName];
-        return newState;
-      });
-    }
-  };
-
-  const handlePortSelection = (vlanId: string, port: string) => {
-    setSelectedPorts(prev => ({
-      ...prev,
-      [vlanId]: port
-    }));
-  };
-
-  const handleAssignPort = async (vlanId: string) => {
-    const port = selectedPorts[vlanId];
-    if (!id || !port) return;
-
-    try {
-      setTaskAction('assignPortToVlan');
-      const response = await assignPortToVlan.mutateAsync({ vlanId, port });
-      setCurrentTaskId(response.task_id);
-    } catch (err: any) {
-      console.error("Error assigning port to VLAN:", err);
-      setToastMessage(`Error assigning port to VLAN: ${err.message || 'Unknown error'}`);
-      setToastVariant('danger');
-      setShowToast(true);
-    }
-  };
-
-  const handleApplyInterfaceConfig = async (ifaceName: string) => {
-    const config = interfaceConfigs[ifaceName];
-    if (!id || !config) return;
-
-    setApplyingConfigs(prev => ({ ...prev, [ifaceName]: true }));
-
-    try {
-      const vlanConfig: any = {
-        interface_name: ifaceName,
-        mode: config.mode,
-      };
-
-      if (config.mode === 'access') {
-        if (config.accessVlan) {
-          vlanConfig.access_vlan = parseInt(config.accessVlan);
-        }
-      } else if (config.mode === 'trunk') {
-        if (config.allowedVlans) {
-          vlanConfig.allowed_vlans = config.allowedVlans;
-        }
-        if (config.nativeVlan) {
-          vlanConfig.native_vlan = parseInt(config.nativeVlan);
-        }
-      }
-
-      setTaskAction('configureInterfaceVlan');
-      const response = await configureInterfaceVlan.mutateAsync(vlanConfig);
-      setCurrentTaskId(response.task_id);
-    } catch (err: any) {
-      setToastMessage(`Error configuring interface: ${err.message || "Unknown error"}`);
-      setToastVariant('danger');
-      setShowToast(true);
-    } finally {
-      setApplyingConfigs(prev => {
-        const newState = { ...prev };
-        delete newState[ifaceName];
         return newState;
       });
     }
@@ -1335,7 +1490,6 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
     });
   };
 
-
   const handleSaveDescription = async (ifaceName: string) => {
     const description = descriptionEdits[ifaceName];
     if (!id || description === undefined) return;
@@ -1351,6 +1505,7 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
     }
   };
 
+  // ============= COMMAND EXECUTION HANDLER =============
   const handleExecuteCommand = async (e: React.FormEvent) => {
     e.preventDefault();
     setExecutingCommand(true);
@@ -1391,88 +1546,59 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
     }
   };
 
-  
-
-  // Handle task completion
+  // ============= TASK COMPLETION EFFECT =============
   useEffect(() => {
     if (taskStatus?.status === 'SUCCESS') {
       if (taskAction === 'toggleInterface') {
-        // Show success toast
         setToastMessage('Interface toggled successfully');
         setToastVariant('success');
         setShowToast(true);
-        
-        // Reset interface loading states
         setTogglingInterfaces({});
-        
-        // Refresh interfaces to show latest changes
         clearInterfacesCache();
         refetchInterfaces();
       } else if (taskAction === 'setInterfaceDescription') {
         setToastMessage('Successfully changed device description');
         setToastVariant('success');
         setShowToast(true);
-
-        // Refresh interface descriptions to show latest changes
         clearInterfaceDescriptionsCache();
         refetchInterfaceDescriptions();
-      } else if (taskAction === 'assignPortToVlan') {
-        setToastMessage('Successfully assigned port to VLAN');
-        setToastVariant('success');
-        setShowToast(true);
-        
-        // Refresh VLANs to show latest changes
-        clearVlanInfoCache();
-        refetchVlanInfo();
       } else if (taskAction === 'changeVlanName') {
         setToastMessage(`Successfully changed VLAN name`);
         setToastVariant('success');
         setShowToast(true);
-        
-        // Refresh VLANs to show latest changes
         clearVlanInfoCache();
         refetchVlanInfo();
       } else if (taskAction === 'createVlan') {
-        setToastMessage('Successfully created VLAN');
+        setToastMessage('Successfully added VLAN member');
         setToastVariant('success');
         setShowToast(true);
-        setNewVlanId('');
-        setNewVlanName('');
-        
-        // Refresh VLANs to show latest changes
         clearVlanInfoCache();
         refetchVlanInfo();
       } else if (taskAction === 'deleteVlan') {
         setToastMessage('Successfully deleted VLAN');
         setToastVariant('success');
         setShowToast(true);
-        
-        // Refresh VLANs to show latest changes
         clearVlanInfoCache();
         refetchVlanInfo();
       } else if (taskAction === 'configureInterfaceVlan') {
-        setToastMessage('Successfully configured VLAN settings for interface');
+        setToastMessage('Successfully configured VLAN settings for port(s)');
         setToastVariant('success');
         setShowToast(true);
-        
-        // Refresh interfaces to show latest changes
         clearInterfacesCache();
         refetchInterfaces();
+        clearVlanInfoCache();
+        refetchVlanInfo();
       } else if (taskAction === 'executeCommand') {
-        // Handle command execution result
-        // The result can be in either 'result' or 'info' field depending on how the backend formats it
         const output = taskStatus.result || taskStatus.info || "No output";
         setCommandOutput(output);
-        setDeviceLevel(null); // Switch commands don't typically have a device level
+        setDeviceLevel(null);
         setExecutingCommand(false);
         setCommand("");
       }
       
-      // Reset task state
       setCurrentTaskId(null);
       setTaskAction(null);
     } else if (taskStatus?.status === 'FAILURE') {
-      // Handle task failure
       const errorMessage = taskStatus.error || 'Task failed';
       
       if (taskAction === 'toggleInterface') {
@@ -1480,72 +1606,59 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
         setToastVariant('danger');
         setShowToast(true);
         setTogglingInterfaces({});
-        
-        // Refresh interfaces to show latest changes
         clearInterfacesCache();
         refetchInterfaces();
       } else if (taskAction === 'setInterfaceDescription') {
-        setToastMessage(`Error changing device description ${errorMessage}`);
+        setToastMessage(`Error changing device description: ${errorMessage}`);
         setToastVariant('danger');
         setShowToast(true);
-
-        // Refresh interface descriptions to show latest changes
         clearInterfaceDescriptionsCache();
         refetchInterfaceDescriptions();
-      } else if (taskAction === 'assignPortToVlan') {
-        setToastMessage(`Error assigning port to VLAN: ${errorMessage}`);
-        setToastVariant('danger');
-        setShowToast(true);
-        
-        // Refresh VLANs to show latest changes
-        clearVlanInfoCache();
-        refetchVlanInfo();
       } else if (taskAction === 'changeVlanName') {
         setToastMessage(`Error changing VLAN name: ${errorMessage}`);
         setToastVariant('danger');
         setShowToast(true);
-        
-        // Refresh VLANs to show latest changes
         clearVlanInfoCache();
         refetchVlanInfo();
       } else if (taskAction === 'createVlan') {
-        setToastMessage(`Error creating VLAN: ${errorMessage}`);
+        setToastMessage(`Error adding VLAN member: ${errorMessage}`);
         setToastVariant('danger');
         setShowToast(true);
-        
-        // Refresh VLANs to show latest changes
         clearVlanInfoCache();
         refetchVlanInfo();
       } else if (taskAction === 'deleteVlan') {
         setToastMessage(`Error deleting VLAN: ${errorMessage}`);
         setToastVariant('danger');
         setShowToast(true);
-        
-        // Refresh VLANs to show latest changes
         clearVlanInfoCache();
         refetchVlanInfo();
       } else if (taskAction === 'configureInterfaceVlan') {
-        setToastMessage(`Error configuring interface VLAN: ${errorMessage}`);
+        setToastMessage(`Error configuring port VLAN: ${errorMessage}`);
         setToastVariant('danger');
         setShowToast(true);
-        
-        // Refresh interfaces to show latest changes
         clearInterfacesCache();
         refetchInterfaces();
+        clearVlanInfoCache();
+        refetchVlanInfo();
       } else if (taskAction === 'executeCommand') {
         setCommandError(errorMessage);
         setExecutingCommand(false);
         setCommand("");
       }
       
-      // Reset task state
       setCurrentTaskId(null);
       setTaskAction(null);
     }
-  }, [taskStatus, taskAction, vlanToDelete]);
+  }, [taskStatus, taskAction, clearInterfacesCache, clearInterfaceDescriptionsCache, clearVlanInfoCache, refetchInterfaces, refetchInterfaceDescriptions, refetchVlanInfo]);
+
+  // ============= EARLY RETURN =============
+  if (!id) {
+    return <Alert variant="danger">Device ID is required</Alert>;
+  }
 
   return (
     <Container fluid className="mt-4">
+      {/* Header Card */}
       <Row className="mb-4">
         <Col>
           <Card>
@@ -1576,6 +1689,7 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
         </Col>
       </Row>
 
+      {/* Task Error Alert */}
       {taskError && (
         <Row className="mb-3">
           <Col>
@@ -1586,6 +1700,7 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
         </Row>
       )}
 
+      {/* Main Tabs */}
       <Tabs
         activeKey={activeTab}
         onSelect={handleTabSelect}
@@ -1593,6 +1708,7 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
         mountOnEnter={true}
         unmountOnExit={true}
       >
+        {/* Overview Tab */}
         <Tab eventKey="overview" title="Overview">
           <Row className="mb-4">
             <Col>
@@ -1637,6 +1753,7 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
           </Row>
         </Tab>
         
+        {/* Interfaces Tab */}
         <Tab eventKey="interfaces" title="Interfaces">
           <Row className="mb-4">
             <Col>
@@ -1669,7 +1786,6 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
                           const isEditing = descriptionEdits.hasOwnProperty(ifaceName);
                           const editedDescription = descriptionEdits[ifaceName] ?? '';
 
-                          // Find matching description data for this interface
                           const descriptionEntry = interfaceDescriptions?.find((desc: any) => {
                             if (desc.port === ifaceName) return true;
                             const shortInterfaceName = ifaceName.replace(/^GigabitEthernet/, 'Gi')
@@ -1679,7 +1795,6 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
                                                               .replace(/^Loopback/, 'Lo')
                                                               .replace(/^Vlan/, 'Vl');
                             return desc.port === shortInterfaceName;
-
                           });
 
                           const currentDescription = descriptionEntry ? descriptionEntry.description : "N/A";
@@ -1755,210 +1870,523 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
           </Row>
         </Tab>
         
+        {/* VLANs Tab */}
         <Tab eventKey="vlans" title="VLANs">
           <Tabs
             activeKey={activeVlanTab}
-            onSelect={(k) => setActiveVlanTab(k || 'create-vlan')}
+            onSelect={(k) => setActiveVlanTab(k || 'vlan-settings')}
             className="mb-3"
             mountOnEnter
             unmountOnExit
           >
-            <Tab eventKey="create-vlan" title="Create VLAN">
+            {/* ============= VLAN SETTINGS - PER PORT CONFIGURATION ============= */}
+            <Tab eventKey="vlan-settings" title="VLAN Settings">
               <Card>
                 <Card.Body>
-                  <Form>
-                    <Row>
-                      <Col md={3}>
-                        <Form.Group controlId="new-vlan-id">
-                          <Form.Label>VLAN ID</Form.Label>
-                          <Form.Control type="text" placeholder="Enter VLAN ID" value={newVlanId} onChange={(e) => setNewVlanId(e.target.value)} disabled={!isReachable || !!currentTaskId} />
-                        </Form.Group>
-                      </Col>
-                      <Col md={4}>
-                        <Form.Group controlId="new-vlan-name">
-                          <Form.Label>VLAN Name (Optional)</Form.Label>
-                          <Form.Control type="text" placeholder="Enter VLAN Name" value={newVlanName} onChange={(e) => setNewVlanName(e.target.value)} disabled={!isReachable || !!currentTaskId} />
-                        </Form.Group>
-                      </Col>
-                      <Col md={2} className="d-flex align-items-end">
-                        <Button variant="primary" onClick={handleCreateVlan} disabled={!newVlanId || !isReachable || isCreatingVlan || !!currentTaskId}>
-                          {isCreatingVlan || (currentTaskId && taskAction === 'createVlan') ? <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" /> : "Create VLAN"}
-                        </Button>
-                      </Col>
-                    </Row>
-                  </Form>
-                </Card.Body>
-              </Card>
-            </Tab>
-            <Tab eventKey="vlan-list" title="VLAN List">
-              <Card>
-                <Card.Body>
-                  {vlanError ? (
-                    <Alert variant="danger">Error: {vlanError.message}</Alert>
-                  ) : vlanLoading ? (
-                    <div className="text-center"><Spinner animation="border" /></div>
-                  ) : vlanInfo && vlanInfo.length > 0 ? (
-                    <Table striped bordered hover responsive>
+                  <div className="mb-3">
+                    <Alert variant="info">
+                      You can go to VLAN Members to add a VLAN ID.
+                    </Alert>
+                  </div>
+                  
+                  {/* Port Selection - Search and Badges */}
+                  <Row className="mb-4">
+                    <Col md={12}>
+                      <Form.Group>
+                        <Form.Label>Port</Form.Label>
+                        <div className="d-flex flex-wrap align-items-center gap-2 mb-2">
+                          {/* Selected Ports Badges */}
+                          {selectedPorts.map((port) => {
+                            const config = portConfigs[port] || { vlanType: 'Access' };
+                            return (
+                              <Badge 
+                                key={port} 
+                                bg={config.vlanType === 'Trunk' ? 'warning' : 'primary'}
+                                className="d-flex align-items-center p-2"
+                                style={{ fontSize: '0.9rem' }}
+                              >
+                                {formatInterfaceName(port)}
+                                <Button
+                                  variant="link"
+                                  size="sm"
+                                  className="p-0 ms-2 text-white"
+                                  onClick={() => handleRemovePortFromFilter(port)}
+                                  style={{ textDecoration: 'none' }}
+                                  disabled={!isReachable || !!currentTaskId}
+                                >
+                                  ×
+                                </Button>
+                              </Badge>
+                            );
+                          })}
+                          
+                          {/* Port Search Input */}
+                          <div className="position-relative" style={{ minWidth: '200px' }}>
+                            <Form.Control
+                              type="text"
+                              size="sm"
+                              placeholder="Search port..."
+                              value={portSearchTerm}
+                              onChange={(e) => {
+                                setPortSearchTerm(e.target.value);
+                                setShowPortDropdown(true);
+                              }}
+                              onFocus={() => setShowPortDropdown(true)}
+                              onBlur={() => setTimeout(() => setShowPortDropdown(false), 200)}
+                              disabled={!isReachable || !!currentTaskId}
+                            />
+                            
+                            {/* Port Dropdown */}
+                            {showPortDropdown && filteredPorts.length > 0 && (
+                              <div 
+                                className="position-absolute bg-white border rounded shadow-sm"
+                                style={{ 
+                                  zIndex: 1000, 
+                                  maxHeight: '200px', 
+                                  overflowY: 'auto',
+                                  width: '100%'
+                                }}
+                              >
+                                {filteredPorts.map((port) => (
+                                  <div
+                                    key={port}
+                                    className="p-2 cursor-pointer hover-bg-light"
+                                    onMouseDown={() => handleAddPortToFilter(port)}
+                                    style={{ cursor: 'pointer' }}
+                                  >
+                                    {formatInterfaceName(port)}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <Form.Text className="text-muted">
+                          {selectedPorts.length === 0 
+                            ? "Select one or more ports to configure" 
+                            : `${selectedPorts.length} port(s) selected`
+                          }
+                        </Form.Text>
+                      </Form.Group>
+                    </Col>
+                  </Row>
+
+                  {/* Configuration Table - PER PORT */}
+                  {selectedPorts.length > 0 && (
+                    <Table striped bordered hover responsive size="sm">
                       <thead>
                         <tr>
-                          <th>VLAN ID</th>
-                          <th>Name</th>
-                          <th>Status</th>
-                          <th>Ports</th>
-                          <th>Assign Port</th>
-                          <th>Actions</th>
+                          <th>Port</th>
+                          <th>VLAN Type</th>
+                          <th>Access VLAN</th>
+                          <th>Native VLAN</th>
+                          <th>Permit VLAN</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {vlanInfo.map((vlan: any) => {
-                          const vlanId = vlan.vlan_id || vlan.id;
-                          const currentName = vlan.vlan_name || "N/A";
-                          const isEditing = vlanNameEdits.hasOwnProperty(vlanId);
-                          const editedName = vlanNameEdits[vlanId] ?? currentName;
+                        {selectedPorts.map((portName) => {
+                          const config = portConfigs[portName] || {
+                            vlanType: 'Access',
+                            accessVlan: '1',
+                            nativeVlan: '1',
+                            permitVlan: ''
+                          };
 
                           return (
-                            <tr key={vlanId}>
-                              <td>{vlanId}</td>
+                            <tr key={portName}>
+                              <td>{formatInterfaceName(portName)}</td>
+                              
+                              {/* VLAN Type Dropdown */}
                               <td>
-                                {isEditing ? (
-                                  <InputGroup>
-                                    <Form.Control
-                                      type="text"
-                                      size="sm"
-                                      value={editedName}
-                                      onChange={(e) => handleVlanNameChange(vlanId, e.target.value)}
-                                      disabled={!isReachable || !!currentTaskId}
-                                    />
-                                    <Button 
-                                      size="sm" 
-                                      variant="success" 
-                                      onClick={() => handleSaveVlanName(vlanId)} 
-                                      disabled={!isReachable || !!currentTaskId || (currentTaskId && taskAction === 'changeVlanName')}
-                                    >
-                                      {currentTaskId && taskAction === 'changeVlanName' ? <Spinner as="span" animation="border" size="sm" /> : "Save"}
-                                    </Button>
-                                    <Button 
-                                      size="sm" 
-                                      variant="outline-secondary" 
-                                      onClick={() => handleCancelVlanNameEdit(vlanId)} 
-                                      disabled={!!currentTaskId}
-                                    >
-                                      ×
-                                    </Button>
-                                  </InputGroup>
-                                ) : (
-                                  <div>
-                                    {currentName}
-                                    <Button size="sm" variant="outline-primary" className="ms-2" onClick={() => handleVlanNameChange(vlanId, currentName)} disabled={!isReachable || !!currentTaskId}>Edit</Button>
-                                  </div>
-                                )}
+                                <Form.Select 
+                                  size="sm"
+                                  value={config.vlanType}
+                                  onChange={(e) => handleVlanTypeChange(portName, e.target.value)}
+                                  disabled={!isReachable || !!currentTaskId}
+                                >
+                                  <option value="Access">Access</option>
+                                  <option value="Trunk">Trunk</option>
+                                </Form.Select>
                               </td>
-                              <td>{vlan.status || "N/A"}</td>
-                              <td>{vlan.interfaces ? (Array.isArray(vlan.interfaces) ? vlan.interfaces.join(', ') : vlan.interfaces) : "N/A"}</td>
+                              
+                              {/* Access VLAN Dropdown */}
                               <td>
-                                <InputGroup>
-                                  <Form.Select size="sm" value={selectedPorts[vlanId] || ''} onChange={(e) => handlePortSelection(vlanId, e.target.value)} disabled={!isReachable || !!currentTaskId}>
-                                    <option value="">Select Port</option>
-                                    {interfaces?.map((iface: any) => (
-                                      <option key={iface.interface || iface.intf} value={iface.interface || iface.intf}>{iface.interface || iface.intf}</option>
+                                {config.vlanType === 'Access' ? (
+                                  <Form.Select 
+                                    size="sm"
+                                    value={config.accessVlan || '1'}
+                                    onChange={(e) => handleAccessVlanChange(portName, e.target.value)}
+                                    disabled={!isReachable || !!currentTaskId}
+                                  >
+                                    <option value="1">VLAN 1</option>
+                                    {vlanOptions.map((vlan: any) => (
+                                      <option key={vlan.vlan_id || vlan.id} value={vlan.vlan_id || vlan.id}>
+                                        VLAN {vlan.vlan_id || vlan.id} {vlan.vlan_name ? `(${vlan.vlan_name})` : ''}
+                                      </option>
                                     ))}
                                   </Form.Select>
-                                  <Button 
-                                    size="sm" 
-                                    variant="primary" 
-                                    onClick={() => handleAssignPort(vlanId)} 
-                                    disabled={!selectedPorts[vlanId] || !isReachable || !!currentTaskId || (currentTaskId && taskAction === 'assignPortToVlan')}
-                                  >
-                                    {currentTaskId && taskAction === 'assignPortToVlan' ? <Spinner as="span" animation="border" size="sm" /> : "+"}
-                                  </Button>
-                                </InputGroup>
+                                ) : (
+                                  <Form.Control
+                                    size="sm"
+                                    type="text"
+                                    value="--"
+                                    disabled
+                                    readOnly
+                                    style={{ backgroundColor: '#e9ecef' }}
+                                  />
+                                )}
                               </td>
+                              
+                              {/* Native VLAN Dropdown */}
                               <td>
-                                <Button 
-                                  size="sm" 
-                                  variant="danger" 
-                                  onClick={() => openDeleteModal(vlanId)} 
-                                  disabled={!isReachable || isDeleting || !!currentTaskId || (currentTaskId && taskAction === 'deleteVlan')}
-                                >
-                                  {isDeleting && vlanToDelete === vlanId ? <Spinner as="span" animation="border" size="sm" /> : "Delete"}
-                                </Button>
+                                {config.vlanType === 'Trunk' ? (
+                                  <Form.Select 
+                                    size="sm"
+                                    value={config.nativeVlan || '1'}
+                                    onChange={(e) => handleNativeVlanChange(portName, e.target.value)}
+                                    disabled={!isReachable || !!currentTaskId}
+                                  >
+                                    <option value="1">VLAN 1</option>
+                                    {vlanMembers?.map((vlan: any) => (
+                                      <option key={vlan.vlan_id || vlan.id} value={vlan.vlan_id || vlan.id}>
+                                        VLAN {vlan.vlan_id || vlan.id} {vlan.vlan_name ? `(${vlan.vlan_name})` : ''}
+                                      </option>
+                                    ))}
+                                  </Form.Select>
+                                ) : (
+                                  <Form.Control
+                                    size="sm"
+                                    type="text"
+                                    value="--"
+                                    disabled
+                                    readOnly
+                                    style={{ backgroundColor: '#e9ecef' }}
+                                  />
+                                )}
+                              </td>
+                              {/* Permit VLANs Multi-Select */}
+                              <td>
+                                {config.vlanType === 'Trunk' ? (
+                                  <div>
+                                    {/* Selected Permit VLANs Badges */}
+                                    <div className="d-flex flex-wrap align-items-center gap-1 mb-2">
+                                      {(config.permitVlans || []).map((vlanId: string) => (
+                                        <Badge 
+                                          key={vlanId} 
+                                          bg="success" 
+                                          className="d-flex align-items-center p-1"
+                                          style={{ fontSize: '0.8rem' }}
+                                        >
+                                          VLAN {vlanId}
+                                          <Button
+                                            variant="link"
+                                            size="sm"
+                                            className="p-0 ms-1 text-white"
+                                            onClick={() => handleRemovePermitVlan(portName, vlanId)}
+                                            style={{ textDecoration: 'none', fontSize: '1rem' }}
+                                            disabled={!isReachable || !!currentTaskId}
+                                          >
+                                            ×
+                                          </Button>
+                                        </Badge>
+                                      ))}
+                                      
+                                      {/* Add All Button */}
+                                      {vlanMembers.length > 1 && (
+                                        <Button
+                                          size="sm"
+                                          variant="outline-primary"
+                                          className="me-1"
+                                          onClick={() => handleAddAllPermitVlans(portName)}
+                                          disabled={!isReachable || !!currentTaskId}
+                                          style={{ fontSize: '0.8rem', padding: '0.2rem 0.5rem' }}
+                                        >
+                                          All
+                                        </Button>
+                                      )}
+                                      
+                                      {/* Clear All Button */}
+                                      {(config.permitVlans || []).length > 0 && (
+                                        <Button
+                                          size="sm"
+                                          variant="outline-danger"
+                                          onClick={() => handleClearPermitVlans(portName)}
+                                          disabled={!isReachable || !!currentTaskId}
+                                          style={{ fontSize: '0.8rem', padding: '0.2rem 0.5rem' }}
+                                        >
+                                          Clear
+                                        </Button>
+                                      )}
+                                    </div>
+                                    
+                                    {/* Search Input untuk Add VLAN */}
+                                    <div className="position-relative">
+                                      <Form.Control
+                                        type="text"
+                                        size="sm"
+                                        placeholder="Add VLAN ID..."
+                                        value={permitVlanSearch[portName] || ''}
+                                        onChange={(e) => {
+                                          setPermitVlanSearch(prev => ({
+                                            ...prev,
+                                            [portName]: e.target.value
+                                          }));
+                                          setShowPermitVlanDropdown(prev => ({
+                                            ...prev,
+                                            [portName]: true
+                                          }));
+                                        }}
+                                        onFocus={() => setShowPermitVlanDropdown(prev => ({
+                                          ...prev,
+                                          [portName]: true
+                                        }))}
+                                        onBlur={() => setTimeout(() => setShowPermitVlanDropdown(prev => ({
+                                          ...prev,
+                                          [portName]: false
+                                        })), 200)}
+                                        disabled={!isReachable || !!currentTaskId}
+                                      />
+                                      
+                                      {/* Dropdown untuk VLAN yang tersedia */}
+                                      {showPermitVlanDropdown[portName] && (
+                                        <div 
+                                          className="position-absolute bg-white border rounded shadow-sm"
+                                          style={{ 
+                                            zIndex: 1000, 
+                                            maxHeight: '150px', 
+                                            overflowY: 'auto',
+                                            width: '100%'
+                                          }}
+                                        >
+                                          {vlanMembers
+                                            .filter(v => (v.vlan_id || v.id) !== '1')
+                                            .map(v => v.vlan_id || v.id)
+                                            .filter((vlanId: string) => 
+                                              !(config.permitVlans || []).includes(vlanId) &&
+                                              vlanId.includes(permitVlanSearch[portName] || '')
+                                            )
+                                            .map((vlanId: string) => (
+                                              <div
+                                                key={vlanId}
+                                                className="p-2 cursor-pointer hover-bg-light"
+                                                onMouseDown={() => handleAddPermitVlan(portName, vlanId)}
+                                                style={{ cursor: 'pointer' }}
+                                              >
+                                                VLAN {vlanId}
+                                              </div>
+                                            ))
+                                          }
+                                          {vlanMembers.filter(v => (v.vlan_id || v.id) !== '1').length === 0 && (
+                                            <div className="p-2 text-muted">
+                                              No VLANs available
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <Form.Control
+                                    size="sm"
+                                    type="text"
+                                    value="--"
+                                    disabled
+                                    readOnly
+                                    style={{ backgroundColor: '#e9ecef' }}
+                                  />
+                                )}
                               </td>
                             </tr>
                           );
                         })}
                       </tbody>
                     </Table>
-                  ) : (
-                    <Alert variant="info">No VLAN information available.</Alert>
                   )}
+
+                  {/* Save Button */}
+                  <Row className="mt-3">
+                    <Col md={12} className="text-end">
+                      <Button 
+                        variant="primary" 
+                        onClick={handleApplyPortConfig}
+                        disabled={selectedPorts.length === 0 || !isReachable || applyingPortConfig || !!currentTaskId}
+                      >
+                        {applyingPortConfig ? (
+                          <>
+                            <Spinner as="span" animation="border" size="sm" className="me-2" />
+                            Applying...
+                          </>
+                        ) : (
+                          'Save Configuration'
+                        )}
+                      </Button>
+                    </Col>
+                  </Row>
                 </Card.Body>
               </Card>
             </Tab>
-             <Tab eventKey="interface-config" title="Interface Configuration">
-                <Card>
-                  <Card.Body>
-                    {interfacesError ? (
-                      <Alert variant="danger">Error: {interfacesError.message}</Alert>
-                    ) : interfacesLoading ? (
-                      <div className="text-center"><Spinner animation="border" /></div>
-                    ) : interfaces && interfaces.length > 0 ? (
-                      <Table striped bordered hover responsive>
+
+            {/* ============= VLAN MEMBERS ============= */}
+            <Tab eventKey="vlan-members" title="VLAN Members">
+              <Card>
+                <Card.Body>
+                  <div className="mb-3">
+                    <Alert variant="info">
+                      VLAN Settings on. Up to <strong>16 VLAN members can be configured.</strong>
+                    </Alert>
+                  </div>
+
+                  {/* Add VLAN Member Form */}
+                  <Row className="mb-4">
+                    <Col md={3}>
+                      <Form.Group>
+                        <Form.Label>VLAN ID</Form.Label>
+                        <Form.Control
+                          type="number"
+                          size="sm"
+                          placeholder="1-4094"
+                          min="1"
+                          max="4094"
+                          value={newVlanMemberId}
+                          onChange={(e) => setNewVlanMemberId(e.target.value)}
+                          disabled={!isReachable || isAddingVlanMember || !!currentTaskId}
+                        />
+                        <Form.Text className="text-muted">
+                          (1-4094)
+                        </Form.Text>
+                      </Form.Group>
+                    </Col>
+                    <Col md={4}>
+                      <Form.Group>
+                        <Form.Label>VLAN Name (Optional)</Form.Label>
+                        <Form.Control
+                          type="text"
+                          size="sm"
+                          placeholder="Enter VLAN Name"
+                          value={newVlanMemberName}
+                          onChange={(e) => setNewVlanMemberName(e.target.value)}
+                          disabled={!isReachable || isAddingVlanMember || !!currentTaskId}
+                        />
+                      </Form.Group>
+                    </Col>
+                    <Col md={2} className="d-flex align-items-end">
+                      <Button 
+                        variant="primary" 
+                        size="sm"
+                        onClick={handleAddVlanMember}
+                        disabled={!newVlanMemberId || !isReachable || isAddingVlanMember || !!currentTaskId}
+                      >
+                        {isAddingVlanMember ? <Spinner as="span" animation="border" size="sm" /> : 'Add'}
+                      </Button>
+                    </Col>
+                  </Row>
+
+                  {/* VLAN Members Table */}
+                  {vlanError ? (
+                    <Alert variant="danger">Error: {vlanError}</Alert>
+                  ) : vlanLoading ? (
+                    <div className="text-center"><Spinner animation="border" /></div>
+                  ) : vlanMembers && vlanMembers.length > 0 ? (
+                    <>
+                      <div className="mb-2">
+                        <Form.Check
+                          type="checkbox"
+                          label="Select All"
+                          checked={vlanMembers.length === selectedVlanMembers.length}
+                          onChange={handleSelectAllVlanMembers}
+                          disabled={!isReachable}
+                        />
+                      </div>
+                      <Table striped bordered hover responsive size="sm">
                         <thead>
                           <tr>
-                            <th>Interface</th>
-                            <th>Port Mode</th>
-                            <th>VLAN ID (Access) / Allowed VLANs (Trunk)</th>
-                            <th>Native VLAN (Trunk)</th>
-                            <th>Actions</th>
+                            <th style={{ width: '5%' }}>No.</th>
+                            <th style={{ width: '5%' }}>Select</th>
+                            <th style={{ width: '20%' }}>VLAN ID</th>
+                            <th style={{ width: '40%' }}>VLAN Name</th>
+                            <th style={{ width: '30%' }}>Actions</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {interfaces.map((iface: any) => {
-                            const ifaceName = iface.interface || iface.intf;
-                            const config = interfaceConfigs[ifaceName];
-                            if (!config) return null;
+                          {vlanMembers.map((vlan, index) => {
+                            const vlanId = vlan.vlan_id || vlan.id;
+                            const vlanName = vlan.vlan_name || `VLAN${vlanId}`;
+                            const isEditing = vlanNameEdits.hasOwnProperty(vlanId);
+                            const editedName = vlanNameEdits[vlanId] ?? vlanName;
 
                             return (
-                              <tr key={ifaceName}>
-                                <td>{ifaceName}</td>
-                                <td>
-                                  <Form.Select size="sm" value={config.mode} onChange={(e) => handleInterfaceConfigChange(ifaceName, 'mode', e.target.value)} disabled={!isReachable || !!currentTaskId}>
-                                    <option value="access">Access</option>
-                                    <option value="trunk">Trunk</option>
-                                  </Form.Select>
+                              <tr key={vlanId}>
+                                <td>{index + 1}</td>
+                                <td className="text-center">
+                                  <Form.Check
+                                    type="checkbox"
+                                    checked={selectedVlanMembers.includes(vlanId)}
+                                    onChange={() => handleSelectVlanMember(vlanId)}
+                                    disabled={vlanId === 1 || !isReachable}
+                                  />
                                 </td>
                                 <td>
-                                  {config.mode === 'access' ? (
-                                    <Form.Control type="text" size="sm" placeholder="VLAN ID" value={config.accessVlan} onChange={(e) => handleInterfaceConfigChange(ifaceName, 'accessVlan', e.target.value)} disabled={!isReachable || !!currentTaskId} />
+                                  <strong>VLAN {vlanId}</strong>
+                                  {vlanId === 1 && (
+                                    <Badge bg="secondary" className="ms-2">Default</Badge>
+                                  )}
+                                </td>
+                                <td>
+                                  {isEditing ? (
+                                    <InputGroup>
+                                      <Form.Control
+                                        type="text"
+                                        size="sm"
+                                        value={editedName}
+                                        onChange={(e) => handleVlanNameChange(vlanId, e.target.value)}
+                                        disabled={!isReachable || !!currentTaskId}
+                                      />
+                                      <Button 
+                                        size="sm" 
+                                        variant="success" 
+                                        onClick={() => handleSaveVlanName(vlanId)} 
+                                        disabled={!isReachable || !!currentTaskId}
+                                      >
+                                        {currentTaskId && taskAction === 'changeVlanName' ? 
+                                          <Spinner as="span" animation="border" size="sm" /> : 
+                                          "Save"
+                                        }
+                                      </Button>
+                                      <Button 
+                                        size="sm" 
+                                        variant="outline-secondary" 
+                                        onClick={() => handleCancelVlanNameEdit(vlanId)} 
+                                        disabled={!!currentTaskId}
+                                      >
+                                        ×
+                                      </Button>
+                                    </InputGroup>
                                   ) : (
-                                    <Form.Control type="text" size="sm" placeholder="Allowed VLANs (e.g., 10,20,30-40)" value={config.allowedVlans} onChange={(e) => handleInterfaceConfigChange(ifaceName, 'allowedVlans', e.target.value)} disabled={!isReachable || !!currentTaskId} />
+                                    <div>
+                                      {vlanName}
+                                      <Button 
+                                        size="sm" 
+                                        variant="outline-primary" 
+                                        className="ms-2" 
+                                        onClick={() => handleVlanNameChange(vlanId, vlanName)} 
+                                        disabled={!isReachable || !!currentTaskId}
+                                      >
+                                        Edit
+                                      </Button>
+                                    </div>
                                   )}
                                 </td>
                                 <td>
-                                  {config.mode === 'trunk' && (
-                                    <Form.Control type="text" size="sm" placeholder="Native VLAN ID" value={config.nativeVlan} onChange={(e) => handleInterfaceConfigChange(ifaceName, 'nativeVlan', e.target.value)} disabled={!isReachable || !!currentTaskId} />
-                                  )}
-                                </td>
-                                <td>
-                                  <Button
-                                    size="sm"
-                                    variant="success"
-                                    onClick={() => handleApplyInterfaceConfig(ifaceName)}
-                                    disabled={!isReachable || applyingConfigs[ifaceName] || !!currentTaskId || (currentTaskId && taskAction === 'configureInterfaceVlan')}
+                                  <Button 
+                                    size="sm" 
+                                    variant="danger"
+                                    onClick={() => {
+                                      setVlanMemberToDelete(vlanId);
+                                      setShowDeleteVlanMemberModal(true);
+                                    }}
+                                    disabled={vlanId === 1 || !isReachable || isDeletingVlanMember || !!currentTaskId}
                                   >
-                                    {applyingConfigs[ifaceName] || (currentTaskId && taskAction === 'configureInterfaceVlan') ? (
-                                      <>
-                                        <Spinner
-                                          as="span"
-                                          animation="border"
-                                          size="sm"
-                                          role="status"
-                                          aria-hidden="true"
-                                        />
-                                      </>
-                                    ) : (
-                                      "Apply"
-                                    )}
+                                    Delete
                                   </Button>
                                 </td>
                               </tr>
@@ -1966,15 +2394,35 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
                           })}
                         </tbody>
                       </Table>
-                    ) : (
-                      <Alert variant="info">No interfaces available for configuration.</Alert>
-                    )}
-                  </Card.Body>
-                </Card>
-              </Tab>
+
+                      {/* Bulk Delete Button */}
+                      {selectedVlanMembers.length > 0 && (
+                        <div className="mt-3">
+                          <Button 
+                            variant="danger" 
+                            size="sm"
+                            onClick={handleBulkDeleteVlanMembers}
+                            disabled={!isReachable || isDeletingVlanMember || !!currentTaskId}
+                          >
+                            {isDeletingVlanMember ? (
+                              <Spinner as="span" animation="border" size="sm" />
+                            ) : (
+                              `Delete (${selectedVlanMembers.length})`
+                            )}
+                          </Button>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <Alert variant="info">No VLAN members configured. Add a VLAN ID above.</Alert>
+                  )}
+                </Card.Body>
+              </Card>
+            </Tab>
           </Tabs>
         </Tab>
         
+        {/* Network Discovery Tab */}
         <Tab eventKey="discovery" title="Network Discovery">
           <Tabs
             activeKey={activeDiscoveryTab}
@@ -2091,7 +2539,7 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
                             <tr>
                               <th>Local Interface</th>
                               <th>Capabilities</th>
-                              <th>Nieghbor Name</th>
+                              <th>Neighbor Name</th>
                               <th>Neighbor Interface</th>
                             </tr>
                           </thead>
@@ -2117,6 +2565,7 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
           </Tabs>
         </Tab>
         
+        {/* Commands Tab */}
         <Tab eventKey="commands" title="Commands">
           <Row>
             <Col md={6}>
@@ -2191,20 +2640,20 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
         </Tab>
       </Tabs>
       
-      {/* Delete Confirmation Modal */}
-      <Modal show={showDeleteModal} onHide={() => setShowDeleteModal(false)}>
+      {/* Delete VLAN Member Confirmation Modal */}
+      <Modal show={showDeleteVlanMemberModal} onHide={() => setShowDeleteVlanMemberModal(false)}>
         <Modal.Header closeButton>
           <Modal.Title>Confirm VLAN Deletion</Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          Are you sure you want to delete VLAN {vlanToDelete}? This action cannot be undone.
+          Are you sure you want to delete VLAN {vlanMemberToDelete}? This action cannot be undone.
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowDeleteModal(false)} disabled={isDeleting || !!currentTaskId}>
+          <Button variant="secondary" onClick={() => setShowDeleteVlanMemberModal(false)} disabled={isDeletingVlanMember || !!currentTaskId}>
             Cancel
           </Button>
-          <Button variant="danger" onClick={confirmDeleteVlan} disabled={isDeleting || !!currentTaskId}>
-            {isDeleting || (currentTaskId && taskAction === 'deleteVlan') ? <Spinner as="span" animation="border" size="sm" /> : 'Proceed'}
+          <Button variant="danger" onClick={() => vlanMemberToDelete && handleDeleteVlanMember(vlanMemberToDelete)} disabled={isDeletingVlanMember || !!currentTaskId}>
+            {isDeletingVlanMember ? <Spinner as="span" animation="border" size="sm" /> : 'Delete'}
           </Button>
         </Modal.Footer>
       </Modal>
