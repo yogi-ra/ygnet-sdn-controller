@@ -27,6 +27,14 @@ class CiscoIosDevice(BaseDevice):
         self.arp = CiscoIosArp(self)
         self.cdp = CiscoIosCdp(self)
         self.lldp = CiscoIosLldp(self)
+
+    def send_config_set(self, commands: List[str], **kwargs) -> str:
+        """
+        Sends a list of configuration commands and saves the configuration.
+        """
+        output = super().send_config_set(commands, **kwargs)
+        self.send_command("wr")
+        return output
         
     @classmethod
     def get_supported_features(cls) -> Tuple[List[str], List[str]]:
