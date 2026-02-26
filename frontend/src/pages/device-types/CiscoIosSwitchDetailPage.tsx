@@ -1013,8 +1013,8 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
   const [showDeleteVlanMemberModal, setShowDeleteVlanMemberModal] = useState(false);
   const [vlanMemberToDelete, setVlanMemberToDelete] = useState<string | null>(null);
   const [isDeletingVlanMember, setIsDeletingVlanMember] = useState(false);
-  const [permitVlanSearch, setPermitVlanSearch] = useState<{ [key: string]: string }>({});
-  const [showPermitVlanDropdown, setShowPermitVlanDropdown] = useState<{ [key: string]: boolean }>({});
+  const [permitVlanSearch, setPermitVlanSearch] = useState<string>("");
+  const [showPermitVlanDropdown, setShowPermitVlanDropdown] = useState<boolean>(false);
 
   // ============= VLAN SETTINGS STATE - PER PORT CONFIG =============
   const physicalInterfaces = useMemo(() => {
@@ -1027,7 +1027,12 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
   const [selectedPorts, setSelectedPorts] = useState<string[]>([]);
   const [portSearchTerm, setPortSearchTerm] = useState<string>('');
   const [showPortDropdown, setShowPortDropdown] = useState<boolean>(false);
-  const [portConfigs, setPortConfigs] = useState<{ [key: string]: any }>({});
+  const [portConfig, setPortConfig] = useState<any>({
+    vlanType: 'Access',
+    accessVlan: '1',
+    nativeVlan: '1',
+    permitVlans: [],
+  });
   const [applyingPortConfig, setApplyingPortConfig] = useState(false);
 
   // ============= VLAN MANAGEMENT STATE =============
@@ -1061,35 +1066,20 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
     }
   }, [vlanInfo]);
 
-  // Initialize port configs for selected ports only
-  useEffect(() => {
-    const newConfigs = { ...portConfigs };
-    let changed = false;
-
-    selectedPorts.forEach(portName => {
-      if (!newConfigs[portName]) {
-        newConfigs[portName] = {
-          vlanType: 'Access',
-          accessVlan: '1',
-          nativeVlan: '1',
-          permitVlan: [],
-        };
-        changed = true;
-      }
-    });
-
-    if (changed) {
-      setPortConfigs(newConfigs);
-    }
-  }, [selectedPorts]);
-
   // Reset when leaving VLAN Settings tab
   useEffect(() => {
     if (activeVlanTab !== 'vlan-settings') {
       setSelectedPorts([]);
       setPortSearchTerm('');
       setShowPortDropdown(false);
-      setPortConfigs({});
+      setPortConfig({
+        vlanType: 'Access',
+        accessVlan: '1',
+        nativeVlan: '1',
+        permitVlans: [],
+      });
+      setPermitVlanSearch("");
+      setShowPermitVlanDropdown(false);
     }
   }, [activeVlanTab]);
 
@@ -1212,60 +1202,41 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
     }
   };
 
-  const handleAddPermitVlan = useCallback((portName: string, vlanId: string) => {
-    setPortConfigs(prev => {
-      const currentPermitVlans = prev[portName]?.permitVlans || [];
+  const handleAddPermitVlan = useCallback((vlanId: string) => {
+    setPortConfig(prev => {
+      const currentPermitVlans = prev.permitVlans || [];
       if (!currentPermitVlans.includes(vlanId) && vlanId !== '1') {
-        console.log(`Adding VLAN ${vlanId} to ${portName}, current:`, currentPermitVlans);
         return {
           ...prev,
-          [portName]: {
-            ...prev[portName],
-            permitVlans: [...currentPermitVlans, vlanId]
-          }
+          permitVlans: [...currentPermitVlans, vlanId]
         };
       }
       return prev;
     });
   }, []);
 
-  const handleRemovePermitVlan = useCallback((portName: string, vlanId: string) => {
-    setPortConfigs(prev => {
-      const newPermitVlans = (prev[portName]?.permitVlans || []).filter(id => id !== vlanId);
-      console.log(`Removing VLAN ${vlanId} from ${portName}, new:`, newPermitVlans);
-      return {
-        ...prev,
-        [portName]: {
-          ...prev[portName],
-          permitVlans: newPermitVlans
-        }
-      };
-    });
+  const handleRemovePermitVlan = useCallback((vlanId: string) => {
+    setPortConfig(prev => ({
+      ...prev,
+      permitVlans: (prev.permitVlans || []).filter(id => id !== vlanId)
+    }));
   }, []);
 
-  const handleAddAllPermitVlans = useCallback((portName: string) => {
-    setPortConfigs(prev => {
-      const allVlanIds = vlanMembers
-        .map(v => v.vlan_id || v.id)
-        .filter((id: string) => id !== '1');
-      
-      return {
-        ...prev,
-        [portName]: {
-          ...prev[portName],
-          permitVlans: allVlanIds
-        }
-      };
-    });
+  const handleAddAllPermitVlans = useCallback(() => {
+    const allVlanIds = vlanMembers
+      .map(v => v.vlan_id || v.id)
+      .filter((id: string) => id !== '1');
+    
+    setPortConfig(prev => ({
+      ...prev,
+      permitVlans: allVlanIds
+    }));
   }, [vlanMembers]);
 
-  const handleClearPermitVlans = useCallback((portName: string) => {
-    setPortConfigs(prev => ({
+  const handleClearPermitVlans = useCallback(() => {
+    setPortConfig(prev => ({
       ...prev,
-      [portName]: {
-        ...prev[portName],
-        permitVlans: []
-      }
+      permitVlans: []
     }));
   }, []);
 
@@ -1273,15 +1244,6 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
   const handleAddPortToFilter = useCallback((portName: string) => {
     setSelectedPorts(prev => {
       if (!prev.includes(portName)) {
-        setPortConfigs(configs => ({
-          ...configs,
-          [portName]: {
-            vlanType: 'Access',
-            accessVlan: '1',
-            nativeVlan: '1',
-            permitVlans: [],
-          }
-        }));
         return [...prev, portName];
       }
       return prev;
@@ -1290,54 +1252,37 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
 
   const handleRemovePortFromFilter = useCallback((portName: string) => {
     setSelectedPorts(prev => prev.filter(p => p !== portName));
-    setPortConfigs(prev => {
-      const newConfigs = { ...prev };
-      delete newConfigs[portName];
-      return newConfigs;
-    });
   }, []);
 
   // ============= PORT CONFIG HANDLERS =============
-  const handleVlanTypeChange = useCallback((portName: string, value: string) => {
-    setPortConfigs(prev => ({
+  const handleVlanTypeChange = useCallback((value: string) => {
+    setPortConfig(prev => ({
       ...prev,
-      [portName]: {
-        ...prev[portName],
-        vlanType: value,
-        accessVlan: value === 'Access' ? prev[portName]?.accessVlan || '1' : '',
-        nativeVlan: value === 'Trunk' ? prev[portName]?.nativeVlan || '1' : '1',
-        permitVlan: value === 'Trunk' ? prev[portName]?.permitVlan || '' : ''
-      }
+      vlanType: value,
+      accessVlan: value === 'Access' ? prev.accessVlan || '1' : '',
+      nativeVlan: value === 'Trunk' ? prev.nativeVlan || '1' : '1',
+      permitVlans: value === 'Trunk' ? prev.permitVlans || [] : []
     }));
   }, []);
 
-  const handleAccessVlanChange = useCallback((portName: string, value: string) => {
-    setPortConfigs(prev => ({
+  const handleAccessVlanChange = useCallback((value: string) => {
+    setPortConfig(prev => ({
       ...prev,
-      [portName]: {
-        ...prev[portName],
-        accessVlan: value
-      }
+      accessVlan: value
     }));
   }, []);
 
-  const handleNativeVlanChange = useCallback((portName: string, value: string) => {
-    setPortConfigs(prev => ({
+  const handleNativeVlanChange = useCallback((value: string) => {
+    setPortConfig(prev => ({
       ...prev,
-      [portName]: {
-        ...prev[portName],
-        nativeVlan: value
-      }
+      nativeVlan: value
     }));
   }, []);
 
-  const handlePermitVlanChange = useCallback((portName: string, value: string) => {
-    setPortConfigs(prev => ({
+  const handlePermitVlanChange = useCallback((value: string) => {
+    setPortConfig(prev => ({
       ...prev,
-      [portName]: {
-        ...prev[portName],
-        permitVlan: value
-      }
+      permitVlan: value
     }));
   }, []);
 
@@ -1349,7 +1294,7 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
     try {
       const configsArray: VlanInterfaceConfig[] = selectedPorts
         .map(portName => {
-          const config = portConfigs[portName];
+          const config = portConfig;
           if (!config) return null;
           
           const vlanConfig: VlanInterfaceConfig = {
@@ -1370,7 +1315,7 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
               if (config.permitVlans.includes('all')) {
                 vlanConfig.allowed_vlans = '1-4094';
               } else {
-                vlanConfig.allowed_vlans = config.permitVlans;
+                vlanConfig.allowed_vlans = config.permitVlans.join(',');
               }
               console.log(`✅ Adding allowed_vlans for ${portName}:`, config.permitVlans);
             }
@@ -1897,7 +1842,7 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
                         <div className="d-flex flex-wrap align-items-center gap-2 mb-2">
                           {/* Selected Ports Badges */}
                           {selectedPorts.map((port) => {
-                            const config = portConfigs[port] || { vlanType: 'Access' };
+                            const config = portConfig || { vlanType: 'Access' };
                             return (
                               <Badge 
                                 key={port} 
@@ -1971,12 +1916,11 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
                     </Col>
                   </Row>
 
-                  {/* Configuration Table - PER PORT */}
+                  {/* Configuration Table - BULK CONFIG */}
                   {selectedPorts.length > 0 && (
                     <Table striped bordered hover responsive size="sm">
                       <thead>
                         <tr>
-                          <th>Port</th>
                           <th>VLAN Type</th>
                           <th>Access VLAN</th>
                           <th>Native VLAN</th>
@@ -1984,221 +1928,196 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
                         </tr>
                       </thead>
                       <tbody>
-                        {selectedPorts.map((portName) => {
-                          const config = portConfigs[portName] || {
-                            vlanType: 'Access',
-                            accessVlan: '1',
-                            nativeVlan: '1',
-                            permitVlan: ''
-                          };
-
-                          return (
-                            <tr key={portName}>
-                              <td>{formatInterfaceName(portName)}</td>
-                              
-                              {/* VLAN Type Dropdown */}
-                              <td>
-                                <Form.Select 
-                                  size="sm"
-                                  value={config.vlanType}
-                                  onChange={(e) => handleVlanTypeChange(portName, e.target.value)}
-                                  disabled={!isReachable || !!currentTaskId}
-                                >
-                                  <option value="Access">Access</option>
-                                  <option value="Trunk">Trunk</option>
-                                </Form.Select>
-                              </td>
-                              
-                              {/* Access VLAN Dropdown */}
-                              <td>
-                                {config.vlanType === 'Access' ? (
-                                  <Form.Select 
-                                    size="sm"
-                                    value={config.accessVlan || '1'}
-                                    onChange={(e) => handleAccessVlanChange(portName, e.target.value)}
-                                    disabled={!isReachable || !!currentTaskId}
-                                  >
-                                    <option value="1">VLAN 1</option>
-                                    {vlanOptions.map((vlan: any) => (
-                                      <option key={vlan.vlan_id || vlan.id} value={vlan.vlan_id || vlan.id}>
-                                        VLAN {vlan.vlan_id || vlan.id} {vlan.vlan_name ? `(${vlan.vlan_name})` : ''}
-                                      </option>
-                                    ))}
-                                  </Form.Select>
-                                ) : (
-                                  <Form.Control
-                                    size="sm"
-                                    type="text"
-                                    value="--"
-                                    disabled
-                                    readOnly
-                                    style={{ backgroundColor: '#e9ecef' }}
-                                  />
-                                )}
-                              </td>
-                              
-                              {/* Native VLAN Dropdown */}
-                              <td>
-                                {config.vlanType === 'Trunk' ? (
-                                  <Form.Select 
-                                    size="sm"
-                                    value={config.nativeVlan || '1'}
-                                    onChange={(e) => handleNativeVlanChange(portName, e.target.value)}
-                                    disabled={!isReachable || !!currentTaskId}
-                                  >
-                                    <option value="1">VLAN 1</option>
-                                    {vlanMembers?.map((vlan: any) => (
-                                      <option key={vlan.vlan_id || vlan.id} value={vlan.vlan_id || vlan.id}>
-                                        VLAN {vlan.vlan_id || vlan.id} {vlan.vlan_name ? `(${vlan.vlan_name})` : ''}
-                                      </option>
-                                    ))}
-                                  </Form.Select>
-                                ) : (
-                                  <Form.Control
-                                    size="sm"
-                                    type="text"
-                                    value="--"
-                                    disabled
-                                    readOnly
-                                    style={{ backgroundColor: '#e9ecef' }}
-                                  />
-                                )}
-                              </td>
-                              {/* Permit VLANs Multi-Select */}
-                              <td>
-                                {config.vlanType === 'Trunk' ? (
-                                  <div>
-                                    {/* Selected Permit VLANs Badges */}
-                                    <div className="d-flex flex-wrap align-items-center gap-1 mb-2">
-                                      {(config.permitVlans || []).map((vlanId: string) => (
-                                        <Badge 
-                                          key={vlanId} 
-                                          bg="success" 
-                                          className="d-flex align-items-center p-1"
-                                          style={{ fontSize: '0.8rem' }}
-                                        >
-                                          VLAN {vlanId}
-                                          <Button
-                                            variant="link"
-                                            size="sm"
-                                            className="p-0 ms-1 text-white"
-                                            onClick={() => handleRemovePermitVlan(portName, vlanId)}
-                                            style={{ textDecoration: 'none', fontSize: '1rem' }}
-                                            disabled={!isReachable || !!currentTaskId}
-                                          >
-                                            ×
-                                          </Button>
-                                        </Badge>
-                                      ))}
-                                      
-                                      {/* Add All Button */}
-                                      {vlanMembers.length > 1 && (
-                                        <Button
-                                          size="sm"
-                                          variant="outline-primary"
-                                          className="me-1"
-                                          onClick={() => handleAddAllPermitVlans(portName)}
-                                          disabled={!isReachable || !!currentTaskId}
-                                          style={{ fontSize: '0.8rem', padding: '0.2rem 0.5rem' }}
-                                        >
-                                          All
-                                        </Button>
-                                      )}
-                                      
-                                      {/* Clear All Button */}
-                                      {(config.permitVlans || []).length > 0 && (
-                                        <Button
-                                          size="sm"
-                                          variant="outline-danger"
-                                          onClick={() => handleClearPermitVlans(portName)}
-                                          disabled={!isReachable || !!currentTaskId}
-                                          style={{ fontSize: '0.8rem', padding: '0.2rem 0.5rem' }}
-                                        >
-                                          Clear
-                                        </Button>
-                                      )}
-                                    </div>
-                                    
-                                    {/* Search Input untuk Add VLAN */}
-                                    <div className="position-relative">
-                                      <Form.Control
-                                        type="text"
+                        <tr>
+                          {/* VLAN Type Dropdown */}
+                          <td>
+                            <Form.Select 
+                              size="sm"
+                              value={portConfig.vlanType}
+                              onChange={(e) => handleVlanTypeChange(e.target.value)}
+                              disabled={!isReachable || !!currentTaskId}
+                            >
+                              <option value="Access">Access</option>
+                              <option value="Trunk">Trunk</option>
+                            </Form.Select>
+                          </td>
+                          
+                          {/* Access VLAN Dropdown */}
+                          <td>
+                            {portConfig.vlanType === 'Access' ? (
+                              <Form.Select 
+                                size="sm"
+                                value={portConfig.accessVlan || '1'}
+                                onChange={(e) => handleAccessVlanChange(e.target.value)}
+                                disabled={!isReachable || !!currentTaskId}
+                              >
+                                <option value="1">VLAN 1</option>
+                                {vlanOptions.map((vlan: any) => (
+                                  <option key={vlan.vlan_id || vlan.id} value={vlan.vlan_id || vlan.id}>
+                                    VLAN {vlan.vlan_id || vlan.id} {vlan.vlan_name ? `(${vlan.vlan_name})` : ''}
+                                  </option>
+                                ))}
+                              </Form.Select>
+                            ) : (
+                              <Form.Control
+                                size="sm"
+                                type="text"
+                                value="--"
+                                disabled
+                                readOnly
+                                style={{ backgroundColor: '#e9ecef' }}
+                              />
+                            )}
+                          </td>
+                          
+                          {/* Native VLAN Dropdown */}
+                          <td>
+                            {portConfig.vlanType === 'Trunk' ? (
+                              <Form.Select 
+                                size="sm"
+                                value={portConfig.nativeVlan || '1'}
+                                onChange={(e) => handleNativeVlanChange(e.target.value)}
+                                disabled={!isReachable || !!currentTaskId}
+                              >
+                                <option value="1">VLAN 1</option>
+                                {vlanMembers?.map((vlan: any) => (
+                                  <option key={vlan.vlan_id || vlan.id} value={vlan.vlan_id || vlan.id}>
+                                    VLAN {vlan.vlan_id || vlan.id} {vlan.vlan_name ? `(${vlan.vlan_name})` : ''}
+                                  </option>
+                                ))}
+                              </Form.Select>
+                            ) : (
+                              <Form.Control
+                                size="sm"
+                                type="text"
+                                value="--"
+                                disabled
+                                readOnly
+                                style={{ backgroundColor: '#e9ecef' }}
+                              />
+                            )}
+                          </td>
+                          {/* Permit VLANs Multi-Select */}
+                          <td>
+                            {portConfig.vlanType === 'Trunk' ? (
+                              <div>
+                                {/* Selected Permit VLANs Badges */}
+                                <div className="d-flex flex-wrap align-items-center gap-1 mb-2">
+                                  {(portConfig.permitVlans || []).map((vlanId: string) => (
+                                    <Badge 
+                                      key={vlanId} 
+                                      bg="success" 
+                                      className="d-flex align-items-center p-1"
+                                      style={{ fontSize: '0.8rem' }}
+                                    >
+                                      VLAN {vlanId}
+                                      <Button
+                                        variant="link"
                                         size="sm"
-                                        placeholder="Add VLAN ID..."
-                                        value={permitVlanSearch[portName] || ''}
-                                        onChange={(e) => {
-                                          setPermitVlanSearch(prev => ({
-                                            ...prev,
-                                            [portName]: e.target.value
-                                          }));
-                                          setShowPermitVlanDropdown(prev => ({
-                                            ...prev,
-                                            [portName]: true
-                                          }));
-                                        }}
-                                        onFocus={() => setShowPermitVlanDropdown(prev => ({
-                                          ...prev,
-                                          [portName]: true
-                                        }))}
-                                        onBlur={() => setTimeout(() => setShowPermitVlanDropdown(prev => ({
-                                          ...prev,
-                                          [portName]: false
-                                        })), 200)}
+                                        className="p-0 ms-1 text-white"
+                                        onClick={() => handleRemovePermitVlan(vlanId)}
+                                        style={{ textDecoration: 'none', fontSize: '1rem' }}
                                         disabled={!isReachable || !!currentTaskId}
-                                      />
-                                      
-                                      {/* Dropdown untuk VLAN yang tersedia */}
-                                      {showPermitVlanDropdown[portName] && (
-                                        <div 
-                                          className="position-absolute bg-white border rounded shadow-sm"
-                                          style={{ 
-                                            zIndex: 1000, 
-                                            maxHeight: '150px', 
-                                            overflowY: 'auto',
-                                            width: '100%'
-                                          }}
-                                        >
-                                          {vlanMembers
-                                            .filter(v => (v.vlan_id || v.id) !== '1')
-                                            .map(v => v.vlan_id || v.id)
-                                            .filter((vlanId: string) => 
-                                              !(config.permitVlans || []).includes(vlanId) &&
-                                              vlanId.includes(permitVlanSearch[portName] || '')
-                                            )
-                                            .map((vlanId: string) => (
-                                              <div
-                                                key={vlanId}
-                                                className="p-2 cursor-pointer hover-bg-light"
-                                                onMouseDown={() => handleAddPermitVlan(portName, vlanId)}
-                                                style={{ cursor: 'pointer' }}
-                                              >
-                                                VLAN {vlanId}
-                                              </div>
-                                            ))
-                                          }
-                                          {vlanMembers.filter(v => (v.vlan_id || v.id) !== '1').length === 0 && (
-                                            <div className="p-2 text-muted">
-                                              No VLANs available
-                                            </div>
-                                          )}
+                                      >
+                                        ×
+                                      </Button>
+                                    </Badge>
+                                  ))}
+                                  
+                                  {/* Add All Button */}
+                                  {vlanMembers.length > 1 && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline-primary"
+                                      className="me-1"
+                                      onClick={() => handleAddAllPermitVlans()}
+                                      disabled={!isReachable || !!currentTaskId}
+                                      style={{ fontSize: '0.8rem', padding: '0.2rem 0.5rem' }}
+                                    >
+                                      All
+                                    </Button>
+                                  )}
+                                  
+                                  {/* Clear All Button */}
+                                  {(portConfig.permitVlans || []).length > 0 && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline-danger"
+                                      onClick={() => handleClearPermitVlans()}
+                                      disabled={!isReachable || !!currentTaskId}
+                                      style={{ fontSize: '0.8rem', padding: '0.2rem 0.5rem' }}
+                                    >
+                                      Clear
+                                    </Button>
+                                  )}
+                                </div>
+                                
+                                {/* Search Input untuk Add VLAN */}
+                                <div className="position-relative">
+                                  <Form.Control
+                                    type="text"
+                                    size="sm"
+                                    placeholder="Add VLAN ID..."
+                                    value={permitVlanSearch}
+                                    onChange={(e) => {
+                                      setPermitVlanSearch(e.target.value);
+                                      setShowPermitVlanDropdown(true);
+                                    }}
+                                    onFocus={() => setShowPermitVlanDropdown(true)}
+                                    onBlur={() => setTimeout(() => setShowPermitVlanDropdown(false), 200)}
+                                    disabled={!isReachable || !!currentTaskId}
+                                  />
+                                  
+                                  {/* Dropdown untuk VLAN yang tersedia */}
+                                  {showPermitVlanDropdown && (
+                                    <div 
+                                      className="position-absolute bg-white border rounded shadow-sm"
+                                      style={{ 
+                                        zIndex: 1000, 
+                                        maxHeight: '150px', 
+                                        overflowY: 'auto',
+                                        width: '100%'
+                                      }}
+                                    >
+                                      {vlanMembers
+                                        .filter(v => (v.vlan_id || v.id) !== '1')
+                                        .map(v => v.vlan_id || v.id)
+                                        .filter((vlanId: string) => 
+                                          !(portConfig.permitVlans || []).includes(vlanId) &&
+                                          vlanId.includes(permitVlanSearch || '')
+                                        )
+                                        .map((vlanId: string) => (
+                                          <div
+                                            key={vlanId}
+                                            className="p-2 cursor-pointer hover-bg-light"
+                                            onMouseDown={() => handleAddPermitVlan(vlanId)}
+                                            style={{ cursor: 'pointer' }}
+                                          >
+                                            VLAN {vlanId}
+                                          </div>
+                                        ))
+                                      }
+                                      {vlanMembers.filter(v => (v.vlan_id || v.id) !== '1').length === 0 && (
+                                        <div className="p-2 text-muted">
+                                          No VLANs available
                                         </div>
                                       )}
                                     </div>
-                                  </div>
-                                ) : (
-                                  <Form.Control
-                                    size="sm"
-                                    type="text"
-                                    value="--"
-                                    disabled
-                                    readOnly
-                                    style={{ backgroundColor: '#e9ecef' }}
-                                  />
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
+                                  )}
+                                </div>
+                              </div>
+                            ) : (
+                              <Form.Control
+                                size="sm"
+                                type="text"
+                                value="--"
+                                disabled
+                                readOnly
+                                style={{ backgroundColor: '#e9ecef' }}
+                              />
+                            )}
+                          </td>
+                        </tr>
                       </tbody>
                     </Table>
                   )}
