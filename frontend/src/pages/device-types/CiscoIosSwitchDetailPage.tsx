@@ -2221,9 +2221,10 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
                           <tr>
                             <th style={{ width: '5%' }}>No.</th>
                             <th style={{ width: '5%' }}>Select</th>
-                            <th style={{ width: '20%' }}>VLAN ID</th>
-                            <th style={{ width: '40%' }}>VLAN Name</th>
-                            <th style={{ width: '30%' }}>Actions</th>
+                            <th style={{ width: '10%' }}>VLAN ID</th>
+                            <th style={{ width: '25%' }}>VLAN Name</th>
+                            <th style={{ width: '40%' }}>Interfaces</th>
+                            <th style={{ width: '15%' }}>Actions</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -2293,6 +2294,19 @@ const CiscoIosSwitchDetailPage = ({ device }: { device: any }) => {
                                         Edit
                                       </Button>
                                     </div>
+                                  )}
+                                </td>
+                                <td>
+                                  {vlan.interfaces && vlan.interfaces.length > 0 ? (
+                                    <div className="d-flex flex-wrap gap-1">
+                                      {vlan.interfaces.map((iface: string) => (
+                                        <Badge key={iface} bg="primary" style={{ fontSize: '0.7rem' }}>
+                                          {iface}
+                                        </Badge>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <span className="text-muted small">None</span>
                                   )}
                                 </td>
                                 <td>
